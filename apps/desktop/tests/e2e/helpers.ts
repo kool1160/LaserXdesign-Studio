@@ -21,9 +21,15 @@ export interface TestLaunch {
   userDataPath: string;
 }
 
+export interface LaunchEnvironment {
+  deviceScaleFactor?: string;
+  failInitialGetState?: boolean;
+}
+
 export async function launchPackaged(
   directory?: string,
   closeResponse: "save" | "discard" | "cancel" = "cancel",
+  launchEnvironment: LaunchEnvironment = {},
 ): Promise<TestLaunch> {
   const testDirectory =
     directory ?? (await mkdtemp(join(tmpdir(), "laserx-e2e-")));
@@ -37,6 +43,15 @@ export async function launchPackaged(
       LASERX_TEST_CLOSE_RESPONSE: closeResponse,
       LASERX_TEST_PROJECT_PATH: projectPath,
       LASERX_USER_DATA_PATH: userDataPath,
+      ...(launchEnvironment.deviceScaleFactor === undefined
+        ? {}
+        : {
+            LASERX_TEST_DEVICE_SCALE_FACTOR:
+              launchEnvironment.deviceScaleFactor,
+          }),
+      ...(launchEnvironment.failInitialGetState === true
+        ? { LASERX_TEST_GET_STATE_FAILURE: "1" }
+        : {}),
     },
   });
   return {

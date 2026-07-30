@@ -15,3 +15,13 @@ All notable project changes will be documented here.
 - Strict `.laserx` schema version 1 and atomic project persistence.
 - New, open, save, save-as, recent-project, dirty-state, autosave, and recovery lifecycle.
 - Unit, integration, packaged Windows smoke, and lifecycle end-to-end test coverage.
+- Canonical millimeter schema-v2 document model with stable document and
+  placeholder-object IDs.
+- Exact inch/millimeter document creation and drift-free display-unit
+  switching.
+- Cartesian SVG viewport with rulers, grid, pan, pointer-preserving zoom, fit,
+  reset, snapping preferences, exact coordinate readout, and high-DPI-safe
+  measurements.
+- Deterministic schema-v1-to-v2 migration with reviewed fixtures.
+- Regression coverage for replacing an existing `.laserx` file and retrying a
+  rejected initial renderer state request.

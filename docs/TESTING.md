@@ -56,6 +56,27 @@ Every reproducible bug gets a test at the lowest meaningful layer. UI-only tests
 - Playwright launches the packaged Windows executable for security smoke and
   complete lifecycle tests.
 
+## M02 executable layers
+
+- geometry unit tests directly cover Cartesian Y inversion, inverse
+  round-trips, pointer-stable zoom, pan/zoom immutability, empty/populated fit,
+  reset, and device-pixel-ratio independence;
+- domain unit tests cover exact 24 in × 12 in and 600 mm × 300 mm creation,
+  drift-free unit switching, bounds, object IDs/types, and viewport
+  preferences;
+- project-format tests cover deterministic schema-v2 round trips, the reviewed
+  populated fixture, v1-to-v2 migration fixture, and corrupt/future rejection;
+- application and desktop integration tests cover command dirty state,
+  preference persistence, save/reopen, save over an existing `.laserx`,
+  recents, recovery, and explicit-save isolation;
+- Playwright launches the packaged Windows executable for renderer isolation,
+  viewport navigation, rulers/grid/readout, forced 2× display scale, fit/reset,
+  startup-state retry, schema-v1 migration, lifecycle, and recovery.
+
+The coordinate inverse tolerance is `1e-9 mm`, documented in
+`docs/UNITS_AND_COORDINATES.md`. Unit storage assertions for the acceptance
+dimensions are exact.
+
 Run all milestone checks from the repository root:
 
 ```bash

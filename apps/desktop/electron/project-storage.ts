@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
 
-import type { LaserxProjectV1 } from "@laserx/domain";
+import type { LaserxProject } from "@laserx/domain";
 import { parseProject, serializeProject } from "@laserx/project-format";
 
 const MAX_PROJECT_BYTES = 10 * 1024 * 1024;
@@ -47,7 +47,7 @@ async function atomicWrite(filePath: string, contents: string): Promise<void> {
 }
 
 export class ProjectStorage {
-  public async read(filePath: string): Promise<LaserxProjectV1> {
+  public async read(filePath: string): Promise<LaserxProject> {
     const normalized = validateProjectPath(filePath);
     let fileStats;
     try {
@@ -60,7 +60,7 @@ export class ProjectStorage {
     }
     if (!fileStats.isFile() || fileStats.size > MAX_PROJECT_BYTES) {
       throw new ProjectStorageError(
-        "The selected project is not a supported file or exceeds the 10 MB M01 limit.",
+        "The selected project is not a supported file or exceeds the 10 MB project limit.",
       );
     }
     try {
@@ -75,7 +75,7 @@ export class ProjectStorage {
 
   public async write(
     filePath: string,
-    project: LaserxProjectV1,
+    project: LaserxProject,
   ): Promise<void> {
     const normalized = validateProjectPath(filePath);
     try {

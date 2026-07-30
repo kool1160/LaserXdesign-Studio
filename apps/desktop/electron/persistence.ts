@@ -9,7 +9,10 @@ import {
 import { dirname, join, resolve } from "node:path";
 
 import type { RecoverySnapshot } from "@laserx/application";
-import { laserxProjectV1Schema } from "@laserx/project-format";
+import {
+  laserxProjectSchema,
+  parseProjectValue,
+} from "@laserx/project-format";
 import { z } from "zod";
 
 const recentProjectSchema = z.strictObject({
@@ -17,11 +20,11 @@ const recentProjectSchema = z.strictObject({
   name: z.string().min(1),
 });
 const recentProjectsSchema = z.array(recentProjectSchema).max(10);
-const recoverySnapshotSchema: z.ZodType<RecoverySnapshot> = z.strictObject({
+const recoveryEnvelopeSchema = z.strictObject({
   schemaVersion: z.literal(1),
   capturedAt: z.iso.datetime(),
   originalPath: z.string().nullable(),
-  project: laserxProjectV1Schema,
+  project: z.unknown(),
 });
 
 export interface RecentProject {
@@ -84,17 +87,26 @@ export class RecoveryStore {
 
   public async load(): Promise<RecoverySnapshot | null> {
     try {
-      const parsed = recoverySnapshotSchema.safeParse(
+      const parsed = recoveryEnvelopeSchema.safeParse(
         JSON.parse(await readFile(this.filePath, "utf8")) as unknown,
       );
-      return parsed.success ? parsed.data : null;
+      if (!parsed.success) {
+        return null;
+      }
+      return {
+        ...parsed.data,
+        project: parseProjectValue(parsed.data.project),
+      };
     } catch {
       return null;
     }
   }
 
   public async save(snapshot: RecoverySnapshot): Promise<void> {
-    const validated = recoverySnapshotSchema.parse(snapshot);
+    const validated = {
+      ...recoveryEnvelopeSchema.parse(snapshot),
+      project: laserxProjectSchema.parse(snapshot.project),
+    };
     await atomicWriteJson(this.filePath, validated);
   }
 

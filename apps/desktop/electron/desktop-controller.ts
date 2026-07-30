@@ -4,11 +4,14 @@ import {
   ProjectSession,
   type RecoverySnapshot,
 } from "@laserx/application";
+import type { UpdateViewportPreferences } from "@laserx/domain";
 
 import type {
   CommandResult,
+  CreateDocumentRequest,
   DesktopState,
   ResolveRecoveryRequest,
+  SetViewportPreferencesRequest,
 } from "./ipc-contract.js";
 import { AppLogger } from "./logger.js";
 import {
@@ -48,6 +51,7 @@ export class DesktopController {
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #autosaveTimer: NodeJS.Timeout | null = null;
+  #autosaveInFlight: Promise<void> | null = null;
 
   public constructor(options: DesktopControllerOptions) {
     this.#recentStore = new RecentProjectsStore(options.userDataPath);
@@ -72,9 +76,22 @@ export class DesktopController {
       project: {
         id: session.project.project.id,
         name: session.project.project.name,
-        displayUnit: session.project.document.settings.displayUnit,
-        pageWidthMm: session.project.document.settings.pageWidthMm,
-        pageHeightMm: session.project.document.settings.pageHeightMm,
+        document: {
+          kind: session.project.document.kind,
+          id: session.project.document.id,
+          dimensions: { ...session.project.document.dimensions },
+          origin: { ...session.project.document.origin },
+          settings: {
+            ...session.project.document.settings,
+            viewport: {
+              ...session.project.document.settings.viewport,
+              snapping: {
+                ...session.project.document.settings.viewport.snapping,
+              },
+            },
+          },
+          objects: structuredClone(session.project.document.objects),
+        },
       },
       filePath: session.filePath,
       dirty: session.dirty,
@@ -108,6 +125,17 @@ export class DesktopController {
       if (filePath !== null) {
         await this.#openPath(filePath);
       }
+    });
+  }
+
+  public async createDocument(
+    request: CreateDocumentRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.dispatch({
+        type: "project.create-document",
+        ...request,
+      });
     });
   }
 
@@ -156,6 +184,33 @@ export class DesktopController {
     });
   }
 
+  public async setViewportPreferences(
+    updates: SetViewportPreferencesRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const domainUpdates: UpdateViewportPreferences = {};
+      if (updates.rulersVisible !== undefined) {
+        domainUpdates.rulersVisible = updates.rulersVisible;
+      }
+      if (updates.gridVisible !== undefined) {
+        domainUpdates.gridVisible = updates.gridVisible;
+      }
+      if (updates.gridSpacingMm !== undefined) {
+        domainUpdates.gridSpacingMm = updates.gridSpacingMm;
+      }
+      if (updates.snappingEnabled !== undefined) {
+        domainUpdates.snappingEnabled = updates.snappingEnabled;
+      }
+      if (updates.snapToGrid !== undefined) {
+        domainUpdates.snapToGrid = updates.snapToGrid;
+      }
+      this.#session.dispatch({
+        type: "project.set-viewport-preferences",
+        updates: domainUpdates,
+      });
+    });
+  }
+
   public async resolveRecovery(
     request: ResolveRecoveryRequest,
   ): Promise<CommandResult> {
@@ -184,6 +239,8 @@ export class DesktopController {
     if (choice === "save") {
       return this.#save(false);
     }
+    this.stop();
+    await this.#autosaveInFlight;
     await this.#recoveryStore.remove();
     this.#pendingRecovery = null;
     return true;
@@ -272,7 +329,16 @@ export class DesktopController {
 
   #startAutosave(): void {
     this.#autosaveTimer = setInterval(() => {
-      void this.#autosave();
+      if (this.#autosaveInFlight !== null) {
+        return;
+      }
+      const autosave = this.#autosave();
+      this.#autosaveInFlight = autosave;
+      void autosave.finally(() => {
+        if (this.#autosaveInFlight === autosave) {
+          this.#autosaveInFlight = null;
+        }
+      });
     }, this.#autosaveIntervalMs);
     this.#autosaveTimer.unref();
   }

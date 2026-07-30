@@ -35,6 +35,9 @@ importers:
       '@laserx/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../../packages/geometry
       '@laserx/project-format':
         specifier: workspace:*
         version: link:../../packages/project-format
@@ -115,14 +118,28 @@ importers:
   packages/cutability: {}
 
   packages/domain:
+    dependencies:
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../geometry
     devDependencies:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/fonts: {}
 
-  packages/geometry: {}
+  packages/geometry:
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/import-raster: {}
 
