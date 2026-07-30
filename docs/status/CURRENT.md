@@ -4,15 +4,18 @@
 
 **M02 — Canonical document model and viewport**
 
-M02 is the next allowed implementation milestone after the M01 pull request is
-merged. Do not add M02 work to the M01 branch.
+M01 is merged and closed. M02 is now the only active implementation milestone.
+Start M02 from current `main`; do not reuse the M01 feature branch.
 
 ## State
 
-M01 is complete on verification commit
-`052000614281f3c304c45fe37ece8113e8439165`. The complete M01 acceptance suite
-passed on Windows on 2026-07-30. The pull request and CI must preserve that
-result before merge.
+M01 was merged through PR #14 in commit
+`7a534e9a5424a8dfd17107f398dcd15332720f3f` after the Repository Guard and
+Windows M01 Desktop workflow passed on the reviewed merge ref.
+
+The complete M01 acceptance suite also passed on verification commit
+`052000614281f3c304c45fe37ece8113e8439165`; the final reviewed PR head was
+`c6df55b000736803e5f337b7f3ced247dc99e8ba`.
 
 M00 remains complete on `main` in commit
 `683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
@@ -33,6 +36,7 @@ M00 remains complete on `main` in commit
 - [x] Known limitations documented in `docs/status/RISKS.md`.
 - [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`,
   `pnpm build`, and `pnpm verify` pass.
+- [x] PR #14 merged and Issue #2 closed.
 
 ## M02 objective
 
