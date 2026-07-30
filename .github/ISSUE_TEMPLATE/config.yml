@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project operating contract
+    url: https://github.com/kool1160/LaserXdesign-Studio/blob/main/AGENTS.md
+    about: Read scope, architecture, and milestone rules before opening work.

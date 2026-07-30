@@ -6,7 +6,7 @@
 
 ## State
 
-Foundation scaffold is being committed. Feature implementation has not started.
+Foundation files, milestone specifications, package/directory scaffold, and GitHub guardrails are committed on the bootstrap branch. Production feature implementation has not started.
 
 ## M00 exit checklist
 
@@ -15,19 +15,17 @@ Foundation scaffold is being committed. Feature implementation has not started.
 - [x] Product requirements documented.
 - [x] Architecture and package boundaries documented.
 - [x] Large milestone sequence documented.
-- [ ] Directory/package scaffold committed.
-- [ ] GitHub workflow and contribution templates committed.
-- [ ] M00 repository guard passes.
+- [x] Directory/package scaffold committed.
+- [x] GitHub workflow and contribution templates committed.
+- [ ] M00 repository guard passes on the merged `main` commit.
 - [ ] Status advanced to M01.
 
 ## Allowed work
 
-- repository structure;
-- documentation;
-- package placeholders;
-- CI guardrails;
-- test-fixture directory setup;
-- milestone and issue setup.
+- merge and verify the M00 foundation;
+- fix repository-guard defects;
+- record the verified M00 commit;
+- advance status to M01 after the guard passes.
 
 ## Not yet allowed
 
