@@ -14,18 +14,38 @@ The product is intentionally narrower than a general CAD program. It focuses on 
 
 ## Project status
 
-M00 and M01 are complete. **M02 — Canonical document model and viewport** is
-the active milestone. Its implementation is under Issue #3 review; M03 remains
-blocked until the M02 pull request passes Windows CI and is merged.
+The README is not the milestone status authority.
 
-Start with [Issue #3](../../issues/3) and read these files before making changes:
+Read [`docs/status/CURRENT.md`](docs/status/CURRENT.md) for the one active gate, then read its milestone specification and GitHub issue. Open pull requests, review threads, and required GitHub workflow results are the authority for work currently under review.
+
+Do not use an old handoff, previous milestone branch, temporary Codex working directory, or stale chat summary as current project state.
+
+## Owner and agent workflow
+
+LaserX uses a GitHub-native operating loop so the owner does not have to carry markdown or completion reports between chats and Codex.
+
+Read [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md) for the complete command/state flow.
+
+Core commands:
+
+- `Plan LaserX: <idea>` - discuss product intent without changing the repository yet.
+- `Lock that into LaserX` - record the accepted decision in the correct GitHub source.
+- `Continue LaserX` - Codex implements or repairs the active gate and stops for review.
+- `Check LaserX` - review the active PR directly and keep detailed findings on GitHub.
+- `Advance LaserX` - merge a verified ready gate, update status, and activate the next issue.
+- `Status LaserX` - report current state without changing anything.
+- `Hold LaserX` - pause new work without discarding the current branch or PR.
+
+Before making changes, read:
 
 1. [`AGENTS.md`](AGENTS.md)
-2. [`docs/status/CURRENT.md`](docs/status/CURRENT.md)
-3. [`docs/milestones/M02-document-viewport.md`](docs/milestones/M02-document-viewport.md)
-4. [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
-5. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-6. [`docs/MILESTONES.md`](docs/MILESTONES.md)
+2. [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md)
+3. [`docs/status/CURRENT.md`](docs/status/CURRENT.md)
+4. the active milestone document
+5. the active GitHub issue and pull request
+6. [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
+7. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+8. [`docs/MILESTONES.md`](docs/MILESTONES.md)
 
 ## Pinned stack
 
@@ -38,14 +58,6 @@ Start with [Issue #3](../../issues/3) and read these files before making changes
 - Playwright 1.62.0
 
 Geometry, file conversion, and cutability rules live outside the UI so they can be tested independently and reused later.
-
-## M02 capability
-
-The packaged Windows application can create exact-size millimeter or inch
-documents, switch display units without changing stored geometry, navigate a
-Cartesian workspace with rulers/grid/pan/zoom/fit/reset, and save/reopen
-schema-v2 projects. Schema-v1 projects migrate on read. Selection and M03+
-editing features are intentionally absent.
 
 ## Development
 
@@ -61,11 +73,9 @@ pnpm build
 pnpm verify
 ```
 
-`pnpm test:e2e` packages and launches the Windows application. `pnpm verify`
-runs lint, typecheck, unit/integration tests, build, package, and packaged
-end-to-end tests.
+`pnpm test:e2e` packages and launches the Windows application. `pnpm verify` runs lint, typecheck, unit/integration tests, build, package, and packaged end-to-end tests.
 
-See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete workflow.
+See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete development workflow.
 
 ## Licensing note
 
