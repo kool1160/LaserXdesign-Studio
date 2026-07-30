@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+out
+release
+artifacts
+coverage
+fixtures/golden
+pnpm-lock.yaml

@@ -1,0 +1,15 @@
+{
+  "name": "laserx-design-studio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Windows-first cut-ready metal sign design studio",
+  "scripts": {
+    "dev": "pnpm --filter @laserx/desktop dev",
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm --filter @laserx/desktop --if-present test:e2e",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  }
+}

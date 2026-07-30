@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+out/
+release/
+artifacts/
+coverage/
+playwright-report/
+test-results/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor and OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local project and user data
+*.laserx.autosave
+*.laserx.recovery
+.local-data/
+user-data/
+
+# Native tooling
+native/target/
+
+# Temporary geometry/export files
+*.tmp.dxf
+*.tmp.svg
+*.trace-cache
