@@ -14,15 +14,16 @@ The product is intentionally narrower than a general CAD program. It focuses on 
 
 ## Project status
 
-Repository foundation and architecture are being established. The first implementation milestone is the desktop shell and editable project lifecycle.
+M00 repository foundation is complete. **M01 — Desktop shell and project lifecycle** is the active milestone and the only production implementation scope currently allowed.
 
-Read these files before making changes:
+Start with [Issue #2](../../issues/2) and read these files before making changes:
 
 1. [`AGENTS.md`](AGENTS.md)
-2. [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
-3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-4. [`docs/MILESTONES.md`](docs/MILESTONES.md)
-5. [`docs/status/CURRENT.md`](docs/status/CURRENT.md)
+2. [`docs/status/CURRENT.md`](docs/status/CURRENT.md)
+3. [`docs/milestones/M01-desktop-shell.md`](docs/milestones/M01-desktop-shell.md)
+4. [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
+5. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+6. [`docs/MILESTONES.md`](docs/MILESTONES.md)
 
 ## Planned stack
 
@@ -38,7 +39,7 @@ Geometry, file conversion, and cutability rules live outside the UI so they can 
 
 ## Development
 
-The repository bootstrap intentionally provides architecture and package boundaries before feature implementation. Once Milestone 1 begins, the standard commands will be:
+The M01 agent must select compatible maintained versions, commit the lockfile, and make these root commands operational:
 
 ```bash
 pnpm install
@@ -47,6 +48,13 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm verify
+```
+
+Until that M01 bootstrap is committed, the available foundation check is:
+
+```bash
+python scripts/repository_guard.py
 ```
 
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete workflow.
