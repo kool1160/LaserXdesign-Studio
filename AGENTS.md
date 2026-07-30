@@ -1,4 +1,4 @@
-# AGENTS.md — LaserX Design Studio
+# AGENTS.md - LaserX Design Studio
 
 This file is the primary operating contract for every coding agent working in this repository. Read it completely before changing code, tests, configuration, architecture, or documentation.
 
@@ -30,19 +30,27 @@ When instructions conflict, use this order:
 2. This `AGENTS.md` file.
 3. `docs/status/CURRENT.md` for the active milestone and allowed scope.
 4. The active milestone document in `docs/milestones/`.
-5. `docs/PRODUCT_REQUIREMENTS.md`.
-6. `docs/ARCHITECTURE.md` and accepted ADRs in `docs/decisions/`.
-7. Existing tests and established code conventions.
+5. The active GitHub issue.
+6. `docs/PRODUCT_REQUIREMENTS.md`.
+7. `docs/ARCHITECTURE.md` and accepted ADRs in `docs/decisions/`.
+8. Existing tests and established code conventions.
+
+`docs/OPERATOR_PROTOCOL.md` defines how the owner, planning/review assistant, Codex, GitHub issues, pull requests, and CI move work through those sources. It does not override product requirements or milestone scope.
 
 Do not silently resolve a genuine conflict. Record it in `docs/status/DECISIONS_NEEDED.md` and choose the smallest reversible implementation that preserves existing behavior.
 
+A PDF, chat handoff, old Codex completion report, stale README status, previous milestone branch, or temporary working directory is never authoritative over current GitHub state.
+
 ## 4. Mandatory reading before work
 
-Before implementing any feature:
+Before implementing or repairing any feature:
 
 - read this file;
+- read `docs/OPERATOR_PROTOCOL.md`;
 - read `docs/status/CURRENT.md`;
 - read the active milestone specification;
+- read the active GitHub issue;
+- inspect any open PR, review threads, and final-head workflow state for that issue;
 - inspect neighboring packages and tests;
 - read relevant ADRs;
 - run the current verification commands when implementation exists.
@@ -91,7 +99,7 @@ The planned stack is:
 
 Do not add a second UI framework, state library, geometry engine, or desktop runtime without an ADR.
 
-Version selection happens during Milestone 1 and must use compatible, actively maintained releases. Commit the lockfile once dependencies are chosen.
+Version selection must use compatible, actively maintained releases. Keep the lockfile committed and deterministic.
 
 ## 7. Repository boundaries
 
@@ -151,7 +159,7 @@ Every path must declare whether it is open or closed. Closed contours must not r
 
 Centralize tolerances. Do not scatter magic epsilon values across packages.
 
-Operations that can change topology—union, subtraction, intersection, offset, simplification, bridging, tracing, and contour repair—must return:
+Operations that can change topology - union, subtraction, intersection, offset, simplification, bridging, tracing, and contour repair - must return:
 
 - resulting geometry;
 - warnings;
@@ -244,7 +252,7 @@ Raster images are references or tracing inputs, never manufacturing export geome
 - Electron renderer must not have unrestricted Node access.
 - Use context isolation and a narrow, typed preload API.
 - Validate file paths and IPC payloads.
-- Treat imported SVG and project files as untrusted.
+- Treat imported SVG, DXF, raster, and project files as untrusted.
 - Do not execute scripts embedded in imported content.
 - Do not load remote content into privileged renderer contexts.
 - Never log API keys, tokens, full private prompts, or user file contents in production telemetry.
@@ -258,10 +266,38 @@ For every task:
 3. Implement the smallest complete vertical slice allowed by the milestone.
 4. Add or update tests in the same change.
 5. Run the required checks.
-6. Update documentation when behavior, architecture, commands, or status changes.
-7. Report changed files, tests run, results, assumptions, and remaining risks.
+6. Update documentation when behavior, architecture, commands, schema, or status changes.
+7. Put detailed changed-file, test, assumption, risk, and limitation evidence in the PR.
+8. Return a compact owner-facing handoff with state and next command.
 
 Do not leave placeholder implementations that falsely report success. A visible `Not implemented` state is better than fake geometry or fake export.
+
+### 16.1 Operator command behavior
+
+The complete role and state protocol lives in `docs/OPERATOR_PROTOCOL.md`.
+
+When the owner tells Codex `Continue LaserX`, Codex must:
+
+1. read the mandatory sources;
+2. identify the one active milestone, issue, and any open PR;
+3. address unresolved blocking review findings first;
+4. otherwise repair required CI failures;
+5. otherwise, if a green implementation PR exists with no unresolved blockers, refresh PR evidence and stop in `AWAITING_REVIEW`;
+6. otherwise implement the smallest complete active-gate vertical slice, test it, open or update a draft PR, and stop;
+7. stop as `BLOCKED` rather than inventing work when repository truth conflicts or no gate is active.
+
+`Continue LaserX` does not authorize merging, closing the active issue, updating the active gate, beginning the next milestone, or performing unrelated cleanup.
+
+Commands intended for the planning/review assistant are:
+
+- `Plan LaserX: <idea>`;
+- `Lock that into LaserX`;
+- `Check LaserX`;
+- `Advance LaserX`;
+- `Status LaserX`;
+- `Hold LaserX`.
+
+A coding agent must not impersonate the owner-level review or advancement role merely because those command names appear in repository documentation.
 
 ## 17. Milestone gate policy
 
@@ -273,7 +309,11 @@ An agent may not begin the next milestone until all of the following are true:
 - required automated tests exist;
 - no severity-1 defects remain;
 - known limitations are documented;
-- current status is updated;
+- the current PR has been reviewed on the exact final head;
+- required GitHub workflows are green;
+- the PR is merged using the established method;
+- the active issue is closed;
+- current status is updated with the verified merge record;
 - the milestone exit checklist is explicitly marked complete.
 
 Work from a later milestone may be considered only when it is required to complete the active vertical slice. Keep such work behind a narrow interface and do not expand it.
@@ -282,19 +322,19 @@ Work from a later milestone may be considered only when it is required to comple
 
 Detailed specifications live in `docs/milestones/`.
 
-- M00 — Repository foundation and contracts.
-- M01 — Desktop shell and project lifecycle.
-- M02 — Canonical document model and viewport.
-- M03 — Selection, transforms, layers, and undo/redo.
-- M04 — Text, fonts, and outline conversion.
-- M05 — Node editing and boolean geometry operations.
-- M06 — Dimensionally correct SVG and DXF interoperability.
-- M07 — PNG/JPEG preprocessing and vector tracing.
-- M08 — Cutability analysis, bridges, and manufacturing preview.
-- M09 — Sign-building tools, borders, holes, templates, and backing plates.
-- M10 — Prompt/image-to-sign AI pipeline.
-- M11 — Layered-sign workflow and production export packages.
-- M12 — Packaging, performance, accessibility, and beta hardening.
+- M00 - Repository foundation and contracts.
+- M01 - Desktop shell and project lifecycle.
+- M02 - Canonical document model and viewport.
+- M03 - Selection, transforms, layers, and undo/redo.
+- M04 - Text, fonts, and outline conversion.
+- M05 - Node editing and boolean geometry operations.
+- M06 - Dimensionally correct SVG and DXF interoperability.
+- M07 - PNG/JPEG preprocessing and vector tracing.
+- M08 - Cutability analysis, bridges, and manufacturing preview.
+- M09 - Sign-building tools, borders, holes, templates, and backing plates.
+- M10 - Prompt/image-to-sign AI pipeline.
+- M11 - Layered-sign workflow and production export packages.
+- M12 - Packaging, performance, accessibility, and beta hardening.
 
 Post-v1 ideas such as nesting, CAM, cloud collaboration, mobile editing, 3D visualization, and native DWG are deferred unless promoted through a new milestone and ADR.
 
@@ -315,7 +355,7 @@ Never update a golden file only to make a failing test green. Explain and review
 
 ## 20. Verification commands
 
-Once Milestone 1 establishes the toolchain, the expected root commands are:
+The expected root commands are:
 
 ```bash
 pnpm lint
@@ -324,9 +364,13 @@ pnpm test
 pnpm test:e2e
 pnpm build
 pnpm verify
+pnpm audit --prod
+py -3 scripts/repository_guard.py
+git diff --check
+git status --short
 ```
 
-Until then, use the repository-structure workflow and document any command that is intentionally unavailable.
+Use the commands required by the active milestone and CI. Do not report completion from local tests alone when GitHub workflow evidence is required.
 
 ## 21. Git and change discipline
 
@@ -336,6 +380,8 @@ Until then, use the repository-structure workflow and document any command that 
 - Do not rewrite public history without explicit instruction.
 - Do not mix architecture migrations with unrelated UI styling.
 - Include before/after screenshots for meaningful UI changes when the workflow supports them.
+- Keep implementation and review-repair PRs draft until the active gate is ready for owner review.
+- Never reuse an old milestone working directory to begin the next gate.
 
 ## 22. Definition of done
 
@@ -349,24 +395,38 @@ A feature is done only when:
 - imported/generated data is validated;
 - documentation is current;
 - the repository builds and verifies cleanly;
+- required GitHub workflows pass on the final pushed head or reviewed merge ref;
 - no fake success path remains.
 
-## 23. Agent reporting template
+A milestone is not advanced merely because implementation code exists.
 
-Use this at the end of a substantial task:
+## 23. Agent reporting
+
+Detailed implementation evidence belongs in the pull request, not in a repeated chat handoff.
+
+Use this compact owner-facing response after a substantial Codex task:
 
 ```text
-Milestone:
-Delivered:
-Changed files:
-Tests added/updated:
-Commands run:
-Results:
-Assumptions:
-Known limitations:
-Next allowed work:
+LaserX M## - IMPLEMENTING | REPAIRING | AWAITING_REVIEW | BLOCKED
+PR: #__
+Head: <short SHA>
+CI: green | failing | running
+Work: <one-sentence result>
+Blocker: none | <one-sentence blocker>
+Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision needed>
 ```
 
-## 24. Final restraint
+The PR description must still include delivered behavior, changed areas, tests, commands, exact results, assumptions, known limitations, and next allowed work.
 
-The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep the geometry core trustworthy, the UI replaceable, and the exported physical dimensions correct.
+## 24. Review and handoff discipline
+
+- Detailed review findings belong on GitHub.
+- The owner should not need to paste a Codex completion report into another chat.
+- The owner should not need a fresh milestone markdown handoff when repository truth is current.
+- Do not repeat a giant product or milestone recap after every review.
+- A reviewer returns `READY`, `REPAIR`, or `BLOCKED` plus the next exact command.
+- `Advance LaserX` is valid only after the reviewed head is unchanged, required CI is green, no blocking thread remains, and exit criteria are satisfied.
+
+## 25. Final restraint
+
+The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep the geometry core trustworthy, the UI replaceable, the exported physical dimensions correct, and the owner out of the courier role.
