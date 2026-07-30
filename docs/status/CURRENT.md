@@ -2,63 +2,74 @@
 
 ## Active gate
 
-**M02 — Canonical document model and viewport (review gate)**
+**M03 — Selection, transforms, layers, and history**
 
-The complete M02 implementation and local acceptance suite are ready for
-review. M02 remains the active gate until its pull request is reviewed, Windows
-CI passes, and the pull request is merged. **M03 is blocked until all three
-conditions are satisfied.**
+M02 is merged and closed. M03 is now the only active implementation milestone.
+Start M03 from current `main`; do not reuse the M02 feature branch or working directory.
 
 ## State
 
-M02 is implemented on `feat/m02-document-viewport` from latest `main`. The user
-can create exact-size inch or millimeter documents, change presentation units
-without changing canonical geometry, and navigate the Cartesian viewport using
-rulers, grid, pan, pointer-preserving zoom, reset, and fit-to-view. Schema-v2
-projects preserve IDs, dimensions, objects, display/viewport preferences, and
-schema-v1 compatibility through deterministic migration.
+M02 was merged through PR #15 in commit
+`735c3ce658313a5c8ca35be3c95f0d70021d8c11` after review, Repository Guard,
+and the Windows M02 Document Viewport workflow passed on the reviewed merge ref.
+
+The final reviewed M02 head was
+`1b9bd6623a0e2fdcd38523b4d9e91418d5beb39e`. It includes deterministic
+coordination preventing an older in-flight autosave from recreating stale recovery
+after Save, New, Open, or close-discard.
 
 M01 was merged through PR #14 in commit
-`7a534e9a5424a8dfd17107f398dcd15332720f3f`. M00 remains complete on `main` in
-commit `683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
+`7a534e9a5424a8dfd17107f398dcd15332720f3f`. M00 remains complete in commit
+`683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
 
-## M02 local completion record
+## M02 completion record
 
 - [x] Exact 24 in × 12 in stores as 609.6 mm × 304.8 mm.
 - [x] Exact 600 mm × 300 mm stores canonically without conversion.
 - [x] Display-unit switching is presentation-only and drift-free.
-- [x] Stable document/object IDs and minimal line/rectangle/ellipse/path types
-  are independent of React.
-- [x] Cartesian positive-Y-up conversion and inverse are directly tested to
-  `1e-9 mm`.
-- [x] Pan, pointer-preserving zoom, reset, empty/populated fit, rulers, grid,
-  spacing preferences, snapping preferences, and exact readout are implemented.
-- [x] Forced 2× packaged Windows coverage confirms DPI-independent physical
-  measurements.
-- [x] Schema v2 is deterministic; schema-v1 migration and rejection fixtures
-  are reviewed.
+- [x] Stable document/object IDs and minimal line/rectangle/ellipse/path types are independent of React.
+- [x] Cartesian positive-Y-up conversion and inverse are directly tested to `1e-9 mm`.
+- [x] Pan, pointer-preserving zoom, reset, empty/populated fit, rulers, grid, snapping preferences, and exact readout are implemented.
+- [x] Forced 2× packaged Windows coverage confirms DPI-independent physical measurements.
+- [x] Schema v2 is deterministic; schema-v1 migration and rejection fixtures are reviewed.
 - [x] Save/reopen preserves dimensions, units, preferences, IDs, and objects.
-- [x] M01 regressions cover replacement of an existing `.laserx` and a visible,
-  retryable initial `getState()` failure.
-- [x] Unit, integration, packaged smoke, lifecycle, migration, and viewport E2E
-  tests pass locally.
-- [x] ADRs 0008–0009 and M02 architecture, unit, file-format, test, risk,
-  fixture, screenshot, changelog, and work-log documentation are updated.
-- [ ] Pull request review complete.
-- [ ] Windows CI green on the published M02 head.
-- [ ] Pull request merged.
+- [x] Existing-project replacement and visible retryable initial-state failure regressions are covered.
+- [x] Autosave/recovery ordering is deterministic across Save, New, Open, canceled replacement, and close-discard.
+- [x] 37 unit/integration tests and 6 packaged Electron E2E tests pass.
+- [x] ADRs 0008–0009 and M02 architecture, unit, format, testing, risk, fixture, screenshot, changelog, and work-log documentation are complete.
+- [x] PR #15 reviewed and merged; Issue #3 closed.
+
+## M03 objective
+
+Deliver the first complete editing core: deterministic selection, transforms, grouping,
+layers, copy/paste, snapping, align/distribute, and bounded undo/redo history while
+preserving canonical geometry, stable IDs, and project-format compatibility.
+
+Read `docs/milestones/M03-editing-core.md` before starting.
 
 ## Allowed next work
 
-Before merge, only M02 review fixes, test hardening, CI fixes, and documentation
-corrections are allowed.
-
-After review, green Windows CI, and merge, M03 may begin from the then-latest
-`main` in a new working directory and branch.
+- single, multi, marquee, and modifier-key selection;
+- move, exact position, exact size, scale, rotate, mirror, duplicate, and delete;
+- transform handles and inspector entry;
+- aspect-ratio locking;
+- align and distribute;
+- group and ungroup;
+- layers, visibility, locking, rename, reorder, and z-order;
+- deterministic command history, transactions, undo/redo, and history limits;
+- keyboard shortcuts and in-application copy/paste;
+- basic snapping to grid, guides, bounds, and centers;
+- schema migration, persistence, fixtures, unit/integration, and packaged E2E coverage required by M03.
 
 ## Not allowed yet
 
-Do not implement M03 selection, handles, transforms, grouping, or layers. Do not
-implement production text/fonts, node editing, booleans, offsets, SVG/DXF
-import/export, raster tracing, cutability, bridges, sign generators, AI,
-layered export, CAM, G-code, or DWG.
+Do not implement production text/fonts, node editing, topology-changing booleans,
+offsets, SVG/DXF import/export, raster tracing, cutability, bridges, sign generators,
+AI, layered export, CAM, G-code, or DWG.
+
+## M03 exit rule
+
+Do not advance to M04 until every acceptance test and exit item in
+`docs/milestones/M03-editing-core.md` passes, the M03 pull request is reviewed,
+Windows CI is green, the pull request is merged, and this file records the verified
+completion commit.
