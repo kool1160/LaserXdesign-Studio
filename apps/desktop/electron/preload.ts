@@ -2,16 +2,20 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import {
   commandResultSchema,
+  createDocumentRequestSchema,
   desktopStateSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
+  setViewportPreferencesRequestSchema,
+  type CreateDocumentRequest,
   type DesktopState,
   type LaserxDesktopApi,
   type OpenRecentRequest,
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
+  type SetViewportPreferencesRequest,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -27,6 +31,12 @@ const api: LaserxDesktopApi = Object.freeze({
   async newProject() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.newProject),
+    );
+  },
+  async createDocument(request: CreateDocumentRequest) {
+    const validated = createDocumentRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.createDocument, validated),
     );
   },
   async openProject() {
@@ -54,6 +64,15 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = setDisplayUnitRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.setDisplayUnit, validated),
+    );
+  },
+  async setViewportPreferences(request: SetViewportPreferencesRequest) {
+    const validated = setViewportPreferencesRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(
+        IPC_CHANNELS.setViewportPreferences,
+        validated,
+      ),
     );
   },
   async resolveRecovery(request: ResolveRecoveryRequest) {

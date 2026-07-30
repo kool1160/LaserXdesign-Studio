@@ -2,19 +2,24 @@ import { randomUUID } from "node:crypto";
 
 import {
   ProjectSession,
+  type ProjectFileService,
   type RecoverySnapshot,
 } from "@laserx/application";
+import type { UpdateViewportPreferences } from "@laserx/domain";
 
 import type {
   CommandResult,
+  CreateDocumentRequest,
   DesktopState,
   ResolveRecoveryRequest,
+  SetViewportPreferencesRequest,
 } from "./ipc-contract.js";
 import { AppLogger } from "./logger.js";
 import {
   RecentProjectsStore,
   RecoveryStore,
   type RecentProject,
+  type RecoveryStorePort,
 } from "./persistence.js";
 import { ProjectStorage, validateProjectPath } from "./project-storage.js";
 
@@ -31,31 +36,54 @@ export interface DesktopControllerOptions {
   dialogs: DesktopDialogs;
   onStateChanged: (state: DesktopState) => void;
   autosaveIntervalMs?: number;
+  autosaveScheduler?: AutosaveScheduler;
+  projectStorage?: ProjectFileService;
+  recoveryStore?: RecoveryStorePort;
 }
+
+export interface AutosaveScheduler {
+  schedule(callback: () => void, intervalMs: number): () => void;
+}
+
+const intervalAutosaveScheduler: AutosaveScheduler = {
+  schedule(callback, intervalMs) {
+    const timer = setInterval(callback, intervalMs);
+    timer.unref();
+    return () => {
+      clearInterval(timer);
+    };
+  },
+};
 
 export class DesktopController {
   readonly #session = new ProjectSession({
     createId: () => randomUUID(),
     now: () => new Date().toISOString(),
   });
-  readonly #storage = new ProjectStorage();
+  readonly #storage: ProjectFileService;
   readonly #recentStore: RecentProjectsStore;
-  readonly #recoveryStore: RecoveryStore;
+  readonly #recoveryStore: RecoveryStorePort;
   readonly #logger: AppLogger;
   readonly #dialogs: DesktopDialogs;
   readonly #onStateChanged: (state: DesktopState) => void;
   readonly #autosaveIntervalMs: number;
+  readonly #autosaveScheduler: AutosaveScheduler;
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
-  #autosaveTimer: NodeJS.Timeout | null = null;
+  #stopAutosave: (() => void) | null = null;
+  #autosaveInFlight: Promise<void> | null = null;
 
   public constructor(options: DesktopControllerOptions) {
+    this.#storage = options.projectStorage ?? new ProjectStorage();
     this.#recentStore = new RecentProjectsStore(options.userDataPath);
-    this.#recoveryStore = new RecoveryStore(options.userDataPath);
+    this.#recoveryStore =
+      options.recoveryStore ?? new RecoveryStore(options.userDataPath);
     this.#logger = new AppLogger(options.userDataPath);
     this.#dialogs = options.dialogs;
     this.#onStateChanged = options.onStateChanged;
     this.#autosaveIntervalMs = options.autosaveIntervalMs ?? 30_000;
+    this.#autosaveScheduler =
+      options.autosaveScheduler ?? intervalAutosaveScheduler;
   }
 
   public async initialize(): Promise<void> {
@@ -72,9 +100,22 @@ export class DesktopController {
       project: {
         id: session.project.project.id,
         name: session.project.project.name,
-        displayUnit: session.project.document.settings.displayUnit,
-        pageWidthMm: session.project.document.settings.pageWidthMm,
-        pageHeightMm: session.project.document.settings.pageHeightMm,
+        document: {
+          kind: session.project.document.kind,
+          id: session.project.document.id,
+          dimensions: { ...session.project.document.dimensions },
+          origin: { ...session.project.document.origin },
+          settings: {
+            ...session.project.document.settings,
+            viewport: {
+              ...session.project.document.settings.viewport,
+              snapping: {
+                ...session.project.document.settings.viewport.snapping,
+              },
+            },
+          },
+          objects: structuredClone(session.project.document.objects),
+        },
       },
       filePath: session.filePath,
       dirty: session.dirty,
@@ -95,6 +136,7 @@ export class DesktopController {
     return this.#run(async () => {
       if (await this.#confirmReplacement()) {
         this.#session.dispatch({ type: "project.new" });
+        await this.#settleAutosaveAndClearRecovery();
       }
     });
   }
@@ -108,6 +150,17 @@ export class DesktopController {
       if (filePath !== null) {
         await this.#openPath(filePath);
       }
+    });
+  }
+
+  public async createDocument(
+    request: CreateDocumentRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.dispatch({
+        type: "project.create-document",
+        ...request,
+      });
     });
   }
 
@@ -156,6 +209,33 @@ export class DesktopController {
     });
   }
 
+  public async setViewportPreferences(
+    updates: SetViewportPreferencesRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const domainUpdates: UpdateViewportPreferences = {};
+      if (updates.rulersVisible !== undefined) {
+        domainUpdates.rulersVisible = updates.rulersVisible;
+      }
+      if (updates.gridVisible !== undefined) {
+        domainUpdates.gridVisible = updates.gridVisible;
+      }
+      if (updates.gridSpacingMm !== undefined) {
+        domainUpdates.gridSpacingMm = updates.gridSpacingMm;
+      }
+      if (updates.snappingEnabled !== undefined) {
+        domainUpdates.snappingEnabled = updates.snappingEnabled;
+      }
+      if (updates.snapToGrid !== undefined) {
+        domainUpdates.snapToGrid = updates.snapToGrid;
+      }
+      this.#session.dispatch({
+        type: "project.set-viewport-preferences",
+        updates: domainUpdates,
+      });
+    });
+  }
+
   public async resolveRecovery(
     request: ResolveRecoveryRequest,
   ): Promise<CommandResult> {
@@ -184,15 +264,15 @@ export class DesktopController {
     if (choice === "save") {
       return this.#save(false);
     }
-    await this.#recoveryStore.remove();
-    this.#pendingRecovery = null;
+    this.stop();
+    await this.#settleAutosaveAndClearRecovery();
     return true;
   }
 
   public stop(): void {
-    if (this.#autosaveTimer !== null) {
-      clearInterval(this.#autosaveTimer);
-      this.#autosaveTimer = null;
+    if (this.#stopAutosave !== null) {
+      this.#stopAutosave();
+      this.#stopAutosave = null;
     }
   }
 
@@ -200,11 +280,11 @@ export class DesktopController {
     const normalized = validateProjectPath(filePath);
     const project = await this.#storage.read(normalized);
     this.#session.open(project, normalized);
+    await this.#settleAutosaveAndClearRecovery();
     this.#recentProjects = await this.#recentStore.add({
       filePath: normalized,
       name: project.project.name,
     });
-    await this.#recoveryStore.remove();
     await this.#logger.info("project-opened");
   }
 
@@ -223,12 +303,11 @@ export class DesktopController {
     const project = this.#session.prepareSave();
     await this.#storage.write(normalized, project);
     this.#session.completeSave(project, normalized);
+    await this.#settleAutosaveAndClearRecovery();
     this.#recentProjects = await this.#recentStore.add({
       filePath: normalized,
       name: project.project.name,
     });
-    this.#pendingRecovery = null;
-    await this.#recoveryStore.remove();
     await this.#logger.info("project-saved");
     return true;
   }
@@ -246,8 +325,6 @@ export class DesktopController {
     if (choice === "save") {
       return this.#save(false);
     }
-    await this.#recoveryStore.remove();
-    this.#pendingRecovery = null;
     return true;
   }
 
@@ -271,10 +348,31 @@ export class DesktopController {
   }
 
   #startAutosave(): void {
-    this.#autosaveTimer = setInterval(() => {
-      void this.#autosave();
+    this.#stopAutosave = this.#autosaveScheduler.schedule(() => {
+      this.#queueAutosave();
     }, this.#autosaveIntervalMs);
-    this.#autosaveTimer.unref();
+  }
+
+  #queueAutosave(): void {
+    if (this.#autosaveInFlight !== null) {
+      return;
+    }
+    const autosave = this.#autosave();
+    this.#autosaveInFlight = autosave;
+    void autosave.finally(() => {
+      if (this.#autosaveInFlight === autosave) {
+        this.#autosaveInFlight = null;
+      }
+    });
+  }
+
+  async #settleAutosaveAndClearRecovery(): Promise<void> {
+    const autosave = this.#autosaveInFlight;
+    if (autosave !== null) {
+      await autosave;
+    }
+    await this.#recoveryStore.remove();
+    this.#pendingRecovery = null;
   }
 
   async #autosave(): Promise<void> {

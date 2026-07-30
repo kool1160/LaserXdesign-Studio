@@ -2,62 +2,63 @@
 
 ## Active gate
 
-**M02 — Canonical document model and viewport**
+**M02 — Canonical document model and viewport (review gate)**
 
-M01 is merged and closed. M02 is now the only active implementation milestone.
-Start M02 from current `main`; do not reuse the M01 feature branch.
+The complete M02 implementation and local acceptance suite are ready for
+review. M02 remains the active gate until its pull request is reviewed, Windows
+CI passes, and the pull request is merged. **M03 is blocked until all three
+conditions are satisfied.**
 
 ## State
 
+M02 is implemented on `feat/m02-document-viewport` from latest `main`. The user
+can create exact-size inch or millimeter documents, change presentation units
+without changing canonical geometry, and navigate the Cartesian viewport using
+rulers, grid, pan, pointer-preserving zoom, reset, and fit-to-view. Schema-v2
+projects preserve IDs, dimensions, objects, display/viewport preferences, and
+schema-v1 compatibility through deterministic migration.
+
 M01 was merged through PR #14 in commit
-`7a534e9a5424a8dfd17107f398dcd15332720f3f` after the Repository Guard and
-Windows M01 Desktop workflow passed on the reviewed merge ref.
+`7a534e9a5424a8dfd17107f398dcd15332720f3f`. M00 remains complete on `main` in
+commit `683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
 
-The complete M01 acceptance suite also passed on verification commit
-`052000614281f3c304c45fe37ece8113e8439165`; the final reviewed PR head was
-`c6df55b000736803e5f337b7f3ced247dc99e8ba`.
+## M02 local completion record
 
-M00 remains complete on `main` in commit
-`683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
-
-## M01 completion record
-
-- [x] Compatible maintained toolchain versions selected and pinned.
-- [x] pnpm lockfile committed.
-- [x] Secure sandboxed Electron main/preload/renderer boundary implemented.
-- [x] Typed, runtime-validated IPC allowlist implemented.
-- [x] Blank Windows desktop shell, menus, logging, and error boundary implemented.
-- [x] `.laserx` schema version 1 and reviewed fixtures committed.
-- [x] New/open/save/save-as/recent/dirty lifecycle implemented.
-- [x] Autosave and interrupted-session recovery implemented without overwriting explicit saves.
-- [x] Unit, integration, packaged smoke, and lifecycle end-to-end tests pass.
-- [x] Windows unpacked smoke package is produced and uploaded by CI.
-- [x] ADRs 0005–0007 accepted.
-- [x] Known limitations documented in `docs/status/RISKS.md`.
-- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`,
-  `pnpm build`, and `pnpm verify` pass.
-- [x] PR #14 merged and Issue #2 closed.
-
-## M02 objective
-
-Deliver the canonical millimeter document model and stable 2D viewport: exact
-document size, unit switching, Cartesian-to-screen conversion, grid, rulers,
-pan, zoom, fit-to-view, snapping preferences, coordinate readout, and the
-minimal placeholder objects needed to prove the model.
-
-Read `docs/milestones/M02-document-viewport.md` before starting.
+- [x] Exact 24 in × 12 in stores as 609.6 mm × 304.8 mm.
+- [x] Exact 600 mm × 300 mm stores canonically without conversion.
+- [x] Display-unit switching is presentation-only and drift-free.
+- [x] Stable document/object IDs and minimal line/rectangle/ellipse/path types
+  are independent of React.
+- [x] Cartesian positive-Y-up conversion and inverse are directly tested to
+  `1e-9 mm`.
+- [x] Pan, pointer-preserving zoom, reset, empty/populated fit, rulers, grid,
+  spacing preferences, snapping preferences, and exact readout are implemented.
+- [x] Forced 2× packaged Windows coverage confirms DPI-independent physical
+  measurements.
+- [x] Schema v2 is deterministic; schema-v1 migration and rejection fixtures
+  are reviewed.
+- [x] Save/reopen preserves dimensions, units, preferences, IDs, and objects.
+- [x] M01 regressions cover replacement of an existing `.laserx` and a visible,
+  retryable initial `getState()` failure.
+- [x] Unit, integration, packaged smoke, lifecycle, migration, and viewport E2E
+  tests pass locally.
+- [x] ADRs 0008–0009 and M02 architecture, unit, file-format, test, risk,
+  fixture, screenshot, changelog, and work-log documentation are updated.
+- [ ] Pull request review complete.
+- [ ] Windows CI green on the published M02 head.
+- [ ] Pull request merged.
 
 ## Allowed next work
 
-- canonical document dimensions and settings in millimeters;
-- stable schema-ready object base types and IDs;
-- Cartesian domain coordinates and tested renderer conversion;
-- viewport pan, zoom, fit/reset, rulers, grid, snapping settings, and exact readout;
-- minimal line/rectangle/ellipse/path placeholders required to prove the model;
-- serialization/migration, unit, coordinate, viewport, high-DPI, and end-to-end coverage.
+Before merge, only M02 review fixes, test hardening, CI fixes, and documentation
+corrections are allowed.
+
+After review, green Windows CI, and merge, M03 may begin from the then-latest
+`main` in a new working directory and branch.
 
 ## Not allowed yet
 
-Do not implement M03 editing/selection, production text/fonts, boolean geometry,
-SVG/DXF conversion, raster tracing, cutability, sign generators, AI, layered
-export, CAM, G-code, or DWG.
+Do not implement M03 selection, handles, transforms, grouping, or layers. Do not
+implement production text/fonts, node editing, booleans, offsets, SVG/DXF
+import/export, raster tracing, cutability, bridges, sign generators, AI,
+layered export, CAM, G-code, or DWG.

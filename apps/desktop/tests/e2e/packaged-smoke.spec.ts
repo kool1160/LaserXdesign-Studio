@@ -4,18 +4,21 @@ import { expect, test } from "@playwright/test";
 
 import { killAndRemove, launchPackaged } from "./helpers.js";
 
-test("packaged app launches with an isolated renderer", async () => {
+test("packaged viewport launches with an isolated renderer", async () => {
   const launched = await launchPackaged();
   try {
     const page = await launched.electronApp.firstWindow();
-    await expect(page.getByTestId("blank-workspace")).toBeVisible();
+    await expect(page.getByTestId("viewport")).toBeVisible();
+    await expect(page.getByTestId("viewport-rulers")).toBeVisible();
+    await expect(page.getByTestId("viewport-grid")).toBeVisible();
+    await expect(page.getByTestId("cursor-coordinate")).toBeVisible();
     await expect(page.getByText("All changes saved")).toBeVisible();
     await expect(page).toHaveTitle(/LaserX Design Studio/);
     if (process.env.LASERX_CAPTURE_SCREENSHOT === "1") {
       await page.locator(".app-shell").screenshot({
         path: resolve(
           process.cwd(),
-          "../../docs/screenshots/m01-desktop-shell.png",
+          "../../docs/screenshots/m02-viewport-fit.png",
         ),
       });
     }
@@ -28,6 +31,7 @@ test("packaged app launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasNodeProcess).toBe(false);
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
+      "createDocument",
       "getState",
       "newProject",
       "onStateChanged",
@@ -38,11 +42,28 @@ test("packaged app launches with an isolated renderer", async () => {
       "saveProjectAs",
       "security",
       "setDisplayUnit",
+      "setViewportPreferences",
     ]);
     expect(await page.evaluate(() => window.laserx.security)).toEqual({
       contextIsolated: true,
       sandboxed: true,
     });
+  } finally {
+    await killAndRemove(launched);
+  }
+});
+
+test("initial state failure is visible and retryable", async () => {
+  const launched = await launchPackaged(
+    undefined,
+    "cancel",
+    { failInitialGetState: true },
+  );
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await expect(page.getByTestId("startup-error")).toBeVisible();
+    await page.getByTestId("retry-startup").click();
+    await expect(page.getByTestId("viewport")).toBeVisible();
   } finally {
     await killAndRemove(launched);
   }

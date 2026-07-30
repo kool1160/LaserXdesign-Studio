@@ -33,8 +33,11 @@ Full editing tools, text, booleans, tracing, DXF, and cutability.
 
 ## Exit checklist
 
-- [ ] Domain model reviewed independently of UI.
-- [ ] Unit conversion and coordinate tests pass.
-- [ ] Viewport smoke/end-to-end test passes.
-- [ ] No geometry algorithms live in React components.
+- [x] Domain model reviewed independently of UI.
+- [x] Unit conversion and coordinate tests pass.
+- [x] Viewport smoke/end-to-end test passes.
+- [x] No geometry algorithms live in React components.
 - [ ] Status advances to M03.
+
+The final item remains blocked until the M02 pull request is reviewed, Windows
+CI passes, and the pull request is merged.

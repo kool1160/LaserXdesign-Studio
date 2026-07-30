@@ -14,18 +14,20 @@ The product is intentionally narrower than a general CAD program. It focuses on 
 
 ## Project status
 
-M00 repository foundation is complete. **M01 — Desktop shell and project lifecycle** is the active milestone and the only production implementation scope currently allowed.
+M00 and M01 are complete. **M02 — Canonical document model and viewport** is
+the active milestone. Its implementation is under Issue #3 review; M03 remains
+blocked until the M02 pull request passes Windows CI and is merged.
 
-Start with [Issue #2](../../issues/2) and read these files before making changes:
+Start with [Issue #3](../../issues/3) and read these files before making changes:
 
 1. [`AGENTS.md`](AGENTS.md)
 2. [`docs/status/CURRENT.md`](docs/status/CURRENT.md)
-3. [`docs/milestones/M01-desktop-shell.md`](docs/milestones/M01-desktop-shell.md)
+3. [`docs/milestones/M02-document-viewport.md`](docs/milestones/M02-document-viewport.md)
 4. [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
 5. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 6. [`docs/MILESTONES.md`](docs/MILESTONES.md)
 
-## M01 stack
+## Pinned stack
 
 - Node 24.18.1 LTS and pnpm 11.18.0
 - Electron 43.2.0
@@ -36,6 +38,14 @@ Start with [Issue #2](../../issues/2) and read these files before making changes
 - Playwright 1.62.0
 
 Geometry, file conversion, and cutability rules live outside the UI so they can be tested independently and reused later.
+
+## M02 capability
+
+The packaged Windows application can create exact-size millimeter or inch
+documents, switch display units without changing stored geometry, navigate a
+Cartesian workspace with rulers/grid/pan/zoom/fit/reset, and save/reopen
+schema-v2 projects. Schema-v1 projects migrate on read. Selection and M03+
+editing features are intentionally absent.
 
 ## Development
 

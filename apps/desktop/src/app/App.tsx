@@ -1,40 +1,63 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type SyntheticEvent,
+} from "react";
 
 import type {
   CommandResult,
   DesktopState,
 } from "../../electron/ipc-contract.js";
+import { Viewport } from "../components/Viewport.js";
+import {
+  formatDimensions,
+  gridSpacingForDisplay,
+  gridSpacingToMillimeters,
+} from "../lib/viewport-adapter.js";
 
 type Command = () => Promise<CommandResult>;
 
-function formatDimensions(state: DesktopState): string {
-  const { displayUnit, pageHeightMm, pageWidthMm } = state.project;
-  if (displayUnit === "inches") {
-    return `${(pageWidthMm / 25.4).toFixed(2)} × ${(pageHeightMm / 25.4).toFixed(2)} in`;
-  }
-  return `${pageWidthMm.toFixed(1)} × ${pageHeightMm.toFixed(1)} mm`;
-}
-
 export function App() {
   const [state, setState] = useState<DesktopState | null>(null);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [width, setWidth] = useState("24");
+  const [height, setHeight] = useState("12");
+  const [inputUnit, setInputUnit] = useState<
+    "millimeters" | "inches"
+  >("inches");
+  const [gridSpacing, setGridSpacing] = useState("10");
+
+  const loadInitialState = useCallback(async () => {
+    setStartupError(null);
+    try {
+      setState(await window.laserx.getState());
+    } catch {
+      setStartupError(
+        "LaserX could not load the project state. Your files were not changed.",
+      );
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    void window.laserx.getState().then((initialState) => {
-      if (active) {
-        setState(initialState);
-      }
-    });
-    const unsubscribe = window.laserx.onStateChanged((nextState) => {
+    void loadInitialState();
+    return window.laserx.onStateChanged((nextState) => {
       setState(nextState);
     });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
+  }, [loadInitialState]);
+
+  useEffect(() => {
+    if (state !== null) {
+      setGridSpacing(
+        String(gridSpacingForDisplay(state.project.document)),
+      );
+    }
+  }, [
+    state?.project.document.settings.displayUnit,
+    state?.project.document.settings.viewport.gridSpacingMm,
+  ]);
 
   const run = useCallback(async (command: Command) => {
     setBusy(true);
@@ -53,8 +76,38 @@ export function App() {
   }, []);
 
   if (state === null) {
+    if (startupError !== null) {
+      return (
+        <main className="startup-error" role="alert">
+          <span className="eyebrow">Startup problem</span>
+          <h1>LaserX could not finish loading.</h1>
+          <p data-testid="startup-error">{startupError}</p>
+          <button
+            type="button"
+            data-testid="retry-startup"
+            onClick={() => void loadInitialState()}
+          >
+            Retry
+          </button>
+        </main>
+      );
+    }
     return <main className="loading">Starting LaserX Design Studio…</main>;
   }
+
+  const document = state.project.document;
+  const viewportPreferences = document.settings.viewport;
+
+  const createExactDocument = (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void run(() =>
+      window.laserx.createDocument({
+        width: Number(width),
+        height: Number(height),
+        inputUnit,
+      }),
+    );
+  };
 
   return (
     <div className="app-shell">
@@ -112,7 +165,7 @@ export function App() {
         >
           Save as
         </button>
-        <span className="shell-badge">M01 shell</span>
+        <span className="shell-badge">M02 viewport</span>
       </nav>
 
       {state.recovery !== null && (
@@ -168,17 +221,67 @@ export function App() {
             <dl className="project-facts">
               <div>
                 <dt>Format</dt>
-                <dd>.laserx v1</dd>
+                <dd>.laserx v2</dd>
               </div>
               <div>
-                <dt>Workspace</dt>
-                <dd>{formatDimensions(state)}</dd>
+                <dt>Stock</dt>
+                <dd data-testid="document-dimensions">
+                  {formatDimensions(document)}
+                </dd>
               </div>
               <div>
-                <dt>Project ID</dt>
-                <dd>{state.project.id.slice(0, 8)}…</dd>
+                <dt>Origin</dt>
+                <dd>0, 0 mm</dd>
               </div>
             </dl>
+          </section>
+
+          <section>
+            <span className="section-label">New exact document</span>
+            <form className="document-form" onSubmit={createExactDocument}>
+              <label>
+                Width
+                <input
+                  aria-label="Document width"
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  required
+                  value={width}
+                  onChange={(event) => setWidth(event.target.value)}
+                />
+              </label>
+              <label>
+                Height
+                <input
+                  aria-label="Document height"
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  required
+                  value={height}
+                  onChange={(event) => setHeight(event.target.value)}
+                />
+              </label>
+              <label>
+                Input units
+                <select
+                  aria-label="Document input units"
+                  value={inputUnit}
+                  onChange={(event) =>
+                    setInputUnit(
+                      event.target.value as "millimeters" | "inches",
+                    )
+                  }
+                >
+                  <option value="millimeters">millimeters</option>
+                  <option value="inches">inches</option>
+                </select>
+              </label>
+              <button type="submit" disabled={busy}>
+                Create document
+              </button>
+            </form>
           </section>
 
           <section>
@@ -189,9 +292,13 @@ export function App() {
                   type="button"
                   key={displayUnit}
                   className={
-                    state.project.displayUnit === displayUnit ? "active" : ""
+                    document.settings.displayUnit === displayUnit
+                      ? "active"
+                      : ""
                   }
-                  aria-pressed={state.project.displayUnit === displayUnit}
+                  aria-pressed={
+                    document.settings.displayUnit === displayUnit
+                  }
                   disabled={busy}
                   onClick={() =>
                     void run(() =>
@@ -202,6 +309,97 @@ export function App() {
                   {displayUnit === "millimeters" ? "mm" : "in"}
                 </button>
               ))}
+            </div>
+          </section>
+
+          <section>
+            <span className="section-label">Viewport preferences</span>
+            <div className="preference-list">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={viewportPreferences.rulersVisible}
+                  onChange={(event) =>
+                    void run(() =>
+                      window.laserx.setViewportPreferences({
+                        rulersVisible: event.target.checked,
+                      }),
+                    )
+                  }
+                />
+                Rulers
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={viewportPreferences.gridVisible}
+                  onChange={(event) =>
+                    void run(() =>
+                      window.laserx.setViewportPreferences({
+                        gridVisible: event.target.checked,
+                      }),
+                    )
+                  }
+                />
+                Grid
+              </label>
+              <label>
+                Grid spacing
+                <span className="inline-input">
+                  <input
+                    aria-label="Grid spacing"
+                    type="number"
+                    min="0.001"
+                    step="any"
+                    value={gridSpacing}
+                    onChange={(event) => setGridSpacing(event.target.value)}
+                    onBlur={() => {
+                      const value = Number(gridSpacing);
+                      if (Number.isFinite(value) && value > 0) {
+                        void run(() =>
+                          window.laserx.setViewportPreferences({
+                            gridSpacingMm: gridSpacingToMillimeters(
+                              value,
+                              document.settings.displayUnit,
+                            ),
+                          }),
+                        );
+                      }
+                    }}
+                  />
+                  <span>
+                    {document.settings.displayUnit === "inches" ? "in" : "mm"}
+                  </span>
+                </span>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={viewportPreferences.snapping.enabled}
+                  onChange={(event) =>
+                    void run(() =>
+                      window.laserx.setViewportPreferences({
+                        snappingEnabled: event.target.checked,
+                      }),
+                    )
+                  }
+                />
+                Enable snapping
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={viewportPreferences.snapping.snapToGrid}
+                  onChange={(event) =>
+                    void run(() =>
+                      window.laserx.setViewportPreferences({
+                        snapToGrid: event.target.checked,
+                      }),
+                    )
+                  }
+                />
+                Snap to grid
+              </label>
             </div>
           </section>
 
@@ -236,29 +434,15 @@ export function App() {
         </aside>
 
         <main className="workspace">
-          <div className="workspace-grid" aria-hidden="true" />
-          <div className="blank-state" data-testid="blank-workspace">
-            <div className="blank-icon" aria-hidden="true">
-              <span />
-            </div>
-            <span className="eyebrow">Blank project</span>
-            <h1>Your workspace is ready.</h1>
-            <p>
-              M01 establishes the secure desktop and project lifecycle. Design
-              tools arrive in the next approved milestone.
-            </p>
-            <div className="blank-meta">
-              <span>Local-first</span>
-              <span>Autosave recovery</span>
-              <span>Schema v1</span>
-            </div>
-          </div>
+          <Viewport document={document} />
         </main>
       </div>
 
       <footer className="statusbar">
         <span>{state.dirty ? "Unsaved changes" : "All changes saved"}</span>
-        <span>{state.recovered ? "Recovered session" : "Desktop ready"}</span>
+        <span>
+          Cartesian workspace · +X right · +Y up · schema v2
+        </span>
       </footer>
     </div>
   );

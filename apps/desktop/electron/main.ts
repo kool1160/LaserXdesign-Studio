@@ -15,10 +15,12 @@ import {
   type UnsavedChoice,
 } from "./desktop-controller.js";
 import {
+  createDocumentRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
+  setViewportPreferencesRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 
@@ -26,10 +28,16 @@ const testUserDataPath = process.env.LASERX_USER_DATA_PATH;
 if (testUserDataPath !== undefined) {
   app.setPath("userData", resolve(testUserDataPath));
 }
+const testScaleFactor = process.env.LASERX_TEST_DEVICE_SCALE_FACTOR;
+if (testScaleFactor !== undefined) {
+  app.commandLine.appendSwitch("force-device-scale-factor", testScaleFactor);
+}
 
 let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
+let rejectNextGetState =
+  process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
 function emitState(state: DesktopState): void {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
@@ -109,10 +117,20 @@ function requireController(): DesktopController {
 }
 
 function registerIpc(): void {
-  ipcMain.handle(IPC_CHANNELS.getState, () => requireController().state);
+  ipcMain.handle(IPC_CHANNELS.getState, () => {
+    if (rejectNextGetState) {
+      rejectNextGetState = false;
+      throw new Error("Injected initial state failure.");
+    }
+    return requireController().state;
+  });
   ipcMain.handle(IPC_CHANNELS.newProject, () =>
     requireController().newProject(),
   );
+  ipcMain.handle(IPC_CHANNELS.createDocument, (_event, request: unknown) => {
+    const validated = createDocumentRequestSchema.parse(request);
+    return requireController().createDocument(validated);
+  });
   ipcMain.handle(IPC_CHANNELS.openProject, () =>
     requireController().openProject(),
   );
@@ -130,6 +148,13 @@ function registerIpc(): void {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);
   });
+  ipcMain.handle(
+    IPC_CHANNELS.setViewportPreferences,
+    (_event, request: unknown) => {
+      const validated = setViewportPreferencesRequestSchema.parse(request);
+      return requireController().setViewportPreferences(validated);
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.resolveRecovery, (_event, request: unknown) => {
     const validated = resolveRecoveryRequestSchema.parse(request);
     return requireController().resolveRecovery(validated);

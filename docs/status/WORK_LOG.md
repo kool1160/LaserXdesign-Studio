@@ -34,3 +34,25 @@ repository guard passed.
 active recovery snapshot; path-based recents; 10 MB empty-document schema-v1
 limit.
 - Next allowed work: M02 only, after the M01 PR is merged.
+
+## 2026-07-30 — M02 canonical document model and viewport
+
+- Date: 2026-07-30
+- Agent/task: Codex / Issue #3
+- Milestone: M02 — Canonical document model and viewport
+- Delivered: Exact millimeter document model; inch/millimeter presentation;
+stable document/object IDs; line/rectangle/ellipse/path placeholders; Cartesian
+coordinate conversion; renderer adapter; pan, pointer zoom, fit, reset, rulers,
+grid, preferences, snapping preferences, coordinate readout; schema v2 and
+deterministic v1 migration; M01 save-over-existing and startup-state
+regressions; packaged Windows and high-DPI coverage.
+- Verification: 32 unit/integration tests and 6 packaged Playwright tests pass
+locally. Final command-by-command output is recorded in the Issue #3 pull
+request.
+- Decisions: ADR 0008 (canonical document/viewport boundary) and ADR 0009
+(schema-v2 migration).
+- Known limitations: Camera position is ephemeral; the renderer covers only
+M02 placeholders; hit testing is interface-only; selection, transforms,
+layers, editing, import/export, and manufacturing features remain excluded.
+- Next allowed work: M03 only after this M02 pull request is reviewed, Windows
+CI passes, and the pull request is merged. Until then M03 remains blocked.

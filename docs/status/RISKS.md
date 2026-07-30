@@ -33,6 +33,22 @@ allowlist explicitly.
   data; those belong to later milestones.
 - Project files are capped at 10 MB until embedded asset requirements exist.
 
+## M02 known limitations
+
+- The SVG viewport is a replaceable renderer for the current document sizes
+  and placeholder objects; high-node-count performance is not yet characterized.
+- Only ephemeral pan/zoom camera state is kept in the renderer. Persisted
+  viewport preferences include rulers, grid, grid spacing, and snapping, not
+  the last camera position.
+- The hit-test interface exists in domain millimeters, but selection, handles,
+  transforms, grouping, and layers are intentionally absent until M03.
+- Placeholder paths are point sequences only. Production curves, node editing,
+  booleans, offsets, imports, and exports remain later milestone work.
+- Windows tests cover a forced 2× scale factor locally and in packaged
+  Playwright. Broader multi-monitor/DPI-transition coverage remains M12.
+- Project files remain capped at 10 MB and the packaged application continues
+  to use the default icon and development signing behavior recorded for M01.
+
 ## Scope explosion
 
 General CAD, CAM, nesting, cloud sync, and plugin systems can consume the project. Milestone gates and non-goals are mandatory.

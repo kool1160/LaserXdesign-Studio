@@ -1,8 +1,13 @@
 import {
+  copyProject,
   createBlankProject,
+  createDocument,
+  replaceProjectDocument,
+  setProjectDisplayUnit,
+  setViewportPreferences,
   type DisplayUnit,
-  type LaserxProjectV1,
-  updateProjectSettings,
+  type LaserxProject,
+  type UpdateViewportPreferences,
 } from "@laserx/domain";
 
 export interface LifecycleDependencies {
@@ -11,7 +16,7 @@ export interface LifecycleDependencies {
 }
 
 export interface ProjectSessionState {
-  project: LaserxProjectV1;
+  project: LaserxProject;
   filePath: string | null;
   dirty: boolean;
   recovered: boolean;
@@ -19,36 +24,32 @@ export interface ProjectSessionState {
 
 export type ApplicationCommand =
   | { type: "project.new" }
-  | { type: "project.set-display-unit"; displayUnit: DisplayUnit };
+  | {
+      type: "project.create-document";
+      width: number;
+      height: number;
+      inputUnit: DisplayUnit;
+    }
+  | { type: "project.set-display-unit"; displayUnit: DisplayUnit }
+  | {
+      type: "project.set-viewport-preferences";
+      updates: UpdateViewportPreferences;
+    };
 
 export interface ProjectCommandDispatcher {
   dispatch(command: ApplicationCommand): ProjectSessionState;
 }
 
 export interface ProjectFileService {
-  read(filePath: string): Promise<LaserxProjectV1>;
-  write(filePath: string, project: LaserxProjectV1): Promise<void>;
+  read(filePath: string): Promise<LaserxProject>;
+  write(filePath: string, project: LaserxProject): Promise<void>;
 }
 
 export interface RecoverySnapshot {
   schemaVersion: 1;
   capturedAt: string;
   originalPath: string | null;
-  project: LaserxProjectV1;
-}
-
-function copyProject(project: LaserxProjectV1): LaserxProjectV1 {
-  return {
-    ...project,
-    project: { ...project.project },
-    document: {
-      ...project.document,
-      settings: { ...project.document.settings },
-    },
-    migrationHistory: project.migrationHistory.map((record) => ({
-      ...record,
-    })),
-  };
+  project: LaserxProject;
 }
 
 function blankState(dependencies: LifecycleDependencies): ProjectSessionState {
@@ -56,6 +57,7 @@ function blankState(dependencies: LifecycleDependencies): ProjectSessionState {
   return {
     project: createBlankProject({
       id: dependencies.createId(),
+      documentId: dependencies.createId(),
       now,
     }),
     filePath: null,
@@ -85,12 +87,41 @@ export class ProjectSession implements ProjectCommandDispatcher {
       case "project.new":
         this.#state = blankState(this.#dependencies);
         break;
+      case "project.create-document": {
+        const document = createDocument({
+          id: this.#dependencies.createId(),
+          width: command.width,
+          height: command.height,
+          inputUnit: command.inputUnit,
+        });
+        this.#state = {
+          ...this.#state,
+          project: replaceProjectDocument(
+            this.#state.project,
+            document,
+            this.#dependencies.now(),
+          ),
+          dirty: true,
+        };
+        break;
+      }
       case "project.set-display-unit":
         this.#state = {
           ...this.#state,
-          project: updateProjectSettings(
+          project: setProjectDisplayUnit(
             this.#state.project,
-            { displayUnit: command.displayUnit },
+            command.displayUnit,
+            this.#dependencies.now(),
+          ),
+          dirty: true,
+        };
+        break;
+      case "project.set-viewport-preferences":
+        this.#state = {
+          ...this.#state,
+          project: setViewportPreferences(
+            this.#state.project,
+            command.updates,
             this.#dependencies.now(),
           ),
           dirty: true,
@@ -100,7 +131,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
     return this.state;
   }
 
-  public open(project: LaserxProjectV1, filePath: string): ProjectSessionState {
+  public open(project: LaserxProject, filePath: string): ProjectSessionState {
     this.#state = {
       project: copyProject(project),
       filePath,
@@ -110,16 +141,14 @@ export class ProjectSession implements ProjectCommandDispatcher {
     return this.state;
   }
 
-  public prepareSave(): LaserxProjectV1 {
-    return updateProjectSettings(
-      this.#state.project,
-      {},
-      this.#dependencies.now(),
-    );
+  public prepareSave(): LaserxProject {
+    const project = copyProject(this.#state.project);
+    project.project.updatedAt = this.#dependencies.now();
+    return project;
   }
 
   public completeSave(
-    savedProject: LaserxProjectV1,
+    savedProject: LaserxProject,
     filePath: string,
   ): ProjectSessionState {
     this.#state = {

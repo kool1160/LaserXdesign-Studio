@@ -13,7 +13,10 @@ test("blank project saves, reopens, and protects dirty close", async () => {
       async () => (await window.laserx.getState()).project.id,
     );
 
-    await page.getByRole("button", { name: "in", exact: true }).click();
+    await page.getByRole("button", { name: "Create document" }).click();
+    await expect(page.getByTestId("document-dimensions")).toHaveText(
+      "24 × 12 in",
+    );
     await expect(page.getByTestId("dirty-indicator")).toBeVisible();
     await page.getByRole("button", { name: "Save as" }).click();
     await expect(page.getByTestId("dirty-indicator")).toBeHidden();
@@ -23,10 +26,19 @@ test("blank project saves, reopens, and protects dirty close", async () => {
     ) as {
       schemaVersion: number;
       project: { id: string };
-      document: { settings: { displayUnit: string } };
+      document: {
+        id: string;
+        dimensions: { widthMm: number; heightMm: number };
+        settings: { displayUnit: string };
+      };
     };
-    expect(saved.schemaVersion).toBe(1);
+    expect(saved.schemaVersion).toBe(2);
     expect(saved.project.id).toBe(originalId);
+    expect(saved.document.id).not.toBe(originalId);
+    expect(saved.document.dimensions).toEqual({
+      widthMm: 609.6,
+      heightMm: 304.8,
+    });
     expect(saved.document.settings.displayUnit).toBe("inches");
 
     await page.getByRole("button", { name: "mm", exact: true }).click();

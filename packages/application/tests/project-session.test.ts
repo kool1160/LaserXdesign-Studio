@@ -7,20 +7,27 @@ function dependencies() {
   let sequence = 0;
   return {
     createId: () =>
-      sequence++ === 0
-        ? "123e4567-e89b-42d3-a456-426614174000"
-        : "123e4567-e89b-42d3-a456-426614174001",
+      `123e4567-e89b-42d3-a456-${String(sequence++).padStart(12, "0")}`,
     now: () => "2026-07-30T12:00:00.000Z",
   };
 }
 
 describe("ProjectSession", () => {
-  it("creates, changes, saves, and reopens a blank project", () => {
+  it("creates an exact document, saves, and reopens all viewport state", () => {
     const session = new ProjectSession(dependencies());
-
     session.dispatch({
-      type: "project.set-display-unit",
-      displayUnit: "inches",
+      type: "project.create-document",
+      width: 24,
+      height: 12,
+      inputUnit: "inches",
+    });
+    session.dispatch({
+      type: "project.set-viewport-preferences",
+      updates: {
+        gridSpacingMm: 12.7,
+        gridVisible: false,
+        snappingEnabled: true,
+      },
     });
     const saved = session.prepareSave();
     session.completeSave(saved, "C:\\projects\\sign.laserx");
@@ -31,24 +38,29 @@ describe("ProjectSession", () => {
       "C:\\projects\\sign.laserx",
     );
 
-    expect(reopened.project.project.id).toBe(
-      "123e4567-e89b-42d3-a456-426614174000",
-    );
+    expect(reopened.project.document.dimensions).toEqual({
+      widthMm: 609.6,
+      heightMm: 304.8,
+    });
     expect(reopened.project.document.settings.displayUnit).toBe("inches");
+    expect(reopened.project.document.settings.viewport).toMatchObject({
+      gridSpacingMm: 12.7,
+      gridVisible: false,
+      snapping: { enabled: true },
+    });
     expect(reopened.dirty).toBe(false);
   });
 
-  it("marks a changed project dirty", () => {
+  it("marks display and viewport preference changes dirty", () => {
     const session = new ProjectSession(dependencies());
     expect(session.state.dirty).toBe(false);
 
     const project = createBlankProject({
       id: "123e4567-e89b-42d3-a456-426614174000",
+      documentId: "123e4567-e89b-42d3-a456-426614174001",
       now: "2026-07-30T12:00:00.000Z",
     });
     session.open(project, "C:\\projects\\saved.laserx");
-    expect(session.state.dirty).toBe(false);
-
     session.dispatch({
       type: "project.set-display-unit",
       displayUnit: "inches",
@@ -60,6 +72,7 @@ describe("ProjectSession", () => {
     const session = new ProjectSession(dependencies());
     const project = createBlankProject({
       id: "123e4567-e89b-42d3-a456-426614174000",
+      documentId: "123e4567-e89b-42d3-a456-426614174001",
       now: "2026-07-30T12:00:00.000Z",
     });
     session.open(project, "C:\\projects\\original.laserx");

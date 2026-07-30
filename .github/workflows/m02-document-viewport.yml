@@ -1,10 +1,10 @@
-name: M01 Desktop
+name: M02 Document Viewport
 
 on:
   push:
     branches:
       - main
-      - "feat/m01-desktop-shell"
+      - "feat/m02-document-viewport"
   pull_request:
 
 permissions:
@@ -32,14 +32,23 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify M01
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+
+      - name: Run repository guard
+        run: py -3 scripts/repository_guard.py
+
+      - name: Verify clean patch formatting
+        run: git diff --check
+
+      - name: Verify M02
         run: pnpm verify
 
-      - name: Upload packaged smoke application
+      - name: Upload packaged viewport smoke application
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: laserx-m01-windows-unpacked
+          name: laserx-m02-windows-unpacked
           path: apps/desktop/dist-packaged/win-unpacked
           if-no-files-found: error
           retention-days: 7

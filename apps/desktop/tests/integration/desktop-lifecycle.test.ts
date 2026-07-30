@@ -84,7 +84,15 @@ describe("desktop project lifecycle", () => {
     await controller.initialize();
     const originalId = controller.state.project.id;
 
-    await controller.setDisplayUnit("inches");
+    await controller.createDocument({
+      width: 24,
+      height: 12,
+      inputUnit: "inches",
+    });
+    await controller.setViewportPreferences({
+      gridSpacingMm: 12.7,
+      snappingEnabled: true,
+    });
     expect(controller.state.dirty).toBe(true);
     await controller.saveProjectAs();
     expect(controller.state.dirty).toBe(false);
@@ -95,7 +103,16 @@ describe("desktop project lifecycle", () => {
     await controller.openRecent(projectPath);
 
     expect(controller.state.project.id).toBe(originalId);
-    expect(controller.state.project.displayUnit).toBe("inches");
+    expect(controller.state.project.document.dimensions).toEqual({
+      widthMm: 609.6,
+      heightMm: 304.8,
+    });
+    expect(
+      controller.state.project.document.settings.viewport,
+    ).toMatchObject({
+      gridSpacingMm: 12.7,
+      snapping: { enabled: true },
+    });
     expect(controller.state.dirty).toBe(false);
   });
 
@@ -170,7 +187,9 @@ describe("desktop project lifecycle", () => {
     expect(second.state.recovery).not.toBeNull();
     await second.resolveRecovery({ action: "recover" });
 
-    expect(second.state.project.displayUnit).toBe("inches");
+    expect(
+      second.state.project.document.settings.displayUnit,
+    ).toBe("inches");
     expect(second.state.filePath).toBe(projectPath);
     expect(second.state.dirty).toBe(true);
     expect(second.state.recovered).toBe(true);

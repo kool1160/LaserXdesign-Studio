@@ -2,11 +2,7 @@
 
 No blocking decision is currently open.
 
-During M01, record and resolve:
-
-- exact supported Windows versions;
-- exact active-LTS Node and pnpm versions;
-- Electron/Vite integration approach;
-- renderer state approach;
-- packaging and signing strategy for development builds;
-- initial canvas rendering adapter candidate.
+M01 toolchain, Electron, renderer-state, packaging, and security decisions are
+recorded in ADRs 0005–0007. M02 canonical document, coordinate, renderer
+adapter, high-DPI, schema-v2, and migration decisions are recorded in ADRs
+0008–0009.

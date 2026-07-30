@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 describe("ProjectStorage", () => {
-  it("atomically saves and reopens a schema-v1 project", async () => {
+  it("atomically saves and reopens a schema-v2 project", async () => {
     const directory = await temporaryDirectory();
     const filePath = join(directory, "blank.laserx");
     const project = createBlankProject({
@@ -39,7 +39,33 @@ describe("ProjectStorage", () => {
     await storage.write(filePath, project);
 
     await expect(storage.read(filePath)).resolves.toEqual(project);
-    expect(await readFile(filePath, "utf8")).toContain('"schemaVersion": 1');
+    expect(await readFile(filePath, "utf8")).toContain('"schemaVersion": 2');
+  });
+
+  it("replaces an existing project and reopens the replacement", async () => {
+    const directory = await temporaryDirectory();
+    const filePath = join(directory, "replacement.laserx");
+    const storage = new ProjectStorage();
+    const first = createBlankProject({
+      id: "123e4567-e89b-42d3-a456-426614174000",
+      documentId: "123e4567-e89b-42d3-a456-426614174001",
+      now: "2026-07-30T12:00:00.000Z",
+      width: 600,
+      height: 300,
+    });
+    const replacement = createBlankProject({
+      id: "123e4567-e89b-42d3-a456-426614174002",
+      documentId: "123e4567-e89b-42d3-a456-426614174003",
+      now: "2026-07-30T12:01:00.000Z",
+      width: 24,
+      height: 12,
+      inputUnit: "inches",
+    });
+
+    await storage.write(filePath, first);
+    await storage.write(filePath, replacement);
+
+    await expect(storage.read(filePath)).resolves.toEqual(replacement);
   });
 
   it("fails safely for corrupt and future-version projects", async () => {
