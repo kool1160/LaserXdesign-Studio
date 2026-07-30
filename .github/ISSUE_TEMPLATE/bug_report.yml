@@ -1,0 +1,63 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include private customer artwork, API keys, or proprietary font files."
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Desktop/project lifecycle
+        - Canvas/editing
+        - Text/fonts
+        - Geometry
+        - SVG/DXF
+        - Raster tracing
+        - Cutability/bridges
+        - AI generation
+        - Layered export
+        - Build/release
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include dimensions, display units, process settings, and fixture names when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, logs, or safe fixture details
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed secrets and private customer data.
+          required: true
+        - label: I stated whether the exported physical size was wrong.
+          required: true

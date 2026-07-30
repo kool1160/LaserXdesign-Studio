@@ -1,0 +1,43 @@
+name: Milestone task
+description: Create a testable task inside the active milestone
+title: "task: "
+body:
+  - type: input
+    id: milestone
+    attributes:
+      label: Active milestone
+      placeholder: M01 — Desktop shell and project lifecycle
+    validations:
+      required: true
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Deliverable
+      description: One complete vertical slice, not a list of unrelated chores.
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Expected package boundaries
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance tests
+    validations:
+      required: true
+  - type: textarea
+    id: excluded
+    attributes:
+      label: Explicit exclusions
+    validations:
+      required: true
+  - type: checkboxes
+    id: done
+    attributes:
+      label: Definition of done
+      options:
+        - label: Tests are included at the correct layer.
+        - label: Units and tolerances are explicit where relevant.
+        - label: Documentation/status changes are identified.
+        - label: Work stays inside the active milestone.

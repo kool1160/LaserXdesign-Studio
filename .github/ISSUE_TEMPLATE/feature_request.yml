@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a user workflow improvement
+title: "feature: "
+body:
+  - type: input
+    id: user
+    attributes:
+      label: User and job
+      description: Who needs this and what sign-making job are they trying to finish?
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the current pain without prescribing a general CAD clone.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Desired workflow
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Closest planned milestone
+      options:
+        - M01 Desktop shell
+        - M02 Document/viewport
+        - M03 Editing core
+        - M04 Text/fonts
+        - M05 Geometry editing
+        - M06 SVG/DXF
+        - M07 Raster tracing
+        - M08 Cutability
+        - M09 Sign tools
+        - M10 AI generation
+        - M11 Layered production
+        - M12 Beta hardening
+        - Post-v1 / unknown
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance test
+      description: State a concrete test with exact dimensions or output where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: What should remain out of scope?
