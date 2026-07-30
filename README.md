@@ -25,21 +25,21 @@ Start with [Issue #2](../../issues/2) and read these files before making changes
 5. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 6. [`docs/MILESTONES.md`](docs/MILESTONES.md)
 
-## Planned stack
+## M01 stack
 
-- Electron
-- React
-- TypeScript
-- Vite
-- pnpm workspaces
-- Vitest
-- Playwright
+- Node 24.18.1 LTS and pnpm 11.18.0
+- Electron 43.2.0
+- React 19.2.8
+- TypeScript 6.0.3
+- Vite 8.2.0
+- Vitest 4.1.10
+- Playwright 1.62.0
 
 Geometry, file conversion, and cutability rules live outside the UI so they can be tested independently and reused later.
 
 ## Development
 
-The M01 agent must select compatible maintained versions, commit the lockfile, and make these root commands operational:
+Install the pinned toolchain and dependencies:
 
 ```bash
 pnpm install
@@ -51,11 +51,9 @@ pnpm build
 pnpm verify
 ```
 
-Until that M01 bootstrap is committed, the available foundation check is:
-
-```bash
-python scripts/repository_guard.py
-```
+`pnpm test:e2e` packages and launches the Windows application. `pnpm verify`
+runs lint, typecheck, unit/integration tests, build, package, and packaged
+end-to-end tests.
 
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete workflow.
 

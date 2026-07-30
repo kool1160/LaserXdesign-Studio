@@ -2,12 +2,17 @@
 
 ## Desktop boundaries
 
-- context isolation enabled;
-- renderer sandboxing evaluated and enabled where compatible;
-- no unrestricted Node integration in renderer;
-- typed allowlisted IPC methods;
-- strict validation of IPC arguments and results;
+- context isolation and renderer sandboxing enabled;
+- Node integration disabled in the renderer;
+- navigation and new renderer windows denied;
+- local packaged content only, with the Vite loopback URL allowlisted only in development;
+- one frozen typed preload API with fixed allowlisted IPC methods;
+- strict Zod validation of IPC arguments and results on both sides;
+- arbitrary renderer-provided save paths rejected;
 - no arbitrary command execution from project data.
+
+Packaged Playwright smoke tests assert that `process` and `require` are absent
+from the page world and that preload reports an isolated, sandboxed context.
 
 ## Untrusted files
 

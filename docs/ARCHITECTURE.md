@@ -41,6 +41,17 @@ Adapters translate external data into or out of normalized domain types. They do
 
 Electron main process owns privileged file and network operations. The renderer receives a narrow typed API through preload with context isolation enabled. The renderer never receives unrestricted filesystem or process access.
 
+For M01, Electron main also owns the authoritative `ProjectSession`, native
+dialogs, validated file storage, recents, dirty-close decisions, autosave, and
+recovery. Preload exposes a frozen allowlist whose request and result schemas
+are validated at runtime. React holds only a replaceable projection of the
+current desktop state.
+
+The application-command interface and file-service boundary live in
+`packages/application`. Schema parsing, deterministic serialization, and the
+migration registry live in `packages/project-format`; Electron adapters perform
+actual filesystem access.
+
 ## State flow
 
 ```text
