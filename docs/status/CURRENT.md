@@ -2,49 +2,58 @@
 
 ## Active gate
 
-**M01 — Desktop shell and project lifecycle**
+**M02 — Canonical document model and viewport**
+
+M02 is the next allowed implementation milestone after the M01 pull request is
+merged. Do not add M02 work to the M01 branch.
 
 ## State
 
-M00 is complete. The Codex-ready repository foundation was merged to `main` in commit `683a0aff72671a76b1e5ac7b366069d4cd0a29d2` after the Repository Guard passed on the reviewed PR head.
+M01 is complete on verification commit
+`052000614281f3c304c45fe37ece8113e8439165`. The complete M01 acceptance suite
+passed on Windows on 2026-07-30. The pull request and CI must preserve that
+result before merge.
 
-Production feature implementation has not started. M01 is now the only active implementation milestone.
+M00 remains complete on `main` in commit
+`683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
 
-## M00 completion record
+## M01 completion record
 
-- [x] Repository initialized.
-- [x] Root `AGENTS.md` created.
-- [x] Product requirements documented.
-- [x] Architecture and package boundaries documented.
-- [x] Large milestone sequence documented.
-- [x] Directory/package scaffold committed.
-- [x] GitHub workflow and contribution templates committed.
-- [x] Repository Guard passed.
-- [x] Foundation merged to `main`.
-- [x] Status advanced to M01.
+- [x] Compatible maintained toolchain versions selected and pinned.
+- [x] pnpm lockfile committed.
+- [x] Secure sandboxed Electron main/preload/renderer boundary implemented.
+- [x] Typed, runtime-validated IPC allowlist implemented.
+- [x] Blank Windows desktop shell, menus, logging, and error boundary implemented.
+- [x] `.laserx` schema version 1 and reviewed fixtures committed.
+- [x] New/open/save/save-as/recent/dirty lifecycle implemented.
+- [x] Autosave and interrupted-session recovery implemented without overwriting explicit saves.
+- [x] Unit, integration, packaged smoke, and lifecycle end-to-end tests pass.
+- [x] Windows unpacked smoke package is produced and uploaded by CI.
+- [x] ADRs 0005–0007 accepted.
+- [x] Known limitations documented in `docs/status/RISKS.md`.
+- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`,
+  `pnpm build`, and `pnpm verify` pass.
 
-## M01 objective
+## M02 objective
 
-Deliver a launchable, securely isolated Windows desktop shell with a versioned blank `.laserx` project lifecycle: new, open, save, save-as, dirty-state protection, and recovery skeleton.
+Deliver the canonical millimeter document model and stable 2D viewport: exact
+document size, unit switching, Cartesian-to-screen conversion, grid, rulers,
+pan, zoom, fit-to-view, snapping preferences, coordinate readout, and the
+minimal placeholder objects needed to prove the model.
 
-Read `docs/milestones/M01-desktop-shell.md` before starting.
+Read `docs/milestones/M02-document-viewport.md` before starting.
 
-## Allowed work
+## Allowed next work
 
-- select and pin compatible active versions for Node, pnpm, Electron, React, Vite, TypeScript, Vitest, and Playwright;
-- establish the lockfile and working root verification commands;
-- implement secure Electron main/preload/renderer boundaries;
-- implement the blank application shell and typed IPC;
-- implement `.laserx` schema version 1 for an empty project;
-- implement new/open/save/save-as/recent-file/dirty-state behavior;
-- implement autosave and recovery skeleton;
-- add M01 unit, integration, smoke, package, and end-to-end tests;
-- record required M01 ADRs and update documentation.
+- canonical document dimensions and settings in millimeters;
+- stable schema-ready object base types and IDs;
+- Cartesian domain coordinates and tested renderer conversion;
+- viewport pan, zoom, fit/reset, rulers, grid, snapping settings, and exact readout;
+- minimal line/rectangle/ellipse/path placeholders required to prove the model;
+- serialization/migration, unit, coordinate, viewport, high-DPI, and end-to-end coverage.
 
 ## Not allowed yet
 
-Do not implement the production canvas, geometry engine, text/font tools, tracing, SVG/DXF workflows, cutability, sign generators, AI generation, layered export, CAM, G-code, DWG, or any M02+ feature.
-
-## M01 exit rule
-
-Do not advance to M02 until every acceptance test and exit item in `docs/milestones/M01-desktop-shell.md` passes and this file is updated with the verified completion commit.
+Do not implement M03 editing/selection, production text/fonts, boolean geometry,
+SVG/DXF conversion, raster tracing, cutability, sign generators, AI, layered
+export, CAM, G-code, or DWG.

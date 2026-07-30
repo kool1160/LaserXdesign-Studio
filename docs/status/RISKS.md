@@ -16,6 +16,23 @@ Raster tracing can create excessive nodes, self-intersections, tiny islands, and
 
 File import and AI connectivity increase the risk of unsafe IPC or remote content. Keep privileged APIs narrow.
 
+M01 mitigates the current shell with sandboxing, context isolation, disabled
+Node integration, denied navigation/windows, strict IPC schemas, and packaged
+security smoke tests. Every later privileged capability must extend that
+allowlist explicitly.
+
+## M01 known limitations
+
+- Packaging produces a reviewed unpacked Windows smoke application, not an
+  installer, branded application icon, or production signing/update flow;
+  those remain M12 work.
+- Recovery holds one active local snapshot and has no history/retention UI.
+- Recent projects are path-based and do not yet detect moved files until open.
+- Schema v1 intentionally stores only an empty document and settings. It has no
+  layers, objects, canvas, geometry, text, import, export, or manufacturing
+  data; those belong to later milestones.
+- Project files are capped at 10 MB until embedded asset requirements exist.
+
 ## Scope explosion
 
 General CAD, CAM, nesting, cloud sync, and plugin systems can consume the project. Milestone gates and non-goals are mandatory.

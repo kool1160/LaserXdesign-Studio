@@ -1,0 +1,45 @@
+name: M01 Desktop
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/m01-desktop-shell"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify M01
+        run: pnpm verify
+
+      - name: Upload packaged smoke application
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: laserx-m01-windows-unpacked
+          path: apps/desktop/dist-packaged/win-unpacked
+          if-no-files-found: error
+          retention-days: 7

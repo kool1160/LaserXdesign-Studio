@@ -2,9 +2,25 @@
 
 ## Native project
 
-Planned extension: `.laserx`.
+Extension: `.laserx`.
 
-The format must be versioned, deterministic, migratable, and capable of preserving editable objects. A packaged JSON-based structure is preferred initially unless fixture size or embedded assets require a container format.
+Schema version 1 is strict, deterministic UTF-8 JSON with a trailing newline.
+It contains project identity/timestamps, an explicitly empty document, display
+unit, blank-workspace dimensions stored in millimeters, and migration history.
+The reviewed fixture is `fixtures/projects/blank-v1.laserx`.
+
+The M01 parser rejects unknown fields, invalid data, corrupt JSON, and schema
+versions newer than the application supports. The migration registry is
+explicitly empty until a second schema exists. Files are limited to 10 MB in
+M01.
+
+Explicit saves use same-directory atomic replacement. Recovery snapshots are
+stored separately under Electron user data and never overwrite the explicit
+project file.
+
+Future schemas remain versioned, deterministic, migratable, and capable of
+preserving editable objects. A container may replace JSON only when embedded
+assets justify it and a migration decision is accepted.
 
 Required data:
 

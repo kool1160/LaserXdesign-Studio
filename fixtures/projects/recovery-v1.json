@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-30T12:05:00.000Z",
+  "originalPath": "C:\\projects\\blank.laserx",
+  "project": {
+    "schemaVersion": 1,
+    "project": {
+      "id": "123e4567-e89b-42d3-a456-426614174000",
+      "name": "Untitled",
+      "createdAt": "2026-07-30T12:00:00.000Z",
+      "updatedAt": "2026-07-30T12:04:00.000Z"
+    },
+    "document": {
+      "kind": "empty",
+      "settings": {
+        "displayUnit": "inches",
+        "pageWidthMm": 304.8,
+        "pageHeightMm": 304.8
+      }
+    },
+    "migrationHistory": []
+  }
+}

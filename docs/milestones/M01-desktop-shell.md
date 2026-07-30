@@ -42,9 +42,13 @@ Canvas geometry, text, tracing, DXF, cutability, AI generation, and production a
 
 ## Exit checklist
 
-- [ ] Dependency and security ADRs accepted.
-- [ ] Project schema fixture committed.
-- [ ] Lifecycle end-to-end test passes.
-- [ ] Windows smoke package produced in CI or documented equivalent.
-- [ ] M01 known limitations documented.
-- [ ] Status advances to M02.
+- [x] Dependency and security ADRs accepted.
+- [x] Project schema fixture committed.
+- [x] Lifecycle end-to-end test passes.
+- [x] Windows smoke package produced in CI or documented equivalent.
+- [x] M01 known limitations documented.
+- [x] Status advances to M02.
+
+Completion evidence: Windows verification passed on 2026-07-30 at
+`052000614281f3c304c45fe37ece8113e8439165`. ADRs 0005–0007 record the
+toolchain, renderer state, security/IPC, project format, and recovery decisions.

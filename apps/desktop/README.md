@@ -12,4 +12,13 @@ Electron main/preload code and the React renderer live here.
 - `src/lib/` contains renderer adapters, never manufacturing geometry.
 - `tests/` contains desktop unit, integration, and end-to-end coverage.
 
-Production implementation begins in M01.
+## M01 implementation
+
+The main process owns the authoritative project session, menus, native
+dialogs, validated filesystem adapters, recents, dirty-close protection,
+autosave, and recovery. Preload exposes the frozen typed `window.laserx`
+allowlist. The renderer is sandboxed, context-isolated, and has Node integration
+disabled.
+
+Run `pnpm dev` from the repository root for development. `pnpm test:e2e`
+packages and tests the unpacked Windows application.

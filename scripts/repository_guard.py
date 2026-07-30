@@ -57,10 +57,28 @@ EXPECTED_MILESTONES = tuple(
 
 FONT_SUFFIXES = {".ttf", ".otf", ".woff", ".woff2"}
 SECRET_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
+IGNORED_DIRECTORY_NAMES = {
+    ".git",
+    ".pnpm-store",
+    "artifacts",
+    "build",
+    "coverage",
+    "dist",
+    "dist-packaged",
+    "node_modules",
+    "out",
+    "playwright-report",
+    "release",
+    "test-results",
+}
 
 
 def relative(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
+
+
+def is_ignored(path: Path) -> bool:
+    return any(part in IGNORED_DIRECTORY_NAMES for part in path.relative_to(ROOT).parts)
 
 
 def check_required(errors: list[str]) -> None:
@@ -88,7 +106,7 @@ def check_instruction_links(errors: list[str]) -> None:
 
 def check_secrets(errors: list[str]) -> None:
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts:
+        if not path.is_file() or is_ignored(path):
             continue
         if path.name == ".env.example":
             continue
@@ -100,7 +118,11 @@ def check_secrets(errors: list[str]) -> None:
 
 def check_fonts(errors: list[str]) -> None:
     for path in ROOT.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in FONT_SUFFIXES:
+        if (
+            not path.is_file()
+            or is_ignored(path)
+            or path.suffix.lower() not in FONT_SUFFIXES
+        ):
             continue
 
         rel = relative(path)

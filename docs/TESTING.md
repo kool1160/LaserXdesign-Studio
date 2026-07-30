@@ -44,3 +44,25 @@ Tests must identify the tolerance and its reason. Do not use a broad tolerance t
 ## Regression policy
 
 Every reproducible bug gets a test at the lowest meaningful layer. UI-only tests are not a substitute for a geometry-unit regression test.
+
+## M01 executable layers
+
+- project-format unit tests cover deterministic round trips and
+  corrupt/future-version rejection;
+- application tests cover dirty state, identity/settings preservation, and
+  recovery semantics;
+- desktop integration tests use real temporary files for atomic save/open,
+  recents, dirty close decisions, autosave, and recovery isolation;
+- Playwright launches the packaged Windows executable for security smoke and
+  complete lifecycle tests.
+
+Run all milestone checks from the repository root:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e
+pnpm build
+pnpm verify
+```

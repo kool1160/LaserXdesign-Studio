@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for initial architecture; exact versions selected in M01.
+Accepted. Exact M01 versions are recorded in ADR 0005.
 
 ## Decision
 
