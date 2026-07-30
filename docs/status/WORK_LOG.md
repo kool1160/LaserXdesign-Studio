@@ -94,6 +94,9 @@ last-command state, and the pre-existing redo branch.
 `pnpm build`, `pnpm verify`, `pnpm audit --prod`,
 `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally.
 The suite contains 70 unit/integration tests and 8 packaged Playwright tests.
+Repository Guard run `30587115678`, Windows push run `30587113232`, and
+Windows pull-request run `30587115511` passed on focused code commit
+`c923502c6cb71d2ff7ffb7a2ba99dd6678038bbf`.
 - Decisions: ADR 0010 now records commit-only redo invalidation and complete
 transaction cancellation; ADR 0011 records one recursive group layer identity.
 - Known limitations: Exact bounds cannot expand an intrinsically zero axis;
