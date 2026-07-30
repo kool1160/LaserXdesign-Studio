@@ -78,7 +78,13 @@ export class RecentProjectsStore {
   }
 }
 
-export class RecoveryStore {
+export interface RecoveryStorePort {
+  load(): Promise<RecoverySnapshot | null>;
+  save(snapshot: RecoverySnapshot): Promise<void>;
+  remove(): Promise<void>;
+}
+
+export class RecoveryStore implements RecoveryStorePort {
   public readonly filePath: string;
 
   public constructor(userDataPath: string) {
