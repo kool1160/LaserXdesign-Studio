@@ -32,6 +32,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
       "createDocument",
+      "editorAction",
       "getState",
       "newProject",
       "onStateChanged",

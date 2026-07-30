@@ -35,8 +35,11 @@ Node editing, text, topology-changing booleans, raster tracing, cutability, and 
 
 ## Exit checklist
 
-- [ ] Command/history model documented.
-- [ ] Transform invariant tests pass.
-- [ ] End-to-end editing workflow passes.
-- [ ] No direct arbitrary document mutation from UI components.
+- [x] Command/history model documented.
+- [x] Transform invariant tests pass.
+- [x] End-to-end editing workflow passes.
+- [x] No direct arbitrary document mutation from UI components.
 - [ ] Status advances to M04.
+
+The final item remains blocked until the M03 pull request is reviewed, Windows
+CI is green, and the pull request is merged.

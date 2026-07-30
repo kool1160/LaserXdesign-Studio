@@ -1,5 +1,8 @@
 import { createDocument, type DocumentObject } from "@laserx/domain";
-import { screenToDomain } from "@laserx/geometry";
+import {
+  IDENTITY_AFFINE_TRANSFORM,
+  screenToDomain,
+} from "@laserx/geometry";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,6 +10,8 @@ import {
   fitDocumentToView,
   formatDimensions,
   gridSpacingToMillimeters,
+  keyboardMoveCommand,
+  pointerMoveCommand,
 } from "../../src/lib/viewport-adapter.js";
 
 const size = {
@@ -26,6 +31,8 @@ describe("renderer viewport adapter", () => {
     const populatedObjects: DocumentObject[] = [
       {
         id: "123e4567-e89b-42d3-a456-426614174001",
+        layerId: empty.activeLayerId,
+        transform: { ...IDENTITY_AFFINE_TRANSFORM },
         type: "line",
         start: { xMm: -100, yMm: -50 },
         end: { xMm: 700, yMm: 350 },
@@ -40,24 +47,29 @@ describe("renderer viewport adapter", () => {
   });
 
   it("adapts objects to screen primitives without changing their IDs", () => {
-    const document = createDocument({
+    const blank = createDocument({
       id: "123e4567-e89b-42d3-a456-426614174000",
       width: 24,
       height: 12,
       inputUnit: "inches",
+    });
+    const document = {
+      ...blank,
       objects: [
         {
           id: "123e4567-e89b-42d3-a456-426614174001",
+          layerId: blank.activeLayerId,
+          transform: { ...IDENTITY_AFFINE_TRANSFORM },
           type: "rectangle",
           origin: { xMm: 10, yMm: 10 },
           widthMm: 100,
           heightMm: 50,
         },
-      ],
-    });
+      ] satisfies DocumentObject[],
+    };
     const viewport = fitDocumentToView(document, size);
     const scene = createViewportScene(document, viewport, size);
-    expect(scene.objects[0]?.id).toBe(
+    expect(scene.objects[0]?.objectId).toBe(
       "123e4567-e89b-42d3-a456-426614174001",
     );
     expect(screenToDomain(
@@ -85,5 +97,65 @@ describe("renderer viewport adapter", () => {
     });
     expect(formatDimensions(document)).toBe("24 × 12 in");
     expect(gridSpacingToMillimeters(0.5, "inches")).toBe(12.7);
+  });
+
+  it("maps pointer and keyboard movement to equivalent domain commands", () => {
+    const objectIds = ["123e4567-e89b-42d3-a456-426614174001"];
+    const viewport = {
+      originScreenXCssPx: 0,
+      originScreenYCssPx: 200,
+      zoomCssPxPerMm: 10,
+    };
+    const pointer = pointerMoveCommand(
+      objectIds,
+      { xCssPx: 100, yCssPx: 100 },
+      { xCssPx: 110, yCssPx: 80 },
+      viewport,
+    );
+    const keyboard = keyboardMoveCommand(objectIds, 1, 2);
+    expect(pointer).toMatchObject(keyboard);
+    expect(pointer.type).toBe("objects.move");
+  });
+
+  it("projects the complete transform-handle set for a selection", () => {
+    const blank = createDocument({
+      id: "123e4567-e89b-42d3-a456-426614174000",
+      width: 200,
+      height: 100,
+      inputUnit: "millimeters",
+    });
+    const objectId = "123e4567-e89b-42d3-a456-426614174001";
+    const document = {
+      ...blank,
+      objects: [
+        {
+          id: objectId,
+          layerId: blank.activeLayerId,
+          transform: { ...IDENTITY_AFFINE_TRANSFORM },
+          type: "rectangle",
+          origin: { xMm: 10, yMm: 10 },
+          widthMm: 20,
+          heightMm: 10,
+        },
+      ] satisfies DocumentObject[],
+    };
+    const viewport = fitDocumentToView(document, size);
+    const scene = createViewportScene(
+      document,
+      viewport,
+      size,
+      [objectId],
+    );
+    expect(scene.selection?.handles.map((handle) => handle.kind)).toEqual([
+      "north-west",
+      "north",
+      "north-east",
+      "east",
+      "south-east",
+      "south",
+      "south-west",
+      "west",
+      "rotate",
+    ]);
   });
 });

@@ -49,6 +49,27 @@ allowlist explicitly.
 - Project files remain capped at 10 MB and the packaged application continues
   to use the default icon and development signing behavior recorded for M01.
 
+## M03 known limitations
+
+- History stores bounded full-project snapshots. The 100-entry limit is
+  deterministic and safe for current placeholder documents, but high-node-count
+  memory performance remains an M12 measurement.
+- The clipboard is in-application only. It does not interoperate with Windows
+  vector/text clipboard formats.
+- Snapping is intentionally basic and uses bounds/center targets. It has no
+  angle, tangent, node, intersection, or production-guide inference.
+- Groups are recursive affine containers over placeholder objects. There are no
+  nested-layer semantics, clipping, masks, or production text/path editing.
+- Layer visibility and locking govern selection and editing; there is no M03
+  layer filtering, color system, or manufacturing-layer meaning.
+- The replaceable SVG renderer is sufficient for M03 fixtures but has not been
+  profiled for high-node-count production artwork.
+- Selection/history/clipboard and camera position are session state and are
+  intentionally not persisted.
+- Production text, nodes, booleans, offsets, SVG/DXF, raster tracing,
+  cutability, sign tools, AI, layered export, CAM, G-code, and DWG remain
+  excluded.
+
 ## Scope explosion
 
 General CAD, CAM, nesting, cloud sync, and plugin systems can consume the project. Milestone gates and non-goals are mandatory.

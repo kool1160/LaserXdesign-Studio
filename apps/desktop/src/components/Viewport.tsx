@@ -6,7 +6,12 @@ import {
   useState,
 } from "react";
 
-import type { LaserxDocument, PointMm } from "@laserx/domain";
+import type { EditorActionRequest } from "@laserx/application";
+import type {
+  BoundsMm,
+  LaserxDocument,
+  PointMm,
+} from "@laserx/domain";
 import {
   panViewport,
   screenToDomain,
@@ -19,72 +24,83 @@ import {
   createViewportScene,
   fitDocumentToView,
   formatCoordinate,
+  marqueeCommand,
+  pointerMoveCommand,
   resetDocumentView,
+  rotateCommandFromPointer,
+  scaleCommandForHandle,
   zoomAtViewportCenter,
   zoomFromWheel,
-  type ObjectPrimitive,
+  type TransformHandleKind,
 } from "../lib/viewport-adapter.js";
 
 const RULER_SIZE_CSS_PX = 24;
+const DRAG_THRESHOLD_CSS_PX = 3;
 
 interface ViewportProps {
   document: LaserxDocument;
+  selectionIds: readonly string[];
+  selectionBounds: BoundsMm | null;
+  onEditorAction: (request: EditorActionRequest) => void;
 }
 
-function renderObject(object: ObjectPrimitive) {
-  switch (object.type) {
-    case "line":
-      return (
-        <line
-          key={object.id}
-          data-object-id={object.id}
-          x1={object.start.xCssPx}
-          y1={object.start.yCssPx}
-          x2={object.end.xCssPx}
-          y2={object.end.yCssPx}
-        />
-      );
-    case "rectangle":
-      return (
-        <rect
-          key={object.id}
-          data-object-id={object.id}
-          x={object.xCssPx}
-          y={object.yCssPx}
-          width={object.widthCssPx}
-          height={object.heightCssPx}
-        />
-      );
-    case "ellipse":
-      return (
-        <ellipse
-          key={object.id}
-          data-object-id={object.id}
-          cx={object.center.xCssPx}
-          cy={object.center.yCssPx}
-          rx={object.radiusXCssPx}
-          ry={object.radiusYCssPx}
-        />
-      );
-    case "path": {
-      const points = object.points
-        .map(
-          (point) =>
-            `${String(point.xCssPx)},${String(point.yCssPx)}`,
-        )
-        .join(" ");
-      return object.closed ? (
-        <polygon key={object.id} data-object-id={object.id} points={points} />
-      ) : (
-        <polyline key={object.id} data-object-id={object.id} points={points} />
-      );
+type Gesture =
+  | {
+      kind: "pan";
+      previous: ScreenPointCssPx;
     }
-  }
+  | {
+      kind: "marquee";
+      start: ScreenPointCssPx;
+      mode: "replace" | "add" | "toggle";
+    }
+  | {
+      kind: "move";
+      start: ScreenPointCssPx;
+      objectIds: string[];
+    }
+  | {
+      kind: "handle";
+      handle: TransformHandleKind;
+      startDomain: PointMm;
+      bounds: BoundsMm;
+      objectIds: string[];
+      lockAspectRatio: boolean;
+    };
+
+function pointsAttribute(points: readonly ScreenPointCssPx[]): string {
+  return points
+    .map((point) => `${String(point.xCssPx)},${String(point.yCssPx)}`)
+    .join(" ");
 }
 
-export function Viewport({ document }: ViewportProps) {
+function selectionMode(
+  event: Pick<React.PointerEvent, "ctrlKey" | "metaKey" | "shiftKey">,
+): "replace" | "add" | "toggle" {
+  if (event.ctrlKey || event.metaKey) {
+    return "toggle";
+  }
+  return event.shiftKey ? "add" : "replace";
+}
+
+function screenDistance(
+  first: ScreenPointCssPx,
+  second: ScreenPointCssPx,
+): number {
+  return Math.hypot(
+    second.xCssPx - first.xCssPx,
+    second.yCssPx - first.yCssPx,
+  );
+}
+
+export function Viewport({
+  document,
+  selectionIds,
+  selectionBounds,
+  onEditorAction,
+}: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const dragPointRef = useRef<ScreenPointCssPx | null>(null);
+  const gestureRef = useRef<Gesture | null>(null);
   const [size, setSize] = useState<ViewportSizeCssPx>({
     widthCssPx: 1,
     heightCssPx: 1,
@@ -96,7 +112,13 @@ export function Viewport({ document }: ViewportProps) {
     zoomCssPxPerMm: 1,
   });
   const [cursor, setCursor] = useState<PointMm | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const [gestureKind, setGestureKind] = useState<Gesture["kind"] | null>(
+    null,
+  );
+  const [marquee, setMarquee] = useState<{
+    start: ScreenPointCssPx;
+    end: ScreenPointCssPx;
+  } | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -131,8 +153,8 @@ export function Viewport({ document }: ViewportProps) {
   ]);
 
   const scene = useMemo(
-    () => createViewportScene(document, viewport, size),
-    [document, size, viewport],
+    () => createViewportScene(document, viewport, size, selectionIds),
+    [document, selectionIds, size, viewport],
   );
 
   const pointFromEvent = useCallback(
@@ -154,6 +176,75 @@ export function Viewport({ document }: ViewportProps) {
     },
     [size],
   );
+
+  const finishGesture = useCallback(
+    (point: ScreenPointCssPx) => {
+      const gesture = gestureRef.current;
+      gestureRef.current = null;
+      setGestureKind(null);
+      setMarquee(null);
+      if (gesture === null || gesture.kind === "pan") {
+        return;
+      }
+      if (gesture.kind === "move") {
+        if (
+          screenDistance(gesture.start, point) >= DRAG_THRESHOLD_CSS_PX
+        ) {
+          onEditorAction(
+            pointerMoveCommand(
+              gesture.objectIds,
+              gesture.start,
+              point,
+              viewport,
+            ),
+          );
+        }
+        return;
+      }
+      if (gesture.kind === "marquee") {
+        if (
+          screenDistance(gesture.start, point) >= DRAG_THRESHOLD_CSS_PX
+        ) {
+          onEditorAction(
+            marqueeCommand(gesture.start, point, viewport, gesture.mode),
+          );
+        } else if (gesture.mode === "replace") {
+          onEditorAction({ type: "selection.clear" });
+        }
+        return;
+      }
+      const pointerDomain = screenToDomain(point, viewport);
+      const command =
+        gesture.handle === "rotate"
+          ? rotateCommandFromPointer(
+              gesture.objectIds,
+              gesture.bounds,
+              gesture.startDomain,
+              pointerDomain,
+            )
+          : scaleCommandForHandle(
+              gesture.objectIds,
+              gesture.bounds,
+              gesture.handle,
+              pointerDomain,
+              gesture.lockAspectRatio,
+            );
+      if (command !== null) {
+        onEditorAction(command);
+      }
+    },
+    [onEditorAction, viewport],
+  );
+
+  const marqueeRect =
+    marquee === null
+      ? null
+      : {
+          x: Math.min(marquee.start.xCssPx, marquee.end.xCssPx),
+          y: Math.min(marquee.start.yCssPx, marquee.end.yCssPx),
+          width: Math.abs(marquee.end.xCssPx - marquee.start.xCssPx),
+          height: Math.abs(marquee.end.yCssPx - marquee.start.yCssPx),
+        };
 
   return (
     <section className="viewport-panel" aria-label="2D workspace">
@@ -189,43 +280,96 @@ export function Viewport({ document }: ViewportProps) {
         >
           Reset
         </button>
+        <span className="viewport-hint">Drag select · Alt-drag pan</span>
       </div>
 
       <div
         ref={hostRef}
-        className={`viewport-host${dragging ? " dragging" : ""}`}
+        className={`viewport-host${gestureKind === "pan" ? " dragging" : ""}`}
         data-testid="viewport"
         onPointerDown={(event) => {
           const point = pointFromEvent(event.clientX, event.clientY);
-          dragPointRef.current = point;
-          setDragging(true);
+          const target = event.target as SVGElement;
+          const handle = target.dataset.handle as
+            | TransformHandleKind
+            | undefined;
+          const objectId = target.dataset.objectId;
+          if (
+            handle !== undefined &&
+            selectionBounds !== null &&
+            selectionIds.length > 0
+          ) {
+            gestureRef.current = {
+              kind: "handle",
+              handle,
+              startDomain: screenToDomain(point, viewport),
+              bounds: { ...selectionBounds },
+              objectIds: [...selectionIds],
+              lockAspectRatio: event.shiftKey,
+            };
+          } else if (objectId !== undefined) {
+            const mode = selectionMode(event);
+            const nextSelectionIds =
+              mode === "replace"
+                ? [objectId]
+                : mode === "add"
+                  ? [...new Set([...selectionIds, objectId])]
+                  : selectionIds.includes(objectId)
+                    ? selectionIds.filter((id) => id !== objectId)
+                    : [...selectionIds, objectId];
+            onEditorAction({
+              type: "selection.point",
+              point: screenToDomain(point, viewport),
+              toleranceMm: 8 / viewport.zoomCssPxPerMm,
+              mode,
+            });
+            gestureRef.current = {
+              kind: "move",
+              start: point,
+              objectIds: nextSelectionIds.includes(objectId)
+                ? nextSelectionIds
+                : [],
+            };
+          } else if (event.button === 1 || event.altKey) {
+            gestureRef.current = { kind: "pan", previous: point };
+          } else {
+            gestureRef.current = {
+              kind: "marquee",
+              start: point,
+              mode: selectionMode(event),
+            };
+            setMarquee({ start: point, end: point });
+          }
+          setGestureKind(gestureRef.current.kind);
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
           const point = pointFromEvent(event.clientX, event.clientY);
           setCursor(screenToDomain(point, viewport));
-          const previous = dragPointRef.current;
-          if (previous !== null) {
+          const gesture = gestureRef.current;
+          if (gesture?.kind === "pan") {
             setViewport((current) =>
               panViewport(current, {
-                xCssPx: point.xCssPx - previous.xCssPx,
-                yCssPx: point.yCssPx - previous.yCssPx,
+                xCssPx: point.xCssPx - gesture.previous.xCssPx,
+                yCssPx: point.yCssPx - gesture.previous.yCssPx,
               }),
             );
-            dragPointRef.current = point;
+            gesture.previous = point;
+          } else if (gesture?.kind === "marquee") {
+            setMarquee({ start: gesture.start, end: point });
           }
         }}
         onPointerUp={(event) => {
-          dragPointRef.current = null;
-          setDragging(false);
+          finishGesture(pointFromEvent(event.clientX, event.clientY));
           event.currentTarget.releasePointerCapture(event.pointerId);
         }}
         onPointerCancel={() => {
-          dragPointRef.current = null;
-          setDragging(false);
+          gestureRef.current = null;
+          setGestureKind(null);
+          setMarquee(null);
         }}
         onPointerLeave={() => {
-          if (dragPointRef.current === null) {
+          if (gestureRef.current === null) {
             setCursor(null);
           }
         }}
@@ -274,9 +418,89 @@ export function Viewport({ document }: ViewportProps) {
             width={scene.stock.widthCssPx}
             height={scene.stock.heightCssPx}
           />
-          <g className="placeholder-objects">
-            {scene.objects.map(renderObject)}
+          <g className="guides" data-testid="viewport-guides">
+            {scene.guides.map((guide) =>
+              guide.axis === "x" ? (
+                <line
+                  key={guide.id}
+                  x1={guide.screenPositionCssPx}
+                  y1={0}
+                  x2={guide.screenPositionCssPx}
+                  y2={size.heightCssPx}
+                />
+              ) : (
+                <line
+                  key={guide.id}
+                  x1={0}
+                  y1={guide.screenPositionCssPx}
+                  x2={size.widthCssPx}
+                  y2={guide.screenPositionCssPx}
+                />
+              ),
+            )}
           </g>
+          <g className="placeholder-objects">
+            {scene.objects.map((object) =>
+              object.closed ? (
+                <polygon
+                  key={object.key}
+                  className={
+                    selectionIds.includes(object.objectId)
+                      ? "selected-object"
+                      : ""
+                  }
+                  data-object-id={object.objectId}
+                  data-source-id={object.sourceId}
+                  points={pointsAttribute(object.points)}
+                />
+              ) : (
+                <polyline
+                  key={object.key}
+                  className={
+                    selectionIds.includes(object.objectId)
+                      ? "selected-object"
+                      : ""
+                  }
+                  data-object-id={object.objectId}
+                  data-source-id={object.sourceId}
+                  points={pointsAttribute(object.points)}
+                />
+              ),
+            )}
+          </g>
+          {scene.selection !== null && (
+            <g className="selection-overlay" data-testid="selection-overlay">
+              <rect
+                className="selection-box"
+                x={scene.selection.bounds.xCssPx}
+                y={scene.selection.bounds.yCssPx}
+                width={scene.selection.bounds.widthCssPx}
+                height={scene.selection.bounds.heightCssPx}
+              />
+              {scene.selection.handles.map((handle) => (
+                <circle
+                  key={handle.kind}
+                  className={`transform-handle ${handle.kind}`}
+                  data-handle={handle.kind}
+                  data-kind={handle.kind}
+                  data-testid={`handle-${handle.kind}`}
+                  cx={handle.point.xCssPx}
+                  cy={handle.point.yCssPx}
+                  r={handle.kind === "rotate" ? 5 : 4}
+                />
+              ))}
+            </g>
+          )}
+          {marqueeRect !== null && (
+            <rect
+              className="marquee-rect"
+              data-testid="marquee-selection"
+              x={marqueeRect.x}
+              y={marqueeRect.y}
+              width={marqueeRect.width}
+              height={marqueeRect.height}
+            />
+          )}
           {document.settings.viewport.rulersVisible && (
             <g className="rulers" data-testid="viewport-rulers">
               <rect

@@ -77,6 +77,31 @@ The coordinate inverse tolerance is `1e-9 mm`, documented in
 `docs/UNITS_AND_COORDINATES.md`. Unit storage assertions for the acceptance
 dimensions are exact.
 
+## M03 executable layers
+
+- geometry tests cover affine composition, pivot scale/rotation, transformed
+  bounds, and repeated-transform tolerance;
+- domain tests cover every edit operation, locked/hidden hit-test exclusion,
+  marquee selection, snapping, layers, grouping/ungrouping, z-order, align,
+  distribute, and stable child geometry;
+- application tests cover explicit selection/clipboard/history ownership,
+  fresh duplicate/paste IDs, transaction grouping, a bounded history, exact
+  undo/redo, and deterministic 100-step replay;
+- project-format golden tests cover complete schema-v3 editing-state round
+  trips, v2-to-v3 migration, chained v1 migration, and corrupt/future/dangling
+  data rejection;
+- desktop unit/integration tests cover strict renderer actions, pointer and
+  keyboard command equivalence, transform-handle projection, absence of React
+  mutation, and full editing-state save/reopen;
+- seven Playwright scenarios launch the packaged Windows executable. The M03
+  workflow covers exact inspector edits, keyboard movement, duplicate,
+  copy/paste, group/ungroup, rotation, undo/redo, layers, guides, schema-v3
+  persistence, and reopen while retaining M01/M02 security, lifecycle,
+  migration, viewport, recovery, and high-DPI regressions.
+
+The M03 numerical transform tolerance remains `1e-9 mm`; packaged exact-bounds
+assertions normalize only below that documented boundary.
+
 Run all milestone checks from the repository root:
 
 ```bash

@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
+import { expect, type Page } from "@playwright/test";
 import { _electron as electron, type ElectronApplication } from "playwright";
 
 export const executablePath = join(
@@ -84,4 +85,70 @@ export async function kill(testLaunch: TestLaunch): Promise<void> {
     "/T",
     "/F",
   ]).catch(() => undefined);
+}
+
+export async function clickAndWaitForCommand(
+  page: Page,
+  buttonName: "Save" | "Save as",
+): Promise<void> {
+  const button = page.getByRole("button", {
+    name: buttonName,
+    exact: true,
+  });
+  await expect(button).toBeEnabled();
+  await button.evaluate(async (element) => {
+    const commandButton = element as HTMLButtonElement;
+    await new Promise<void>((resolveCommand, rejectCommand) => {
+      let observedBusy = commandButton.disabled;
+      const observer = new MutationObserver(() => {
+        if (commandButton.disabled) {
+          observedBusy = true;
+        } else if (observedBusy) {
+          window.clearTimeout(timeoutId);
+          observer.disconnect();
+          resolveCommand();
+        }
+      });
+      const timeoutId = window.setTimeout(() => {
+        observer.disconnect();
+        rejectCommand(
+          new Error(
+            `${commandButton.textContent} did not complete its disabled-to-enabled UI cycle within 10 seconds.`,
+          ),
+        );
+      }, 10_000);
+      observer.observe(commandButton, {
+        attributes: true,
+        attributeFilter: ["disabled"],
+      });
+      commandButton.click();
+    });
+  });
+}
+
+export async function waitForProjectSchema(
+  projectPath: string,
+  schemaVersion: number,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        try {
+          const candidate = JSON.parse(
+            await readFile(projectPath, "utf8"),
+          ) as { schemaVersion?: unknown };
+          return candidate.schemaVersion;
+        } catch (error) {
+          return error instanceof Error
+            ? `parse/read error: ${error.message}`
+            : "parse/read error: unknown failure";
+        }
+      },
+      {
+        message: `Expected the saved .laserx file to become valid schema version ${String(schemaVersion)}.`,
+        timeout: 10_000,
+        intervals: [50, 100, 250, 500],
+      },
+    )
+    .toBe(schemaVersion);
 }

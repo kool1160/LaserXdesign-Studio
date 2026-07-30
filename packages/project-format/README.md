@@ -1,10 +1,11 @@
 # @laserx/project-format
 
-M02 writes strict deterministic JSON schema version 2 for canonical documents,
-viewport preferences, stable IDs, and minimal placeholder objects. It opens
-schema-v1 files through a deterministic reviewed migration. The package owns
-validation, serialization, safe error classification, and the migration
-registry. It contains no filesystem access.
+M03 writes strict deterministic JSON schema version 3 for canonical documents,
+ordered layers/guides, recursive groups, stable IDs, affine transforms, locks,
+visibility, z-order, and viewport/snapping preferences.
 
-See `docs/decisions/0009-project-schema-v2-migration.md` and the reviewed
-fixtures under `fixtures/projects/`.
+The package opens schema-v1 and schema-v2 files through explicit deterministic
+migrations. It owns validation, serialization, safe error classification, and
+the migration registry, with no filesystem access.
+
+See ADRs 0009 and 0011 plus the reviewed fixtures under `fixtures/projects/`.

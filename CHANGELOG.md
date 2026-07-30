@@ -25,3 +25,11 @@ All notable project changes will be documented here.
 - Deterministic schema-v1-to-v2 migration with reviewed fixtures.
 - Regression coverage for replacing an existing `.laserx` file and retrying a
   rejected initial renderer state request.
+- Command-driven M03 editing with single/modifier/marquee selection, exact and
+  pointer transforms, handles, align/distribute, duplicate/delete, recursive
+  groups, layers, z-order, guides, copy/paste, snapping, keyboard shortcuts, and
+  bounded transactional undo/redo.
+- Strict schema-v3 persistence for layers, guides, affine transforms, groups,
+  locks, visibility, and order, with deterministic v1/v2 migration fixtures.
+- Packaged Windows editing save/reopen coverage and renderer boundary
+  regressions proving that React does not own or mutate document geometry.

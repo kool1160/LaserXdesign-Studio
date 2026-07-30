@@ -16,6 +16,7 @@ import {
 } from "./desktop-controller.js";
 import {
   createDocumentRequestSchema,
+  editorActionRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
@@ -155,6 +156,10 @@ function registerIpc(): void {
       return requireController().setViewportPreferences(validated);
     },
   );
+  ipcMain.handle(IPC_CHANNELS.editorAction, (_event, request: unknown) => {
+    const validated = editorActionRequestSchema.parse(request);
+    return requireController().editorAction(validated);
+  });
   ipcMain.handle(IPC_CHANNELS.resolveRecovery, (_event, request: unknown) => {
     const validated = resolveRecoveryRequestSchema.parse(request);
     return requireController().resolveRecovery(validated);
@@ -191,6 +196,55 @@ function buildMenu(): void {
         {
           label: "Exit",
           role: "quit",
+        },
+      ],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        {
+          label: "Undo",
+          accelerator: "CmdOrCtrl+Z",
+          click: () =>
+            void requireController().editorAction({ type: "history.undo" }),
+        },
+        {
+          label: "Redo",
+          accelerator: "CmdOrCtrl+Y",
+          click: () =>
+            void requireController().editorAction({ type: "history.redo" }),
+        },
+        { type: "separator" },
+        {
+          label: "Copy",
+          accelerator: "CmdOrCtrl+C",
+          click: () =>
+            void requireController().editorAction({ type: "clipboard.copy" }),
+        },
+        {
+          label: "Paste",
+          accelerator: "CmdOrCtrl+V",
+          click: () =>
+            void requireController().editorAction({
+              type: "clipboard.paste",
+            }),
+        },
+        {
+          label: "Duplicate",
+          accelerator: "CmdOrCtrl+D",
+          click: () =>
+            void requireController().editorAction({
+              type: "objects.duplicate-selection",
+            }),
+        },
+        {
+          label: "Delete",
+          accelerator: "Delete",
+          click: () =>
+            void requireController().editorAction({
+              type: "objects.delete",
+              objectIds: requireController().state.editor.selectionIds,
+            }),
         },
       ],
     },

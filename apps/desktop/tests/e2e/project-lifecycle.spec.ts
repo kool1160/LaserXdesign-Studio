@@ -3,7 +3,13 @@ import { join, resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { kill, killAndRemove, launchPackaged } from "./helpers.js";
+import {
+  clickAndWaitForCommand,
+  kill,
+  killAndRemove,
+  launchPackaged,
+  waitForProjectSchema,
+} from "./helpers.js";
 
 test("blank project saves, reopens, and protects dirty close", async () => {
   const launched = await launchPackaged();
@@ -18,7 +24,8 @@ test("blank project saves, reopens, and protects dirty close", async () => {
       "24 × 12 in",
     );
     await expect(page.getByTestId("dirty-indicator")).toBeVisible();
-    await page.getByRole("button", { name: "Save as" }).click();
+    await clickAndWaitForCommand(page, "Save as");
+    await waitForProjectSchema(launched.projectPath, 3);
     await expect(page.getByTestId("dirty-indicator")).toBeHidden();
 
     const saved = JSON.parse(
@@ -32,7 +39,7 @@ test("blank project saves, reopens, and protects dirty close", async () => {
         settings: { displayUnit: string };
       };
     };
-    expect(saved.schemaVersion).toBe(2);
+    expect(saved.schemaVersion).toBe(3);
     expect(saved.project.id).toBe(originalId);
     expect(saved.document.id).not.toBe(originalId);
     expect(saved.document.dimensions).toEqual({

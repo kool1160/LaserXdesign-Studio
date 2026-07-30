@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   createBlankProject,
   createDocument,
+  deriveStableId,
   fromMillimeters,
   getDocumentBounds,
+  identityTransform,
   setProjectDisplayUnit,
   setViewportPreferences,
   toMillimeters,
@@ -13,17 +15,22 @@ import {
 
 const NOW = "2026-07-30T12:00:00.000Z";
 const ID = "123e4567-e89b-42d3-a456-426614174000";
+const LAYER_ID = deriveStableId(ID, "default-layer");
 
 const objects: DocumentObject[] = [
   {
     id: "123e4567-e89b-42d3-a456-426614174010",
     type: "line",
+    layerId: LAYER_ID,
+    transform: identityTransform(),
     start: { xMm: 10, yMm: 20 },
     end: { xMm: 90, yMm: 80 },
   },
   {
     id: "123e4567-e89b-42d3-a456-426614174011",
     type: "rectangle",
+    layerId: LAYER_ID,
+    transform: identityTransform(),
     origin: { xMm: 100, yMm: 50 },
     widthMm: 40,
     heightMm: 30,
@@ -31,6 +38,8 @@ const objects: DocumentObject[] = [
   {
     id: "123e4567-e89b-42d3-a456-426614174012",
     type: "ellipse",
+    layerId: LAYER_ID,
+    transform: identityTransform(),
     center: { xMm: 170, yMm: 90 },
     radiusXmm: 20,
     radiusYmm: 10,
@@ -38,6 +47,8 @@ const objects: DocumentObject[] = [
   {
     id: "123e4567-e89b-42d3-a456-426614174013",
     type: "path",
+    layerId: LAYER_ID,
+    transform: identityTransform(),
     closed: true,
     points: [
       { xMm: 210, yMm: 20 },

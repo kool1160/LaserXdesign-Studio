@@ -1,9 +1,12 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+import type { EditorActionRequest } from "@laserx/application";
+
 import {
   commandResultSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
+  editorActionRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
@@ -73,6 +76,12 @@ const api: LaserxDesktopApi = Object.freeze({
         IPC_CHANNELS.setViewportPreferences,
         validated,
       ),
+    );
+  },
+  async editorAction(request: EditorActionRequest) {
+    const validated = editorActionRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.editorAction, validated),
     );
   },
   async resolveRecovery(request: ResolveRecoveryRequest) {

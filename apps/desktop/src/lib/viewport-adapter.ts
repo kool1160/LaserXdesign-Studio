@@ -1,18 +1,28 @@
+import type { EditorActionRequest } from "@laserx/application";
 import {
   fromMillimeters,
   getDocumentBounds,
+  getObjectsInRenderOrder,
+  getSelectionBounds,
   toMillimeters,
+  type AffineTransformMm,
+  type BoundsMm,
   type DisplayUnit,
   type DocumentObject,
   type LaserxDocument,
   type PointMm,
 } from "@laserx/domain";
 import {
+  IDENTITY_AFFINE_TRANSFORM,
+  applyAffineTransform,
+  boundsCenter,
+  composeAffineTransforms,
   domainToScreen,
   fitBoundsToView,
   gridLinesForViewport,
   resetViewport,
   rulerTicks,
+  screenToDomain,
   visibleDomainBounds,
   zoomViewportAt,
   type GridLine,
@@ -29,34 +39,40 @@ export interface StockPrimitive {
   heightCssPx: number;
 }
 
-export type ObjectPrimitive =
-  | {
-      id: string;
-      type: "line";
-      start: ScreenPointCssPx;
-      end: ScreenPointCssPx;
-    }
-  | {
-      id: string;
-      type: "rectangle";
-      xCssPx: number;
-      yCssPx: number;
-      widthCssPx: number;
-      heightCssPx: number;
-    }
-  | {
-      id: string;
-      type: "ellipse";
-      center: ScreenPointCssPx;
-      radiusXCssPx: number;
-      radiusYCssPx: number;
-    }
-  | {
-      id: string;
-      type: "path";
-      closed: boolean;
-      points: ScreenPointCssPx[];
-    };
+export interface ObjectPrimitive {
+  key: string;
+  objectId: string;
+  sourceId: string;
+  closed: boolean;
+  points: ScreenPointCssPx[];
+}
+
+export interface GuidePrimitive {
+  id: string;
+  axis: "x" | "y";
+  screenPositionCssPx: number;
+}
+
+export type TransformHandleKind =
+  | "north-west"
+  | "north"
+  | "north-east"
+  | "east"
+  | "south-east"
+  | "south"
+  | "south-west"
+  | "west"
+  | "rotate";
+
+export interface TransformHandlePrimitive {
+  kind: TransformHandleKind;
+  point: ScreenPointCssPx;
+}
+
+export interface SelectionPrimitive {
+  bounds: StockPrimitive;
+  handles: TransformHandlePrimitive[];
+}
 
 export interface PositionedRulerTick extends RulerTick {
   screenPositionCssPx: number;
@@ -66,6 +82,8 @@ export interface PositionedRulerTick extends RulerTick {
 export interface ViewportScene {
   stock: StockPrimitive;
   objects: ObjectPrimitive[];
+  guides: GuidePrimitive[];
+  selection: SelectionPrimitive | null;
   gridLines: GridLine[];
   horizontalTicks: PositionedRulerTick[];
   verticalTicks: PositionedRulerTick[];
@@ -74,6 +92,7 @@ export interface ViewportScene {
 const INCH_RULER_STEPS_MM = [
   3.175, 6.35, 12.7, 25.4, 50.8, 127, 254, 508, 1_270,
 ] as const;
+const ELLIPSE_SEGMENTS = 48;
 
 function trimNumber(value: number, decimals: number): string {
   return value
@@ -100,7 +119,15 @@ export function formatDimensions(document: LaserxDocument): string {
   const unit = document.settings.displayUnit;
   const decimals = unit === "inches" ? 3 : 2;
   const suffix = unit === "inches" ? "in" : "mm";
-  return `${trimNumber(fromMillimeters(document.dimensions.widthMm, unit), decimals)} × ${trimNumber(fromMillimeters(document.dimensions.heightMm, unit), decimals)} ${suffix}`;
+  const width = trimNumber(
+    fromMillimeters(document.dimensions.widthMm, unit),
+    decimals,
+  );
+  const height = trimNumber(
+    fromMillimeters(document.dimensions.heightMm, unit),
+    decimals,
+  );
+  return `${width} × ${height} ${suffix}`;
 }
 
 export function gridSpacingForDisplay(document: LaserxDocument): number {
@@ -115,6 +142,109 @@ export function gridSpacingToMillimeters(
   unit: DisplayUnit,
 ): number {
   return toMillimeters(value, unit);
+}
+
+export function displayScalar(
+  valueMm: number,
+  unit: DisplayUnit,
+): string {
+  return String(Number(fromMillimeters(valueMm, unit).toFixed(4)));
+}
+
+export function selectionBoundsForDisplay(
+  bounds: BoundsMm,
+  unit: DisplayUnit,
+): { x: string; y: string; width: string; height: string } {
+  return {
+    x: displayScalar(bounds.minXmm, unit),
+    y: displayScalar(bounds.minYmm, unit),
+    width: displayScalar(bounds.maxXmm - bounds.minXmm, unit),
+    height: displayScalar(bounds.maxYmm - bounds.minYmm, unit),
+  };
+}
+
+export function exactBoundsCommand(
+  objectIds: readonly string[],
+  values: {
+    x: string;
+    y: string;
+    width: string;
+    height: string;
+  },
+  unit: DisplayUnit,
+  lockAspectRatio: boolean,
+): EditorActionRequest | null {
+  const converted = {
+    xMm: toMillimeters(Number(values.x), unit),
+    yMm: toMillimeters(Number(values.y), unit),
+    widthMm: toMillimeters(Number(values.width), unit),
+    heightMm: toMillimeters(Number(values.height), unit),
+  };
+  if (
+    objectIds.length === 0 ||
+    !Object.values(converted).every(Number.isFinite) ||
+    converted.widthMm <= 0 ||
+    converted.heightMm <= 0
+  ) {
+    return null;
+  }
+  return {
+    type: "objects.set-bounds",
+    objectIds: [...objectIds],
+    ...converted,
+    lockAspectRatio,
+  };
+}
+
+export function rotateSelectionCommand(
+  objectIds: readonly string[],
+  selectionBounds: BoundsMm | null,
+  angleText: string,
+): EditorActionRequest | null {
+  const angleDeg = Number(angleText);
+  if (
+    objectIds.length === 0 ||
+    selectionBounds === null ||
+    !Number.isFinite(angleDeg)
+  ) {
+    return null;
+  }
+  return {
+    type: "objects.rotate",
+    objectIds: [...objectIds],
+    angleDeg,
+    pivot: boundsCenter(selectionBounds),
+  };
+}
+
+export function mirrorSelectionCommand(
+  objectIds: readonly string[],
+  selectionBounds: BoundsMm | null,
+  axis: "horizontal" | "vertical",
+): EditorActionRequest | null {
+  if (objectIds.length === 0 || selectionBounds === null) {
+    return null;
+  }
+  return {
+    type: "objects.mirror",
+    objectIds: [...objectIds],
+    axis,
+    pivot: boundsCenter(selectionBounds),
+  };
+}
+
+export function centerGuideCommand(
+  document: LaserxDocument,
+  axis: "x" | "y",
+): EditorActionRequest {
+  return {
+    type: "guide.create",
+    axis,
+    positionMm:
+      axis === "x"
+        ? document.dimensions.widthMm / 2
+        : document.dimensions.heightMm / 2,
+  };
 }
 
 export function fitDocumentToView(
@@ -159,52 +289,77 @@ export function resetDocumentView(
   return resetViewport(getDocumentBounds(document), size);
 }
 
-function objectToPrimitive(
-  object: DocumentObject,
-  viewport: ViewportTransform,
-): ObjectPrimitive {
+function primitiveDomainPoints(
+  object: Exclude<DocumentObject, { type: "group" }>,
+): { points: PointMm[]; closed: boolean } {
   switch (object.type) {
     case "line":
+      return { points: [object.start, object.end], closed: false };
+    case "rectangle":
       return {
-        id: object.id,
-        type: "line",
-        start: domainToScreen(object.start, viewport),
-        end: domainToScreen(object.end, viewport),
+        closed: true,
+        points: [
+          object.origin,
+          {
+            xMm: object.origin.xMm + object.widthMm,
+            yMm: object.origin.yMm,
+          },
+          {
+            xMm: object.origin.xMm + object.widthMm,
+            yMm: object.origin.yMm + object.heightMm,
+          },
+          {
+            xMm: object.origin.xMm,
+            yMm: object.origin.yMm + object.heightMm,
+          },
+        ],
       };
-    case "rectangle": {
-      const topLeft = domainToScreen(
-        {
-          xMm: object.origin.xMm,
-          yMm: object.origin.yMm + object.heightMm,
-        },
-        viewport,
-      );
-      return {
-        id: object.id,
-        type: "rectangle",
-        ...topLeft,
-        widthCssPx: object.widthMm * viewport.zoomCssPxPerMm,
-        heightCssPx: object.heightMm * viewport.zoomCssPxPerMm,
-      };
-    }
     case "ellipse":
       return {
-        id: object.id,
-        type: "ellipse",
-        center: domainToScreen(object.center, viewport),
-        radiusXCssPx: object.radiusXmm * viewport.zoomCssPxPerMm,
-        radiusYCssPx: object.radiusYmm * viewport.zoomCssPxPerMm,
+        closed: true,
+        points: Array.from({ length: ELLIPSE_SEGMENTS }, (_value, index) => {
+          const angle = (index / ELLIPSE_SEGMENTS) * Math.PI * 2;
+          return {
+            xMm: object.center.xMm + Math.cos(angle) * object.radiusXmm,
+            yMm: object.center.yMm + Math.sin(angle) * object.radiusYmm,
+          };
+        }),
       };
     case "path":
-      return {
-        id: object.id,
-        type: "path",
-        closed: object.closed,
-        points: object.points.map((point) =>
-          domainToScreen(point, viewport),
-        ),
-      };
+      return { points: object.points, closed: object.closed };
   }
+}
+
+function objectPrimitives(
+  object: DocumentObject,
+  viewport: ViewportTransform,
+  parentTransform: AffineTransformMm,
+  selectionId: string,
+): ObjectPrimitive[] {
+  const worldTransform = composeAffineTransforms(
+    parentTransform,
+    object.transform,
+  );
+  if (object.type === "group") {
+    return object.children.flatMap((child) =>
+      objectPrimitives(child, viewport, worldTransform, selectionId),
+    );
+  }
+  const primitive = primitiveDomainPoints(object);
+  return [
+    {
+      key: `${selectionId}:${object.id}`,
+      objectId: selectionId,
+      sourceId: object.id,
+      closed: primitive.closed,
+      points: primitive.points.map((point) =>
+        domainToScreen(
+          applyAffineTransform(point, worldTransform),
+          viewport,
+        ),
+      ),
+    },
+  ];
 }
 
 function positionTicks(
@@ -232,10 +387,68 @@ function positionTicks(
   });
 }
 
+function selectionPrimitive(
+  selectionBounds: BoundsMm | null,
+  viewport: ViewportTransform,
+): SelectionPrimitive | null {
+  if (selectionBounds === null) {
+    return null;
+  }
+  const topLeft = domainToScreen(
+    { xMm: selectionBounds.minXmm, yMm: selectionBounds.maxYmm },
+    viewport,
+  );
+  const bottomRight = domainToScreen(
+    { xMm: selectionBounds.maxXmm, yMm: selectionBounds.minYmm },
+    viewport,
+  );
+  const centerX = (topLeft.xCssPx + bottomRight.xCssPx) / 2;
+  const centerY = (topLeft.yCssPx + bottomRight.yCssPx) / 2;
+  const handles: TransformHandlePrimitive[] = [
+    { kind: "north-west", point: topLeft },
+    { kind: "north", point: { xCssPx: centerX, yCssPx: topLeft.yCssPx } },
+    {
+      kind: "north-east",
+      point: { xCssPx: bottomRight.xCssPx, yCssPx: topLeft.yCssPx },
+    },
+    {
+      kind: "east",
+      point: { xCssPx: bottomRight.xCssPx, yCssPx: centerY },
+    },
+    { kind: "south-east", point: bottomRight },
+    {
+      kind: "south",
+      point: { xCssPx: centerX, yCssPx: bottomRight.yCssPx },
+    },
+    {
+      kind: "south-west",
+      point: { xCssPx: topLeft.xCssPx, yCssPx: bottomRight.yCssPx },
+    },
+    {
+      kind: "west",
+      point: { xCssPx: topLeft.xCssPx, yCssPx: centerY },
+    },
+    {
+      kind: "rotate",
+      point: { xCssPx: centerX, yCssPx: topLeft.yCssPx - 28 },
+    },
+  ];
+  return {
+    bounds: {
+      xCssPx: topLeft.xCssPx,
+      yCssPx: topLeft.yCssPx,
+      widthCssPx: bottomRight.xCssPx - topLeft.xCssPx,
+      heightCssPx: bottomRight.yCssPx - topLeft.yCssPx,
+    },
+    handles,
+  };
+}
+
 export function createViewportScene(
   document: LaserxDocument,
   viewport: ViewportTransform,
   size: ViewportSizeCssPx,
+  selectionIds: readonly string[] = [],
 ): ViewportScene {
   const origin = domainToScreen(
     {
@@ -270,8 +483,30 @@ export function createViewportScene(
       heightCssPx:
         document.dimensions.heightMm * viewport.zoomCssPxPerMm,
     },
-    objects: document.objects.map((object) =>
-      objectToPrimitive(object, viewport),
+    objects: getObjectsInRenderOrder(document).flatMap((object) =>
+      objectPrimitives(
+        object,
+        viewport,
+        IDENTITY_AFFINE_TRANSFORM,
+        object.id,
+      ),
+    ),
+    guides: document.guides.map((guide) => ({
+      ...guide,
+      screenPositionCssPx:
+        guide.axis === "x"
+          ? domainToScreen(
+              { xMm: guide.positionMm, yMm: 0 },
+              viewport,
+            ).xCssPx
+          : domainToScreen(
+              { xMm: 0, yMm: guide.positionMm },
+              viewport,
+            ).yCssPx,
+    })),
+    selection: selectionPrimitive(
+      getSelectionBounds(document, selectionIds),
+      viewport,
     ),
     gridLines: document.settings.viewport.gridVisible
       ? gridLinesForViewport(
@@ -292,5 +527,145 @@ export function createViewportScene(
       viewport,
       document.settings.displayUnit,
     ),
+  };
+}
+
+export function createMoveCommand(
+  objectIds: readonly string[],
+  deltaXmm: number,
+  deltaYmm: number,
+  snapToleranceMm?: number,
+): EditorActionRequest {
+  return {
+    type: "objects.move",
+    objectIds: [...objectIds],
+    deltaXmm,
+    deltaYmm,
+    ...(snapToleranceMm === undefined ? {} : { snapToleranceMm }),
+  };
+}
+
+export function pointerMoveCommand(
+  objectIds: readonly string[],
+  start: ScreenPointCssPx,
+  end: ScreenPointCssPx,
+  viewport: ViewportTransform,
+  snapToleranceCssPx = 8,
+): EditorActionRequest {
+  const startDomain = screenToDomain(start, viewport);
+  const endDomain = screenToDomain(end, viewport);
+  return createMoveCommand(
+    objectIds,
+    endDomain.xMm - startDomain.xMm,
+    endDomain.yMm - startDomain.yMm,
+    snapToleranceCssPx / viewport.zoomCssPxPerMm,
+  );
+}
+
+export function keyboardMoveCommand(
+  objectIds: readonly string[],
+  deltaXmm: number,
+  deltaYmm: number,
+): EditorActionRequest {
+  return createMoveCommand(objectIds, deltaXmm, deltaYmm);
+}
+
+export function marqueeCommand(
+  start: ScreenPointCssPx,
+  end: ScreenPointCssPx,
+  viewport: ViewportTransform,
+  mode: "replace" | "add" | "toggle",
+): EditorActionRequest {
+  const first = screenToDomain(start, viewport);
+  const second = screenToDomain(end, viewport);
+  return {
+    type: "selection.marquee",
+    bounds: {
+      minXmm: Math.min(first.xMm, second.xMm),
+      minYmm: Math.min(first.yMm, second.yMm),
+      maxXmm: Math.max(first.xMm, second.xMm),
+      maxYmm: Math.max(first.yMm, second.yMm),
+    },
+    mode,
+  };
+}
+
+export function scaleCommandForHandle(
+  objectIds: readonly string[],
+  selectionBounds: BoundsMm,
+  handle: TransformHandleKind,
+  pointer: PointMm,
+  lockAspectRatio: boolean,
+): EditorActionRequest | null {
+  if (handle === "rotate") {
+    return null;
+  }
+  const center = boundsCenter(selectionBounds);
+  const west = handle.includes("west");
+  const east = handle.includes("east");
+  const north = handle.includes("north");
+  const south = handle.includes("south");
+  const pivot = {
+    xMm: west
+      ? selectionBounds.maxXmm
+      : east
+        ? selectionBounds.minXmm
+        : center.xMm,
+    yMm: north
+      ? selectionBounds.minYmm
+      : south
+        ? selectionBounds.maxYmm
+        : center.yMm,
+  };
+  const originalX =
+    (west ? selectionBounds.minXmm : east ? selectionBounds.maxXmm : center.xMm) -
+    pivot.xMm;
+  const originalY =
+    (north
+      ? selectionBounds.maxYmm
+      : south
+        ? selectionBounds.minYmm
+        : center.yMm) - pivot.yMm;
+  let scaleX = originalX === 0 ? 1 : (pointer.xMm - pivot.xMm) / originalX;
+  let scaleY = originalY === 0 ? 1 : (pointer.yMm - pivot.yMm) / originalY;
+  if (lockAspectRatio) {
+    const dominant =
+      Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
+    if (originalX !== 0) {
+      scaleX = dominant;
+    }
+    if (originalY !== 0) {
+      scaleY = dominant;
+    }
+  }
+  if (Math.abs(scaleX) < 0.001 || Math.abs(scaleY) < 0.001) {
+    return null;
+  }
+  return {
+    type: "objects.scale",
+    objectIds: [...objectIds],
+    scaleX,
+    scaleY,
+    pivot,
+  };
+}
+
+export function rotateCommandFromPointer(
+  objectIds: readonly string[],
+  selectionBounds: BoundsMm,
+  start: PointMm,
+  end: PointMm,
+): EditorActionRequest {
+  const pivot = boundsCenter(selectionBounds);
+  const startAngle = Math.atan2(
+    start.yMm - pivot.yMm,
+    start.xMm - pivot.xMm,
+  );
+  const endAngle = Math.atan2(end.yMm - pivot.yMm, end.xMm - pivot.xMm);
+  return {
+    type: "objects.rotate",
+    objectIds: [...objectIds],
+    angleDeg: ((endAngle - startAngle) * 180) / Math.PI,
+    pivot,
   };
 }

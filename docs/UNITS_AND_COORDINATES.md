@@ -31,8 +31,32 @@ The domain is Cartesian:
 - the stock occupies `(0, 0)` through `(widthMm, heightMm)`;
 - object geometry is never stored in screen pixels.
 
-The M02 line, rectangle, ellipse, and path objects use explicit `Mm` field
-names. A path declares whether it is open or closed.
+Line, rectangle, ellipse, and path objects use explicit `Mm` field names. A
+path declares whether it is open or closed.
+
+## M03 transforms
+
+Each object stores raw geometry in canonical millimeters plus an affine
+transform:
+
+```text
+x' = a*x + c*y + eMm
+y' = b*x + d*y + fMm
+```
+
+Translation fields are explicitly millimeters. Scale, rotation, and mirror
+compose matrices at a documented domain pivot. A group adds one parent matrix;
+its child geometry and IDs stay unchanged. Ungrouping composes the parent
+matrix into each child, preserving the same world geometry.
+
+Exact inspector values are converted at the renderer-adapter boundary before
+the validated command enters the application. Repeated-transform tests use the
+existing `1e-9 mm` numerical tolerance. That tolerance covers IEEE-754 matrix
+composition error and is not a manufacturing tolerance.
+
+Move snapping is evaluated in domain millimeters. Enabled targets are grid
+lines, explicit guides, document bounds/center, and visible editable object
+bounds/centers. Camera position and device-pixel ratio do not affect targets.
 
 ## Renderer conversion boundary
 
@@ -67,7 +91,8 @@ canonical dimensions and displayed measurements remain unchanged.
 
 ## Hit testing
 
-M02 defines `HitTestService`, `HitTestRequest`, and `HitTestResult` in the
-domain. The request uses a domain point and millimeter tolerance. M02 does not
-implement selection, hit-test algorithms, handles, or transforms; those remain
-blocked until M03.
+Hit testing consumes a domain point and millimeter tolerance. M03 returns
+topmost object IDs in layer/z order and implements domain-bounds marquee
+testing. Hidden- or locked-layer objects are excluded before selection and
+editing. Transform handles are screen projections only; their gestures convert
+back to domain commands through the renderer adapter.
