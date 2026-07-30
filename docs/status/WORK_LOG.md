@@ -69,8 +69,9 @@ guides, visibility, locking, rename/reorder, and z-order; in-application
 copy/paste; basic snapping; bounded transactional undo/redo; schema v3 with
 deterministic v1/v2 migrations; complete packaged editing save/reopen workflow.
 - Verification: 63 unit/integration tests and 7 packaged Playwright tests pass
-locally. Final command-by-command output is recorded in the Issue #4 pull
-request.
+locally. Repository Guard and the Windows M03 Editing Core workflow pass on the
+published draft. Final command-by-command output is recorded in the Issue #4
+pull request.
 - Decisions: ADR 0010 (commands, state ownership, affine/ID/history policy) and
 ADR 0011 (schema-v3 editing state and migrations).
 - Known limitations: 100 full-snapshot history entries; in-application

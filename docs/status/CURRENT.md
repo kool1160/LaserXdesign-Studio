@@ -48,8 +48,8 @@ M01 was merged through PR #14 in commit
 - [x] ADRs 0010–0011 and architecture, units, format, testing, risk, fixture,
   screenshot, changelog, and work-log documentation are updated.
 - [ ] Draft pull request reviewed.
-- [ ] Repository Guard and Windows M03 Editing Core CI green on the published
-  feature head.
+- [x] Repository Guard and Windows M03 Editing Core CI green on the published
+  draft head.
 - [ ] Pull request merged and Issue #4 closed.
 
 ## M03 scope restraint
