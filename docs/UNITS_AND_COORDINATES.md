@@ -54,6 +54,13 @@ the validated command enters the application. Repeated-transform tests use the
 existing `1e-9 mm` numerical tolerance. That tolerance covers IEEE-754 matrix
 composition error and is not a manufacturing tolerance.
 
+Inspector X/Y values are signed finite coordinates, so zero and positions
+outside the stock region are valid. Inspector width/height values are
+nonnegative dimensions. A line's intrinsically zero bounds axis remains zero
+while its other axis can be resized and its X/Y position can be changed. A
+request to expand an intrinsically zero bounds axis is rejected explicitly
+instead of dividing by zero or producing a non-invertible transform.
+
 Move snapping is evaluated in domain millimeters. Enabled targets are grid
 lines, explicit guides, document bounds/center, and visible editable object
 bounds/centers. Camera position and device-pixel ratio do not affect targets.

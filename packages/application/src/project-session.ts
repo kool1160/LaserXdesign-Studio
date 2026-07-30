@@ -136,6 +136,11 @@ interface HistoryEntry {
 interface ActiveTransaction {
   label: string;
   before: LaserxProject;
+  selectionIds: string[];
+  clipboard: DocumentObject[] | null;
+  pasteSequence: number;
+  future: HistoryEntry[];
+  lastEditorCommand: EditorCommand | null;
   commands: EditorCommand[];
 }
 
@@ -154,6 +159,21 @@ function fingerprint(project: LaserxProject): string {
 
 function copyEditorCommand(command: EditorCommand): EditorCommand {
   return JSON.parse(JSON.stringify(command)) as EditorCommand;
+}
+
+function copyHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  return {
+    label: entry.label,
+    before: copyProject(entry.before),
+    after: copyProject(entry.after),
+    commands: entry.commands.map(copyEditorCommand),
+  };
+}
+
+function copyClipboard(
+  clipboard: readonly DocumentObject[] | null,
+): DocumentObject[] | null {
+  return clipboard?.map(copyDocumentObject) ?? null;
 }
 
 function applySelectionMode(
@@ -599,6 +619,14 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#transaction = {
       label,
       before: copyProject(this.#project),
+      selectionIds: [...this.#selectionIds],
+      clipboard: copyClipboard(this.#clipboard),
+      pasteSequence: this.#pasteSequence,
+      future: this.#future.map(copyHistoryEntry),
+      lastEditorCommand:
+        this.#lastEditorCommand === null
+          ? null
+          : copyEditorCommand(this.#lastEditorCommand),
       commands: [],
     };
     return this.state;
@@ -625,9 +653,17 @@ export class ProjectSession implements ProjectCommandDispatcher {
 
   public cancelTransaction(): ProjectSessionState {
     if (this.#transaction !== null) {
-      this.#project = copyProject(this.#transaction.before);
+      const transaction = this.#transaction;
+      this.#project = copyProject(transaction.before);
+      this.#selectionIds = [...transaction.selectionIds];
+      this.#clipboard = copyClipboard(transaction.clipboard);
+      this.#pasteSequence = transaction.pasteSequence;
+      this.#future = transaction.future.map(copyHistoryEntry);
+      this.#lastEditorCommand =
+        transaction.lastEditorCommand === null
+          ? null
+          : copyEditorCommand(transaction.lastEditorCommand);
       this.#transaction = null;
-      this.#reconcileSelection();
     }
     return this.state;
   }
@@ -740,7 +776,6 @@ export class ProjectSession implements ProjectCommandDispatcher {
     }
     const before = copyProject(this.#project);
     this.#project = copyProject(nextProject);
-    this.#future = [];
     if (this.#transaction !== null) {
       this.#transaction.commands.push(
         ...commands.map((command) => copyEditorCommand(command)),

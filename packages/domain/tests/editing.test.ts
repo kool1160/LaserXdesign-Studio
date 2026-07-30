@@ -13,6 +13,7 @@ import {
   hitTestDocument,
   identityTransform,
   marqueeHitTest,
+  objectUsesLayerRecursively,
   type DocumentObject,
   type LaserxDocument,
   type Layer,
@@ -26,6 +27,8 @@ const RECT_ONE = "50000000-0000-4000-8000-000000000000";
 const RECT_TWO = "60000000-0000-4000-8000-000000000000";
 const RECT_THREE = "70000000-0000-4000-8000-000000000000";
 const GROUP_ID = "80000000-0000-4000-8000-000000000000";
+const HORIZONTAL_LINE = "81000000-0000-4000-8000-000000000000";
+const VERTICAL_LINE = "82000000-0000-4000-8000-000000000000";
 
 const layers: Layer[] = [
   { id: LAYER_ONE, name: "Artwork", visible: true, locked: false },
@@ -49,6 +52,22 @@ function rectangle(
     origin: { xMm, yMm },
     widthMm,
     heightMm,
+  };
+}
+
+function line(
+  id: string,
+  layerId: string,
+  start: { xMm: number; yMm: number },
+  end: { xMm: number; yMm: number },
+): DocumentObject {
+  return {
+    id,
+    type: "line",
+    layerId,
+    transform: identityTransform(),
+    start,
+    end,
   };
 }
 
@@ -142,6 +161,92 @@ describe("editing domain", () => {
     expect(getObjectBounds(document.objects[0] as DocumentObject)).toEqual(
       rotated,
     );
+  });
+
+  it("moves and resizes each nonzero axis of horizontal and vertical lines", () => {
+    let document = createDocument({
+      id: DOCUMENT_ID,
+      width: 200,
+      height: 100,
+      inputUnit: "millimeters",
+      layers,
+      activeLayerId: LAYER_ONE,
+      objects: [
+        line(
+          HORIZONTAL_LINE,
+          LAYER_ONE,
+          { xMm: 10, yMm: 20 },
+          { xMm: 90, yMm: 20 },
+        ),
+        line(
+          VERTICAL_LINE,
+          LAYER_ONE,
+          { xMm: 50, yMm: 10 },
+          { xMm: 50, yMm: 60 },
+        ),
+      ],
+    });
+
+    document = applyEditorCommand(document, {
+      type: "objects.set-bounds",
+      objectIds: [HORIZONTAL_LINE],
+      xMm: 0,
+      yMm: -25,
+      widthMm: 120,
+      heightMm: 0,
+      lockAspectRatio: false,
+    });
+    const horizontal = document.objects.find(
+      (object) => object.id === HORIZONTAL_LINE,
+    ) as DocumentObject;
+    expect(getObjectBounds(horizontal)).toEqual({
+      minXmm: 0,
+      minYmm: -25,
+      maxXmm: 120,
+      maxYmm: -25,
+    });
+    expect(Object.values(horizontal.transform).every(Number.isFinite)).toBe(
+      true,
+    );
+
+    document = applyEditorCommand(document, {
+      type: "objects.set-bounds",
+      objectIds: [VERTICAL_LINE],
+      xMm: -10,
+      yMm: 0,
+      widthMm: 0,
+      heightMm: 80,
+      lockAspectRatio: false,
+    });
+    const vertical = document.objects.find(
+      (object) => object.id === VERTICAL_LINE,
+    ) as DocumentObject;
+    expect(getObjectBounds(vertical)).toEqual({
+      minXmm: -10,
+      minYmm: 0,
+      maxXmm: -10,
+      maxYmm: 80,
+    });
+    expect(Object.values(vertical.transform).every(Number.isFinite)).toBe(
+      true,
+    );
+
+    expect(() =>
+      applyEditorCommand(document, {
+        type: "objects.set-bounds",
+        objectIds: [HORIZONTAL_LINE],
+        heightMm: 5,
+        lockAspectRatio: false,
+      }),
+    ).toThrow("current height is zero");
+    expect(() =>
+      applyEditorCommand(document, {
+        type: "objects.set-bounds",
+        objectIds: [VERTICAL_LINE],
+        widthMm: 5,
+        lockAspectRatio: false,
+      }),
+    ).toThrow("current width is zero");
   });
 
   it("excludes locked and hidden layers from hit testing and edits", () => {
@@ -249,6 +354,7 @@ describe("editing domain", () => {
     if (group?.type !== "group") {
       throw new Error("Expected a group.");
     }
+    expect(objectUsesLayerRecursively(group)).toBe(true);
     const childGeometry = group.children.map(geometryWithoutTransform);
     const pivot = boundsCenter(getObjectBounds(group));
     document = applyEditorCommand(document, {
@@ -289,6 +395,34 @@ describe("editing domain", () => {
         .filter((object) => [RECT_ONE, RECT_TWO].includes(object.id))
         .map(geometryWithoutTransform),
     ).toEqual(childGeometry);
+  });
+
+  it("rejects inserted groups whose descendants use locked or hidden layers", () => {
+    for (const childLayerId of [LAYER_TWO, LAYER_THREE]) {
+      const childId =
+        childLayerId === LAYER_TWO
+          ? "83000000-0000-4000-8000-000000000000"
+          : "84000000-0000-4000-8000-000000000000";
+      expect(() =>
+        applyEditorCommand(editingDocument(), {
+          type: "objects.insert",
+          objects: [
+            {
+              id:
+                childLayerId === LAYER_TWO
+                  ? "85000000-0000-4000-8000-000000000000"
+                  : "86000000-0000-4000-8000-000000000000",
+              type: "group",
+              layerId: LAYER_ONE,
+              transform: identityTransform(),
+              children: [
+                rectangle(childId, childLayerId, 10, 10),
+              ],
+            },
+          ],
+        }),
+      ).toThrow("must use the group's layer");
+    }
   });
 
   it("duplicates with new IDs and preserves originals and z order", () => {
@@ -403,6 +537,25 @@ describe("editing domain", () => {
   it("renames, reorders, locks, hides, activates, and deletes layers", () => {
     let document = editingDocument();
     document = applyEditorCommand(document, {
+      type: "objects.insert",
+      objects: [
+        {
+          id: "87000000-0000-4000-8000-000000000000",
+          type: "group",
+          layerId: LAYER_THREE,
+          transform: identityTransform(),
+          children: [
+            rectangle(
+              "88000000-0000-4000-8000-000000000000",
+              LAYER_THREE,
+              150,
+              40,
+            ),
+          ],
+        },
+      ],
+    });
+    document = applyEditorCommand(document, {
       type: "layer.rename",
       layerId: LAYER_ONE,
       name: "Cut artwork",
@@ -443,9 +596,15 @@ describe("editing domain", () => {
     expect(
       document.objects
         .filter((object) =>
-          object.id.startsWith("71000000"),
+          ["71000000", "87000000"].some((prefix) =>
+            object.id.startsWith(prefix),
+          ),
         )
-        .every((object) => object.layerId === LAYER_TWO),
+        .every(
+          (object) =>
+            object.layerId === LAYER_TWO &&
+            objectUsesLayerRecursively(object, LAYER_TWO),
+        ),
     ).toBe(true);
   });
 

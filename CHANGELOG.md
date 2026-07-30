@@ -4,6 +4,16 @@ All notable project changes will be documented here.
 
 ## Unreleased
 
+### Fixed
+
+- Exact inspector X/Y conversion now accepts signed finite coordinates,
+  including zero, while horizontal and vertical lines can move and resize
+  along their nonzero axis without division by zero.
+- Schema-v3 groups now enforce one recursive layer identity across parsing,
+  serialization, insertion, grouping, duplicate/paste, and layer deletion.
+- Canceling an editor transaction now restores transaction-touched session
+  state and preserves the existing redo branch.
+
 ### Added
 
 - Repository operating contract and product requirements.

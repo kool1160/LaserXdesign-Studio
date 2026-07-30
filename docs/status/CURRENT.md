@@ -44,12 +44,19 @@ M01 was merged through PR #14 in commit
   tests.
 - [x] React arbitrary-mutation regression and pointer/keyboard command
   equivalence are directly tested.
-- [x] 63 unit/integration tests and 7 packaged Electron E2E tests pass locally.
+- [x] Exact inspector coordinates accept signed finite values, and horizontal
+  or vertical lines support exact movement and one-axis resizing without
+  zero-division or non-finite geometry.
+- [x] Schema parsing, serialization, and internal insertion enforce one
+  recursive `layerId` for every group.
+- [x] Canceling a transaction restores selection/session metadata and preserves
+  the pre-existing redo branch.
+- [x] 70 unit/integration tests and 8 packaged Electron E2E tests pass locally.
 - [x] ADRs 0010–0011 and architecture, units, format, testing, risk, fixture,
   screenshot, changelog, and work-log documentation are updated.
 - [ ] Draft pull request reviewed.
-- [x] Repository Guard and Windows M03 Editing Core CI green on the published
-  draft head.
+- [ ] Repository Guard and both Windows M03 Editing Core runs green on the
+  published review-fix head.
 - [ ] Pull request merged and Issue #4 closed.
 
 ## M03 scope restraint

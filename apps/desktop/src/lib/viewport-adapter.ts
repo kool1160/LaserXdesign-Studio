@@ -1,9 +1,11 @@
 import type { EditorActionRequest } from "@laserx/application";
 import {
+  coordinateToMillimeters,
   fromMillimeters,
   getDocumentBounds,
   getObjectsInRenderOrder,
   getSelectionBounds,
+  nonnegativeLengthToMillimeters,
   toMillimeters,
   type AffineTransformMm,
   type BoundsMm,
@@ -174,17 +176,31 @@ export function exactBoundsCommand(
   unit: DisplayUnit,
   lockAspectRatio: boolean,
 ): EditorActionRequest | null {
-  const converted = {
-    xMm: toMillimeters(Number(values.x), unit),
-    yMm: toMillimeters(Number(values.y), unit),
-    widthMm: toMillimeters(Number(values.width), unit),
-    heightMm: toMillimeters(Number(values.height), unit),
+  const parsed = Object.fromEntries(
+    Object.entries(values).map(([name, value]) => [
+      name,
+      value.trim().length === 0 ? Number.NaN : Number(value),
+    ]),
+  ) as Record<keyof typeof values, number>;
+  let converted: {
+    xMm: number;
+    yMm: number;
+    widthMm: number;
+    heightMm: number;
   };
+  try {
+    converted = {
+      xMm: coordinateToMillimeters(parsed.x, unit),
+      yMm: coordinateToMillimeters(parsed.y, unit),
+      widthMm: nonnegativeLengthToMillimeters(parsed.width, unit),
+      heightMm: nonnegativeLengthToMillimeters(parsed.height, unit),
+    };
+  } catch {
+    return null;
+  }
   if (
     objectIds.length === 0 ||
-    !Object.values(converted).every(Number.isFinite) ||
-    converted.widthMm <= 0 ||
-    converted.heightMm <= 0
+    !Object.values(converted).every(Number.isFinite)
   ) {
     return null;
   }

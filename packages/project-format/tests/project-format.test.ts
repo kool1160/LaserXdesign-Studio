@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   createBlankProject,
   identityTransform,
+  objectUsesLayerRecursively,
   setViewportPreferences,
   type DocumentObject,
   type LaserxProject,
@@ -158,6 +159,11 @@ describe("schema version 3", () => {
       NOTES_LAYER,
     ]);
     expect(reopened.document.objects[1]?.type).toBe("group");
+    expect(
+      reopened.document.objects.every((object) =>
+        objectUsesLayerRecursively(object),
+      ),
+    ).toBe(true);
   });
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
@@ -235,6 +241,36 @@ describe("schema version 3", () => {
       () => parseProject(JSON.stringify(singular)),
       "INVALID_PROJECT",
     );
+  });
+
+  it("rejects mixed-layer nested groups during parsing and serialization", () => {
+    const mixed = editingProject();
+    const group = mixed.document.objects.find(
+      (object) => object.type === "group",
+    );
+    if (group?.type !== "group") {
+      throw new Error("Expected the fixture to contain a group.");
+    }
+    const [firstChild, ...remainingChildren] = group.children;
+    if (firstChild === undefined) {
+      throw new Error("Expected the group to contain a child.");
+    }
+    group.children = [
+      {
+        id: "123e4567-e89b-42d3-a456-426614174021",
+        type: "group",
+        layerId: ARTWORK_LAYER,
+        transform: identityTransform(),
+        children: [{ ...firstChild, layerId: NOTES_LAYER }],
+      },
+      ...remainingChildren,
+    ];
+
+    expectProjectError(
+      () => parseProject(JSON.stringify(mixed)),
+      "INVALID_PROJECT",
+    );
+    expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
   it("registers explicit v1-to-v2 and v2-to-v3 migrations", () => {

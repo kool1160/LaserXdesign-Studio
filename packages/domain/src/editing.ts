@@ -20,6 +20,7 @@ import {
   getObjectBounds,
   getSelectionBounds,
   isLayerEditable,
+  objectUsesLayerRecursively,
   type DocumentObject,
   type Guide,
   type LaserxDocument,
@@ -133,9 +134,9 @@ function assertFinite(value: number, name: string): void {
   }
 }
 
-function assertPositive(value: number, name: string): void {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new RangeError(`${name} must be positive and finite.`);
+function assertNonnegative(value: number, name: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${name} must be nonnegative and finite.`);
   }
 }
 
@@ -378,6 +379,11 @@ function validateInsertedIds(
   ) {
     throw new RangeError("Inserted objects must reference an existing layer.");
   }
+  if (objects.some((object) => !objectUsesLayerRecursively(object))) {
+    throw new RangeError(
+      "Every descendant of an inserted group must use the group's layer.",
+    );
+  }
 }
 
 function setLayerRecursively(
@@ -591,12 +597,44 @@ export function applyEditorCommand(
       if (bounds === null) {
         break;
       }
-      let targetWidth = command.widthMm ?? boundsWidth(bounds);
-      let targetHeight = command.heightMm ?? boundsHeight(bounds);
-      assertPositive(targetWidth, "Target width");
-      assertPositive(targetHeight, "Target height");
-      if (command.lockAspectRatio) {
-        const aspect = boundsWidth(bounds) / boundsHeight(bounds);
+      if (command.xMm !== undefined) {
+        assertFinite(command.xMm, "Target X");
+      }
+      if (command.yMm !== undefined) {
+        assertFinite(command.yMm, "Target Y");
+      }
+      const sourceWidth = boundsWidth(bounds);
+      const sourceHeight = boundsHeight(bounds);
+      let targetWidth = command.widthMm ?? sourceWidth;
+      let targetHeight = command.heightMm ?? sourceHeight;
+      assertNonnegative(targetWidth, "Target width");
+      assertNonnegative(targetHeight, "Target height");
+      if (sourceWidth === 0 && targetWidth !== 0) {
+        throw new RangeError(
+          "Cannot resize width because the selection's current width is zero.",
+        );
+      }
+      if (sourceHeight === 0 && targetHeight !== 0) {
+        throw new RangeError(
+          "Cannot resize height because the selection's current height is zero.",
+        );
+      }
+      if (sourceWidth > 0 && targetWidth === 0) {
+        throw new RangeError(
+          "Target width must remain positive for a nonzero-width selection.",
+        );
+      }
+      if (sourceHeight > 0 && targetHeight === 0) {
+        throw new RangeError(
+          "Target height must remain positive for a nonzero-height selection.",
+        );
+      }
+      if (
+        command.lockAspectRatio &&
+        sourceWidth > 0 &&
+        sourceHeight > 0
+      ) {
+        const aspect = sourceWidth / sourceHeight;
         if (command.widthMm !== undefined) {
           targetHeight = targetWidth / aspect;
         } else if (command.heightMm !== undefined) {
@@ -604,8 +642,8 @@ export function applyEditorCommand(
         }
       }
       const scale = scaleTransformAt(
-        targetWidth / boundsWidth(bounds),
-        targetHeight / boundsHeight(bounds),
+        sourceWidth === 0 ? 1 : targetWidth / sourceWidth,
+        sourceHeight === 0 ? 1 : targetHeight / sourceHeight,
         { xMm: bounds.minXmm, yMm: bounds.minYmm },
       );
       applyTransformToIds(document, selectedIds, scale);

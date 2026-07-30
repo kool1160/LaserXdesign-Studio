@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import type { DocumentObject } from "@laserx/domain";
 import { expect, test } from "@playwright/test";
 
 import {
@@ -9,6 +10,34 @@ import {
   launchPackaged,
   waitForProjectSchema,
 } from "./helpers.js";
+
+function canonicalLineGeometry(object: DocumentObject | undefined) {
+  if (object?.type !== "line") {
+    return null;
+  }
+  const worldPoint = (point: { xMm: number; yMm: number }) => {
+    const xMm =
+      object.transform.a * point.xMm +
+      object.transform.c * point.yMm +
+      object.transform.eMm;
+    const yMm =
+      object.transform.b * point.xMm +
+      object.transform.d * point.yMm +
+      object.transform.fMm;
+    return {
+      xMm: Number(xMm.toFixed(9)),
+      yMm: Number(yMm.toFixed(9)),
+    };
+  };
+  return {
+    id: object.id,
+    start: { ...object.start },
+    end: { ...object.end },
+    transform: { ...object.transform },
+    worldStart: worldPoint(object.start),
+    worldEnd: worldPoint(object.end),
+  };
+}
 
 test("packaged editing workflow persists deterministic M03 state", async () => {
   const launched = await launchPackaged();
@@ -213,6 +242,131 @@ test("packaged editing workflow persists deterministic M03 state", async () => {
         ),
       });
     }
+  } finally {
+    await killAndRemove(launched);
+  }
+});
+
+test("packaged exact inspector preserves signed horizontal-line geometry", async () => {
+  const launched = await launchPackaged();
+  try {
+    const page = await launched.electronApp.firstWindow();
+
+    await page.getByTestId("add-line").click();
+    await expect(page.getByTestId("selection-count")).toHaveText(
+      "1 object selected",
+    );
+    const lineId = await page.evaluate(
+      async () => (await window.laserx.getState()).editor.selectionIds[0],
+    );
+    expect(lineId).toBeDefined();
+    if (lineId === undefined) {
+      throw new Error("Expected the default horizontal line to be selected.");
+    }
+    const originalLine = await page.evaluate(async (selectedId) => {
+      const state = await window.laserx.getState();
+      return state.project.document.objects.find(
+        (object) => object.id === selectedId,
+      );
+    }, lineId);
+    expect(canonicalLineGeometry(originalLine)).toMatchObject({
+      worldStart: { xMm: 112.4, yMm: 152.4 },
+      worldEnd: { xMm: 192.4, yMm: 152.4 },
+    });
+
+    await page.getByLabel("Selection X").fill("0");
+    await page.getByLabel("Selection Y").fill("-25");
+    await page.getByLabel("Selection width").fill("120");
+    await page.getByLabel("Selection height").fill("0");
+    await page.getByRole("button", { name: "Apply exact bounds" }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const bounds = (await window.laserx.getState()).editor
+            .selectionBounds;
+          return bounds === null
+            ? null
+            : [
+                bounds.minXmm,
+                bounds.minYmm,
+                bounds.maxXmm,
+                bounds.maxYmm,
+              ];
+        }),
+      )
+      .toEqual([0, -25, 120, -25]);
+
+    const editedLine = await page.evaluate(async (selectedId) => {
+      const state = await window.laserx.getState();
+      return state.project.document.objects.find(
+        (object) => object.id === selectedId,
+      );
+    }, lineId);
+    expect(canonicalLineGeometry(editedLine)).toMatchObject({
+      id: lineId,
+      start: { xMm: 112.4, yMm: 152.4 },
+      end: { xMm: 192.4, yMm: 152.4 },
+      worldStart: { xMm: 0, yMm: -25 },
+      worldEnd: { xMm: 120, yMm: -25 },
+    });
+    expect(
+      Object.values(editedLine?.transform ?? {}).every(Number.isFinite),
+    ).toBe(true);
+
+    await page.getByTestId("undo").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () => (await window.laserx.getState()).editor.selectionBounds,
+        ),
+      )
+      .toEqual({
+        minXmm: 112.4,
+        minYmm: 152.4,
+        maxXmm: 192.4,
+        maxYmm: 152.4,
+      });
+    await page.getByTestId("redo").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () => (await window.laserx.getState()).editor.selectionBounds,
+        ),
+      )
+      .toEqual({
+        minXmm: 0,
+        minYmm: -25,
+        maxXmm: 120,
+        maxYmm: -25,
+      });
+
+    await clickAndWaitForCommand(page, "Save as");
+    await waitForProjectSchema(launched.projectPath, 3);
+    const diskProject = JSON.parse(
+      await readFile(launched.projectPath, "utf8"),
+    ) as { document: { objects: DocumentObject[] } };
+    expect(
+      canonicalLineGeometry(
+        diskProject.document.objects.find((object) => object.id === lineId),
+      ),
+    ).toMatchObject({
+      id: lineId,
+      worldStart: { xMm: 0, yMm: -25 },
+      worldEnd: { xMm: 120, yMm: -25 },
+    });
+
+    await page.getByRole("button", { name: "New", exact: true }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async (selectedId) => {
+          const state = await window.laserx.getState();
+          return state.project.document.objects.find(
+            (object) => object.id === selectedId,
+          );
+        }, lineId),
+      )
+      .toEqual(editedLine);
   } finally {
     await killAndRemove(launched);
   }

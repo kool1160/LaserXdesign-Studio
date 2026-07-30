@@ -22,6 +22,12 @@ rejects unknown fields, invalid matrices or geometry, duplicate/invalid
 structure, missing active layers, and dangling object-to-layer references.
 Selection, clipboard, camera position, and history are not serialized.
 
+Groups have one recursive layer identity: every descendant must use the
+group's `layerId`. The parser, serializer, and internal insertion boundary
+reject mixed-layer groups. Grouping, paste, duplicate, ungroup, layer moves,
+and layer deletion preserve the invariant. Separate child-layer semantics are
+not part of schema v3.
+
 Schema-v2 files migrate on read. The migration derives one deterministic
 default-layer UUID from the stable document ID, assigns that layer and an
 identity transform to every object, creates no guides, and supplies the new

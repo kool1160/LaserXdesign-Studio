@@ -16,6 +16,12 @@ name, and active-layer identity are persistent. Selection, clipboard, undo/redo
 history, transient camera position, and transform-handle state are not project
 data.
 
+Every descendant of a schema-v3 group must use the same `layerId` as the
+group. Parsing, serialization, and internal insertion reject mixed-layer
+groups. Layer moves, grouping, duplicate/paste, ungrouping, and layer deletion
+preserve this recursive invariant; schema v3 does not define independent child
+layer semantics inside a group.
+
 The parser rejects unknown fields, invalid object geometry or matrices,
 dangling layer references, corrupt JSON, and schema versions newer than the
 application supports. Files remain limited to 10 MB.

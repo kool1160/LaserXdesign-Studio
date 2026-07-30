@@ -24,6 +24,7 @@ export const IPC_CHANNELS = {
 export const displayUnitSchema = z.enum(["millimeters", "inches"]);
 const finiteNumber = z.number();
 const positiveNumber = finiteNumber.positive();
+const nonnegativeNumber = finiteNumber.nonnegative();
 const objectIdsSchema = z.array(z.uuid()).min(1);
 const pointSchema = z.strictObject({
   xMm: finiteNumber,
@@ -201,8 +202,8 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
       objectIds: objectIdsSchema,
       xMm: finiteNumber.optional(),
       yMm: finiteNumber.optional(),
-      widthMm: positiveNumber.optional(),
-      heightMm: positiveNumber.optional(),
+      widthMm: nonnegativeNumber.optional(),
+      heightMm: nonnegativeNumber.optional(),
       lockAspectRatio: z.boolean(),
     }),
     z.strictObject({

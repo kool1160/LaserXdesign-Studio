@@ -41,6 +41,12 @@ transaction records one initial snapshot and commits all contained commands as
 one history entry. Undo and redo restore exact snapshots, including IDs and
 matrix values.
 
+A transaction also snapshots selection, clipboard/paste sequencing, redo
+entries, and the last-command projection. Temporary edits do not clear redo.
+Committing a transaction with a new project state clears redo when it appends
+the new history entry; canceling restores every transaction-touched session
+projection and leaves the pre-existing redo branch intact.
+
 Hit testing and edits exclude objects whose layer is hidden or locked. Basic
 move snapping considers enabled grid intersections, guides, document
 bounds/center, and visible editable object bounds/centers.

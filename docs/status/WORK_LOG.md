@@ -79,3 +79,26 @@ clipboard only; basic bounds/center snapping; placeholder SVG renderer and
 objects only; no M04+ functionality.
 - Next allowed work: M04 only after the M03 pull request is reviewed, Windows CI
 passes, and the pull request is merged. Until then M04 remains blocked.
+
+## 2026-07-30 — M03 review correctness fixes
+
+- Date: 2026-07-30
+- Agent/task: Codex / PR #16 review findings
+- Milestone: M03 — Selection, transforms, layers, and history
+- Delivered: Signed/zero exact-inspector coordinate conversion and
+one-dimensional-safe horizontal/vertical line bounds; one recursive group
+`layerId` invariant across schema and internal editing boundaries; canceled
+transaction restoration that preserves selection, clipboard/paste metadata,
+last-command state, and the pre-existing redo branch.
+- Verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`,
+`pnpm build`, `pnpm verify`, `pnpm audit --prod`,
+`py -3 scripts/repository_guard.py`, and `git diff --check` pass locally.
+The suite contains 70 unit/integration tests and 8 packaged Playwright tests.
+- Decisions: ADR 0010 now records commit-only redo invalidation and complete
+transaction cancellation; ADR 0011 records one recursive group layer identity.
+- Known limitations: Exact bounds cannot expand an intrinsically zero axis;
+the request is rejected clearly. Schema v3 intentionally has no independent
+child-layer semantics inside groups. Existing M03 limitations remain.
+- Next allowed work: M04 only after PR #16 is reviewed, both Windows M03 runs
+and Repository Guard pass on the review-fix head, and the draft PR is merged.
+Until then M04 remains blocked.

@@ -86,18 +86,22 @@ dimensions are exact.
   distribute, and stable child geometry;
 - application tests cover explicit selection/clipboard/history ownership,
   fresh duplicate/paste IDs, transaction grouping, a bounded history, exact
-  undo/redo, and deterministic 100-step replay;
+  undo/redo, canceled-transaction redo preservation, and deterministic
+  100-step replay;
 - project-format golden tests cover complete schema-v3 editing-state round
   trips, v2-to-v3 migration, chained v1 migration, and corrupt/future/dangling
-  data rejection;
+  data rejection, including mixed-layer nested groups;
 - desktop unit/integration tests cover strict renderer actions, pointer and
   keyboard command equivalence, transform-handle projection, absence of React
-  mutation, and full editing-state save/reopen;
-- seven Playwright scenarios launch the packaged Windows executable. The M03
+  mutation, signed/zero exact-bounds conversion, and full editing-state
+  save/reopen;
+- eight Playwright scenarios launch the packaged Windows executable. The M03
   workflow covers exact inspector edits, keyboard movement, duplicate,
   copy/paste, group/ungroup, rotation, undo/redo, layers, guides, schema-v3
-  persistence, and reopen while retaining M01/M02 security, lifecycle,
-  migration, viewport, recovery, and high-DPI regressions.
+  persistence, and reopen. A direct default-horizontal-line regression covers
+  X = 0, negative Y, exact width, canonical geometry, undo/redo, and
+  save/reopen while retaining M01/M02 security, lifecycle, migration,
+  viewport, recovery, and high-DPI regressions.
 
 The M03 numerical transform tolerance remains `1e-9 mm`; packaged exact-bounds
 assertions normalize only below that documented boundary.

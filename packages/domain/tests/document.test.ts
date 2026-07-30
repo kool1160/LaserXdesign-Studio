@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  coordinateToMillimeters,
   createBlankProject,
   createDocument,
   deriveStableId,
   fromMillimeters,
   getDocumentBounds,
   identityTransform,
+  nonnegativeLengthToMillimeters,
   setProjectDisplayUnit,
   setViewportPreferences,
   toMillimeters,
@@ -120,6 +122,16 @@ describe("canonical document model", () => {
   it("uses exact inch conversion without repeated drift", () => {
     expect(toMillimeters(24, "inches")).toBe(609.6);
     expect(fromMillimeters(609.6, "inches")).toBe(24);
+  });
+
+  it("converts signed coordinates separately from nonnegative lengths", () => {
+    expect(coordinateToMillimeters(0, "inches")).toBe(0);
+    expect(coordinateToMillimeters(-2, "inches")).toBe(-50.8);
+    expect(nonnegativeLengthToMillimeters(0, "millimeters")).toBe(0);
+    expect(nonnegativeLengthToMillimeters(4, "inches")).toBe(101.6);
+    expect(() =>
+      nonnegativeLengthToMillimeters(-1, "millimeters"),
+    ).toThrow("Length must be nonnegative and finite.");
   });
 
   it("defines stock bounds and includes populated placeholder bounds", () => {

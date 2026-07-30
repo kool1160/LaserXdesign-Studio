@@ -327,6 +327,50 @@ describe("editing ProjectSession", () => {
     expect(projectJson(session)).toBe(after);
   });
 
+  it("restores selection and preserves redo when a transaction is canceled", () => {
+    const session = sessionWithFixture();
+    session.performEditorAction({
+      type: "selection.point",
+      point: { xMm: 15, yMm: 15 },
+      toleranceMm: 1,
+      mode: "replace",
+    });
+    const editA: EditorCommand = {
+      type: "objects.move",
+      objectIds: [RECT_ONE],
+      deltaXmm: 5,
+      deltaYmm: 0,
+    };
+    session.executeEditorCommand(editA);
+    const afterEditA = projectJson(session);
+    session.undo();
+    const beforeTransaction = projectJson(session);
+    expect(session.state.editor.history.redoDepth).toBe(1);
+    expect(session.state.editor.selectionIds).toEqual([RECT_ONE]);
+
+    session.beginTransaction("Canceled edit");
+    session.executeEditorCommand({
+      type: "objects.delete",
+      objectIds: [RECT_ONE],
+    });
+    expect(session.state.editor.selectionIds).toEqual([]);
+    session.cancelTransaction();
+
+    expect(projectJson(session)).toBe(beforeTransaction);
+    expect(session.state.editor.selectionIds).toEqual([RECT_ONE]);
+    expect(session.state.editor.history).toMatchObject({
+      undoDepth: 0,
+      redoDepth: 1,
+      transactionActive: false,
+    });
+    expect(session.lastEditorCommand).toEqual(editA);
+
+    session.redo();
+    expect(projectJson(session)).toBe(afterEditA);
+    expect(session.state.editor.selectionIds).toEqual([RECT_ONE]);
+    expect(session.state.editor.history.redoDepth).toBe(0);
+  });
+
   it("copy, paste, and duplicate create fresh deterministic IDs", () => {
     const session = sessionWithFixture();
     session.performEditorAction({

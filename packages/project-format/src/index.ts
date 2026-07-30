@@ -5,6 +5,7 @@ import {
   deriveStableId,
   identityTransform,
   isInvertibleTransform,
+  objectUsesLayerRecursively,
   type AffineTransformMm,
   type DocumentObject,
   type LaserxProject,
@@ -421,13 +422,7 @@ function objectLayerReferencesAreValid(
   object: DocumentObject,
   layerIds: ReadonlySet<string>,
 ): boolean {
-  return (
-    layerIds.has(object.layerId) &&
-    (object.type !== "group" ||
-      object.children.every((child) =>
-        objectLayerReferencesAreValid(child, layerIds),
-      ))
-  );
+  return layerIds.has(object.layerId) && objectUsesLayerRecursively(object);
 }
 
 export function parseProjectValue(candidate: unknown): LaserxProject {

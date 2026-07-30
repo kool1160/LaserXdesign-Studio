@@ -217,6 +217,25 @@ function assertPositiveFinite(value: number, name: string): void {
   }
 }
 
+function assertFinite(value: number, name: string): void {
+  if (!Number.isFinite(value)) {
+    throw new RangeError(`${name} must be finite.`);
+  }
+}
+
+function assertNonnegativeFinite(value: number, name: string): void {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${name} must be nonnegative and finite.`);
+  }
+}
+
+function convertDisplayValueToMillimeters(
+  value: number,
+  unit: DisplayUnit,
+): number {
+  return unit === "inches" ? (value * 254) / 10 : value;
+}
+
 function hashText(value: string, seed: number): number {
   let hash = seed >>> 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -269,7 +288,23 @@ export function isInvertibleTransform(
 
 export function toMillimeters(value: number, unit: DisplayUnit): number {
   assertPositiveFinite(value, "Length");
-  return unit === "inches" ? (value * 254) / 10 : value;
+  return convertDisplayValueToMillimeters(value, unit);
+}
+
+export function coordinateToMillimeters(
+  value: number,
+  unit: DisplayUnit,
+): number {
+  assertFinite(value, "Coordinate");
+  return convertDisplayValueToMillimeters(value, unit);
+}
+
+export function nonnegativeLengthToMillimeters(
+  value: number,
+  unit: DisplayUnit,
+): number {
+  assertNonnegativeFinite(value, "Length");
+  return convertDisplayValueToMillimeters(value, unit);
 }
 
 export function fromMillimeters(valueMm: number, unit: DisplayUnit): number {
@@ -581,6 +616,19 @@ export function collectObjectIds(object: DocumentObject): string[] {
         ...object.children.flatMap((child) => collectObjectIds(child)),
       ]
     : [object.id];
+}
+
+export function objectUsesLayerRecursively(
+  object: DocumentObject,
+  layerId = object.layerId,
+): boolean {
+  return (
+    object.layerId === layerId &&
+    (object.type !== "group" ||
+      object.children.every((child) =>
+        objectUsesLayerRecursively(child, layerId),
+      ))
+  );
 }
 
 export function copyLayer(layer: Layer): Layer {

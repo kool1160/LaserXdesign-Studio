@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createViewportScene,
+  exactBoundsCommand,
   fitDocumentToView,
   formatDimensions,
   gridSpacingToMillimeters,
@@ -115,6 +116,42 @@ describe("renderer viewport adapter", () => {
     const keyboard = keyboardMoveCommand(objectIds, 1, 2);
     expect(pointer).toMatchObject(keyboard);
     expect(pointer.type).toBe("objects.move");
+  });
+
+  it("maps signed coordinates and zero line extents to exact bounds", () => {
+    const objectId = "123e4567-e89b-42d3-a456-426614174001";
+    expect(
+      exactBoundsCommand(
+        [objectId],
+        { x: "0", y: "-2", width: "4", height: "0" },
+        "inches",
+        false,
+      ),
+    ).toEqual({
+      type: "objects.set-bounds",
+      objectIds: [objectId],
+      xMm: 0,
+      yMm: -50.8,
+      widthMm: 101.6,
+      heightMm: 0,
+      lockAspectRatio: false,
+    });
+    expect(
+      exactBoundsCommand(
+        [objectId],
+        { x: "", y: "0", width: "4", height: "0" },
+        "inches",
+        false,
+      ),
+    ).toBeNull();
+    expect(
+      exactBoundsCommand(
+        [objectId],
+        { x: "0", y: "0", width: "-1", height: "0" },
+        "millimeters",
+        false,
+      ),
+    ).toBeNull();
   });
 
   it("projects the complete transform-handle set for a selection", () => {

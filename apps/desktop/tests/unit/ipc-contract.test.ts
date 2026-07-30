@@ -111,4 +111,25 @@ describe("typed IPC validation", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("accepts signed exact coordinates and zero line extents", () => {
+    const result = editorActionRequestSchema.safeParse({
+      type: "objects.set-bounds",
+      objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+      xMm: 0,
+      yMm: -25,
+      widthMm: 120,
+      heightMm: 0,
+      lockAspectRatio: false,
+    });
+    expect(result.success).toBe(true);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "objects.set-bounds",
+        objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+        widthMm: -1,
+        lockAspectRatio: false,
+      }).success,
+    ).toBe(false);
+  });
 });
