@@ -75,6 +75,12 @@ pnpm verify
 
 `pnpm test:e2e` packages and launches the Windows application. `pnpm verify` runs lint, typecheck, unit/integration tests, build, package, and packaged end-to-end tests.
 
+M06 SVG/DXF interoperability keeps native paths and untrusted file contents in
+Electron main. Import is preview-first and commits as one undoable edit. Export
+writes explicit millimeter metadata and reports path count, warnings, units,
+and bounds. The exact supported-entity and unit matrix is documented in
+[`docs/FILE_FORMATS.md`](docs/FILE_FORMATS.md).
+
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete development workflow.
 
 ## Licensing note

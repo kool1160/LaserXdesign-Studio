@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600mm" height="300mm" viewBox="0 0 600 300">
+  <g data-layer="Cut" transform="translate(10 20)">
+    <polygon points="0,0 580,0 580,260 0,260" fill="none" stroke="#000"/>
+    <path d="M 40 130 C 120 20 220 240 300 130 Q 390 20 500 130" fill="none" stroke="#000"/>
+  </g>
+</svg>

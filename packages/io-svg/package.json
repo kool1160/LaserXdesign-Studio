@@ -1,1 +1,21 @@
-{"name":"@laserx/io-svg","version":"0.0.0","private":true,"type":"module"}
+{
+  "name": "@laserx/io-svg",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@laserx/domain": "workspace:*",
+    "@laserx/geometry": "workspace:*",
+    "saxes": "6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -20,3 +20,10 @@ M05 evidence:
 - `m05-geometry-editing.png` — packaged Windows geometry workspace after a
   boolean union, direct node move, and cubic-handle edit, with the topology
   summary visible.
+
+M06 evidence:
+
+- `m06-svg-dxf.png` - packaged Windows workspace showing a non-destructive
+  600 mm SVG import preview, explicit source units/dimensions, commit/cancel
+  controls, and the dashed geometry overlay before history or dirty state
+  changes.

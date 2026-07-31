@@ -32,6 +32,12 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Dimensionally correct SVG/DXF import preview, atomic undoable commit, and
+  explicit-mm export with layers, units, transforms, closure, warnings,
+  bounds/count summaries, scale fixtures, and independent DXF inspection.
+- Safe bounded SVG parsing for common 2D primitives and cubic/quadratic paths,
+  plus fixture-driven ASCII DXF LINE, 2D polyline, bulge, CIRCLE, and ARC
+  interoperability with explicit unitless assumptions.
 - Editable schema-v4 text with installed fonts and six audited redistributable
   bundled font
   catalogs, search/categories/favorites/recents, exact typography spacing,

@@ -106,6 +106,37 @@ join snaps endpoint anchors to a midpoint, the adjacent cubic controls receive
 the same world-millimeter deltas so their anchor-relative vectors remain
 unchanged.
 
+## M06 interchange scale
+
+All SVG/DXF candidates cross the adapter boundary in canonical millimeters.
+Import does not auto-fit, center, or rescale artwork to stock. Nested transforms
+are composed before materialization, so committed objects use an identity
+transform at their imported world coordinates.
+
+SVG absolute root lengths use these exact conversions:
+
+```text
+1 in = 25.4 mm
+1 cm = 10 mm
+96 px = 1 in
+```
+
+Unitless SVG root dimensions are CSS pixels. ViewBox-only dimensions are also
+CSS pixels and the preview records that assumption. The root viewBox mapping,
+including `preserveAspectRatio`, resolves before the SVG Y-down axis is flipped
+into LaserX Y-up. Shape coordinates are viewBox user units; percentages and
+relative CSS units are not accepted.
+
+DXF `$INSUNITS` 1, 4, and 5 convert from inches, millimeters, and centimeters.
+Unit value 0 or missing metadata has no implicit default: preview requires the
+user to choose millimeters or inches and reports that choice. DXF export always
+writes `$INSUNITS = 4` and coordinates in millimeters.
+
+The `0.01 mm` interchange flattening value is a maximum chordal-deviation
+target for cubic paths, ellipses, circles, arcs, and bulges. Scale-golden tests
+use `1e-9 mm` for straight coordinate conversion and the declared 0.01 mm
+curve tolerance for sampled geometry. Neither is a kerf or CAM tolerance.
+
 ## Renderer conversion boundary
 
 The screen uses CSS pixels with positive Y downward. `packages/geometry`

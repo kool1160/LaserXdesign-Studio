@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="50mm" viewBox="0 0 100 50">
+  <text x="5" y="10">Unsupported text is warning-only</text>
+  <path d="M 0 25 A 25 25 0 0 1 50 25"/>
+  <line x1="0" y1="0" x2="100" y2="50"/>
+</svg>

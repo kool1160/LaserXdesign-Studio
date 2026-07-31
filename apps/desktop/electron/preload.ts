@@ -17,6 +17,8 @@ import {
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
+  vectorExportRequestSchema,
+  vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
   type CancelGeometryOperationRequest,
   type DesktopState,
@@ -28,6 +30,8 @@ import {
   type SetViewportPreferencesRequest,
   type TextLayoutRequestDto,
   type TextUpdateRequestDto,
+  type VectorExportRequest,
+  type VectorImportPreviewRequest,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -70,6 +74,28 @@ const api: LaserxDesktopApi = Object.freeze({
   async saveProjectAs() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.saveProjectAs),
+    );
+  },
+  async previewVectorImport(request: VectorImportPreviewRequest) {
+    const validated = vectorImportPreviewRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.previewVectorImport, validated),
+    );
+  },
+  async commitVectorImport() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.commitVectorImport),
+    );
+  },
+  async cancelVectorImport() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelVectorImport),
+    );
+  },
+  async exportVector(request: VectorExportRequest) {
+    const validated = vectorExportRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.exportVector, validated),
     );
   },
   async setDisplayUnit(request: SetDisplayUnitRequest) {

@@ -69,6 +69,8 @@ export interface LaunchEnvironment {
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
   geometryDelayMs?: string;
+  importPath?: string;
+  exportPath?: string;
 }
 
 export async function launchPackaged(
@@ -100,6 +102,12 @@ export async function launchPackaged(
       ...(launchEnvironment.geometryDelayMs === undefined
         ? {}
         : { LASERX_TEST_GEOMETRY_DELAY_MS: launchEnvironment.geometryDelayMs }),
+      ...(launchEnvironment.importPath === undefined
+        ? {}
+        : { LASERX_TEST_IMPORT_PATH: launchEnvironment.importPath }),
+      ...(launchEnvironment.exportPath === undefined
+        ? {}
+        : { LASERX_TEST_EXPORT_PATH: launchEnvironment.exportPath }),
     },
   });
   return {

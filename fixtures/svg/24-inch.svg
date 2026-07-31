@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24in" height="12in" viewBox="0 0 24 12">
+  <g data-layer="Cut">
+    <rect x="0" y="0" width="24" height="12" fill="none" stroke="#000"/>
+    <circle cx="12" cy="6" r="2" fill="none" stroke="#000"/>
+  </g>
+</svg>

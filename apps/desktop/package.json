@@ -22,6 +22,8 @@
     "@laserx/domain": "workspace:*",
     "@laserx/fonts": "workspace:*",
     "@laserx/geometry": "workspace:*",
+    "@laserx/io-dxf": "workspace:*",
+    "@laserx/io-svg": "workspace:*",
     "@laserx/project-format": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8",

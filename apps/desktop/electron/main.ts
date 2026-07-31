@@ -31,6 +31,8 @@ import {
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
+  vectorExportRequestSchema,
+  vectorImportPreviewRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 
@@ -60,6 +62,13 @@ function emitState(state: DesktopState): void {
 
 function testPath(): string | null {
   const value = process.env.LASERX_TEST_PROJECT_PATH;
+  return value === undefined ? null : resolve(value);
+}
+
+function configuredVectorPath(
+  name: "LASERX_TEST_IMPORT_PATH" | "LASERX_TEST_EXPORT_PATH",
+): string | null {
+  const value = process.env[name];
   return value === undefined ? null : resolve(value);
 }
 
@@ -117,6 +126,34 @@ const dialogs: DesktopDialogs = {
     const choices: readonly UnsavedChoice[] = ["save", "discard", "cancel"];
     return choices[result.response] ?? "cancel";
   },
+  async chooseImportVector() {
+    const configured = configuredVectorPath("LASERX_TEST_IMPORT_PATH");
+    if (configured !== null) {
+      return configured;
+    }
+    const result = await dialog.showOpenDialog(requireMainWindow(), {
+      title: "Import SVG or DXF",
+      properties: ["openFile"],
+      filters: [
+        { name: "2D Vector Interchange", extensions: ["svg", "dxf"] },
+        { name: "SVG", extensions: ["svg"] },
+        { name: "DXF", extensions: ["dxf"] },
+      ],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
+  async chooseExportVector(format, suggestedName) {
+    const configured = configuredVectorPath("LASERX_TEST_EXPORT_PATH");
+    if (configured !== null) {
+      return configured;
+    }
+    const result = await dialog.showSaveDialog(requireMainWindow(), {
+      title: `Export ${format.toUpperCase()}`,
+      defaultPath: suggestedName,
+      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+    });
+    return result.canceled ? null : result.filePath;
+  },
 };
 
 function requireController(): DesktopController {
@@ -154,6 +191,23 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.saveProjectAs, () =>
     requireController().saveProjectAs(),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.previewVectorImport,
+    (_event, request: unknown) => {
+      const validated = vectorImportPreviewRequestSchema.parse(request);
+      return requireController().previewVectorImport(validated);
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.commitVectorImport, () =>
+    requireController().commitVectorImport(),
+  );
+  ipcMain.handle(IPC_CHANNELS.cancelVectorImport, () =>
+    requireController().cancelVectorImport(),
+  );
+  ipcMain.handle(IPC_CHANNELS.exportVector, (_event, request: unknown) => {
+    const validated = vectorExportRequestSchema.parse(request);
+    return requireController().exportVector(validated);
+  });
   ipcMain.handle(IPC_CHANNELS.setDisplayUnit, (_event, request: unknown) => {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);
@@ -215,6 +269,13 @@ function buildMenu(): void {
           accelerator: "CmdOrCtrl+O",
           click: () => void requireController().openProject(),
         },
+        {
+          label: "Import SVG/DXF...",
+          click: () =>
+            void requireController().previewVectorImport({
+              unitlessDxfUnit: null,
+            }),
+        },
         { type: "separator" },
         {
           label: "Save",
@@ -225,6 +286,17 @@ function buildMenu(): void {
           label: "Save As…",
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => void requireController().saveProjectAs(),
+        },
+        { type: "separator" },
+        {
+          label: "Export SVG...",
+          click: () =>
+            void requireController().exportVector({ format: "svg" }),
+        },
+        {
+          label: "Export DXF...",
+          click: () =>
+            void requireController().exportVector({ format: "dxf" }),
         },
         { type: "separator" },
         {

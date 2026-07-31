@@ -35,7 +35,7 @@ Native DWG, 3D DXF entities, CAM operations, splines without a proven conversion
 
 ## Exit checklist
 
-- [ ] Supported entity matrix documented.
-- [ ] Scale golden suite passes.
-- [ ] Independent downstream validation recorded.
+- [x] Supported entity matrix documented.
+- [x] Scale golden suite passes.
+- [x] Independent downstream validation recorded.
 - [ ] Status advances to M07.

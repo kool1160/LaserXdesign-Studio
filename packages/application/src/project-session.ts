@@ -9,6 +9,7 @@ import {
   getObjectsInRenderOrder,
   getSelectionBounds,
   hitTestDocument,
+  identityTransform,
   isLayerEditable,
   marqueeHitTest,
   replaceProjectDocument,
@@ -20,10 +21,15 @@ import {
   type EditorCommand,
   type LaserxDocument,
   type LaserxProject,
+  type Layer,
   type PathObject,
   type PointMm,
   type TextObject,
   type UpdateViewportPreferences,
+  type VectorImportCandidate,
+  type VectorSourceUnit,
+  type VectorInterchangeFormat,
+  type InterchangeWarning,
 } from "@laserx/domain";
 import {
   applyAffineTransform,
@@ -47,12 +53,29 @@ export interface EditorProjection {
   clipboardHasContent: boolean;
   pathSelection: PathSelectionProjection | null;
   topologySummary: TopologyChangeSummary | null;
+  importPreview: VectorImportPreview | null;
   history: {
     undoDepth: number;
     redoDepth: number;
     limit: number;
     transactionActive: boolean;
   };
+}
+
+export interface VectorImportPreview {
+  sourceName: string;
+  format: VectorInterchangeFormat;
+  sourceUnit: VectorSourceUnit;
+  dimensionsMm: { widthMm: number; heightMm: number } | null;
+  layers: Layer[];
+  objects: PathObject[];
+  warnings: InterchangeWarning[];
+  assumptions: string[];
+  bounds: BoundsMm | null;
+}
+
+interface PendingVectorImport extends VectorImportPreview {
+  projectFingerprint: string;
 }
 
 export interface PathSelectionProjection {
@@ -96,6 +119,7 @@ export type ApplicationCommand =
 type GeneratedEditorCommand =
   | Extract<EditorCommand, { type: "objects.duplicate" }>
   | Extract<EditorCommand, { type: "objects.insert" }>
+  | Extract<EditorCommand, { type: "objects.import" }>
   | Extract<EditorCommand, { type: "objects.replace" }>
   | Extract<EditorCommand, { type: "objects.replace-topology" }>
   | Extract<EditorCommand, { type: "objects.convert-text" }>
@@ -272,6 +296,27 @@ function copyTopologySummary(
       };
 }
 
+function copyImportPreview(
+  preview: PendingVectorImport | null,
+): VectorImportPreview | null {
+  return preview === null
+    ? null
+    : {
+        sourceName: preview.sourceName,
+        format: preview.format,
+        sourceUnit: preview.sourceUnit,
+        dimensionsMm:
+          preview.dimensionsMm === null ? null : { ...preview.dimensionsMm },
+        layers: preview.layers.map((layer) => ({ ...layer })),
+        objects: preview.objects.map((object) =>
+          copyDocumentObject(object) as PathObject,
+        ),
+        warnings: preview.warnings.map((item) => ({ ...item })),
+        assumptions: [...preview.assumptions],
+        bounds: preview.bounds === null ? null : { ...preview.bounds },
+      };
+}
+
 function worldPathGeometry(object: PathObject): EditablePathGeometry {
   return {
     closed: object.closed,
@@ -328,6 +373,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
   #lastEditorCommand: EditorCommand | null = null;
   #pathSelection: PathSelectionProjection | null = null;
   #topologySummary: TopologyChangeSummary | null = null;
+  #importPreview: PendingVectorImport | null = null;
 
   public constructor(
     dependencies: LifecycleDependencies,
@@ -360,6 +406,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
           this.#clipboard !== null && this.#clipboard.length > 0,
         pathSelection: copyPathSelection(this.#pathSelection),
         topologySummary: copyTopologySummary(this.#topologySummary),
+        importPreview: copyImportPreview(this.#importPreview),
         history: {
           undoDepth: this.#past.length,
           redoDepth: this.#future.length,
@@ -577,6 +624,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
           .filter((id): id is string => id !== undefined);
         break;
       case "objects.insert":
+      case "objects.import":
         this.#selectionIds = command.objects.map((object) => object.id);
         break;
       case "objects.group":
@@ -646,6 +694,135 @@ export class ProjectSession implements ProjectCommandDispatcher {
     }
     this.#recordTopologySummary(command, beforeDocument, nextDocument);
     this.#reconcilePathSelection();
+    return this.state;
+  }
+
+  public previewVectorImport(
+    candidate: VectorImportCandidate,
+    sourceName: string,
+  ): ProjectSessionState {
+    if (this.#transaction !== null) {
+      throw new Error("Commit or cancel the active transaction before importing.");
+    }
+    if (candidate.paths.length === 0) {
+      throw new RangeError("The selected file contains no supported 2D geometry to preview.");
+    }
+    if (candidate.paths.length > 100_000) {
+      throw new RangeError("The selected file contains too many imported paths.");
+    }
+    const document = this.#project.document;
+    const editableLayers = document.layers.filter(
+      (layer) => layer.visible && !layer.locked,
+    );
+    const activeLayer = editableLayers.find(
+      (layer) => layer.id === document.activeLayerId,
+    ) ?? editableLayers[0];
+    const newLayers: Layer[] = [];
+    const mappedLayerIds = new Map<string, string>();
+    const usedLayerNames = new Set(
+      document.layers.map((layer) => layer.name.toLocaleLowerCase()),
+    );
+    const uniqueLayerName = (requested: string): string => {
+      const base = requested.trim().slice(0, 100) || "Imported";
+      let name = base;
+      let sequence = 2;
+      while (usedLayerNames.has(name.toLocaleLowerCase())) {
+        const suffix = ` (${String(sequence)})`;
+        name = `${base.slice(0, 100 - suffix.length)}${suffix}`;
+        sequence += 1;
+      }
+      usedLayerNames.add(name.toLocaleLowerCase());
+      return name;
+    };
+    const layerIdFor = (sourceLayerName: string | null): string => {
+      const requested = sourceLayerName?.trim() ?? "";
+      if (requested === "" && activeLayer !== undefined) {
+        return activeLayer.id;
+      }
+      const key = requested.toLocaleLowerCase() || "__default_import_layer__";
+      const mapped = mappedLayerIds.get(key);
+      if (mapped !== undefined) {
+        return mapped;
+      }
+      const existing = editableLayers.find(
+        (layer) => layer.name.toLocaleLowerCase() === key,
+      );
+      if (existing !== undefined) {
+        mappedLayerIds.set(key, existing.id);
+        return existing.id;
+      }
+      const layer: Layer = {
+        id: this.#dependencies.createId(),
+        name: uniqueLayerName(requested || "Imported"),
+        visible: true,
+        locked: false,
+      };
+      newLayers.push(layer);
+      mappedLayerIds.set(key, layer.id);
+      return layer.id;
+    };
+    const objects = candidate.paths.map<PathObject>((path) => ({
+      id: this.#dependencies.createId(),
+      type: "path",
+      layerId: layerIdFor(path.layerName),
+      transform: identityTransform(),
+      closed: path.closed,
+      points: path.points.map((point) => ({ ...point })),
+      ...(path.handles === undefined
+        ? {}
+        : {
+            handles: path.handles.map((handle) => ({
+              incoming:
+                handle.incoming === null ? null : { ...handle.incoming },
+              outgoing:
+                handle.outgoing === null ? null : { ...handle.outgoing },
+            })),
+          }),
+    }));
+    const previewDocument: LaserxDocument = {
+      ...document,
+      layers: [...document.layers, ...newLayers],
+      objects: [...document.objects, ...objects],
+    };
+    const bounds = getSelectionBounds(
+      previewDocument,
+      objects.map((object) => object.id),
+    );
+    this.#importPreview = {
+      sourceName: sourceName.trim() || `Imported ${candidate.format.toUpperCase()}`,
+      format: candidate.format,
+      sourceUnit: candidate.sourceUnit,
+      dimensionsMm:
+        candidate.dimensionsMm === null ? null : { ...candidate.dimensionsMm },
+      layers: newLayers,
+      objects,
+      warnings: candidate.warnings.map((item) => ({ ...item })),
+      assumptions: [...candidate.assumptions],
+      bounds,
+      projectFingerprint: fingerprint(this.#project),
+    };
+    return this.state;
+  }
+
+  public cancelVectorImport(): ProjectSessionState {
+    this.#importPreview = null;
+    return this.state;
+  }
+
+  public commitVectorImport(): ProjectSessionState {
+    const preview = this.#importPreview;
+    if (preview === null) {
+      throw new RangeError("There is no vector import preview to commit.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed after this preview was created. Preview the vector file again before committing it.");
+    }
+    this.executeEditorCommand({
+      type: "objects.import",
+      layers: preview.layers,
+      objects: preview.objects,
+    });
+    this.#importPreview = null;
     return this.state;
   }
 
@@ -1359,5 +1536,6 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#lastEditorCommand = null;
     this.#pathSelection = null;
     this.#topologySummary = null;
+    this.#importPreview = null;
   }
 }

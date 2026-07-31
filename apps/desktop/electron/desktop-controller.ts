@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { basename, extname } from "node:path";
 
 import {
   fingerprintGeometryDocument,
@@ -14,12 +15,15 @@ import {
   identityTransform,
   type TextObject,
   type UpdateViewportPreferences,
+  type VectorExportSummary,
 } from "@laserx/domain";
 import {
   type FontCatalogEntry,
   FontEngine,
   type TextLayoutRequest,
 } from "@laserx/fonts";
+import { exportDxf, importDxf } from "@laserx/io-dxf";
+import { exportSvg, importSvg } from "@laserx/io-svg";
 
 import type {
   CommandResult,
@@ -28,6 +32,8 @@ import type {
   ResolveRecoveryRequest,
   SetViewportPreferencesRequest,
   TextUpdateRequestDto,
+  VectorExportRequest,
+  VectorImportPreviewRequest,
 } from "./ipc-contract.js";
 import { AppLogger } from "./logger.js";
 import {
@@ -41,6 +47,11 @@ import {
   type RecoveryStorePort,
 } from "./persistence.js";
 import { ProjectStorage, validateProjectPath } from "./project-storage.js";
+import {
+  VectorStorage,
+  type VectorFileFormat,
+  type VectorFileService,
+} from "./vector-storage.js";
 
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
@@ -48,6 +59,11 @@ export interface DesktopDialogs {
   chooseOpenProject(): Promise<string | null>;
   chooseSaveProject(suggestedName: string): Promise<string | null>;
   confirmUnsavedChanges(projectName: string): Promise<UnsavedChoice>;
+  chooseImportVector?(): Promise<string | null>;
+  chooseExportVector?(
+    format: VectorFileFormat,
+    suggestedName: string,
+  ): Promise<string | null>;
 }
 
 export interface DesktopControllerOptions {
@@ -60,6 +76,7 @@ export interface DesktopControllerOptions {
   recoveryStore?: RecoveryStorePort;
   fontEngine?: FontEngine;
   geometryWorker?: GeometryWorkerPort;
+  vectorStorage?: VectorFileService;
 }
 
 export interface AutosaveScheduler {
@@ -91,11 +108,13 @@ export class DesktopController {
   readonly #autosaveScheduler: AutosaveScheduler;
   readonly #fontEngine: FontEngine;
   readonly #geometryWorker: GeometryWorkerPort;
+  readonly #vectorStorage: VectorFileService;
   readonly #geometryAbortControllers = new Map<string, AbortController>();
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
   #autosaveInFlight: Promise<void> | null = null;
+  #lastExportSummary: VectorExportSummary | null = null;
 
   public constructor(options: DesktopControllerOptions) {
     this.#storage = options.projectStorage ?? new ProjectStorage();
@@ -111,6 +130,7 @@ export class DesktopController {
     this.#fontEngine = options.fontEngine ?? new FontEngine([]);
     this.#geometryWorker =
       options.geometryWorker ?? new NodeGeometryWorkerService();
+    this.#vectorStorage = options.vectorStorage ?? new VectorStorage();
   }
 
   public async initialize(): Promise<void> {
@@ -142,6 +162,12 @@ export class DesktopController {
               originalPath: this.#pendingRecovery.originalPath,
               projectName: this.#pendingRecovery.project.project.name,
             },
+      interchange: {
+        exportSummary:
+          this.#lastExportSummary === null
+            ? null
+            : structuredClone(this.#lastExportSummary),
+      },
     };
   }
 
@@ -203,6 +229,69 @@ export class DesktopController {
   public async saveProjectAs(): Promise<CommandResult> {
     return this.#run(async () => {
       await this.#save(true);
+    });
+  }
+
+  public async previewVectorImport(
+    request: VectorImportPreviewRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#dialogs.chooseImportVector === undefined) {
+        throw new Error("Vector import is not available in this desktop host.");
+      }
+      const filePath = await this.#dialogs.chooseImportVector();
+      if (filePath === null) {
+        return;
+      }
+      const contents = await this.#vectorStorage.read(filePath);
+      const extension = extname(filePath).toLowerCase();
+      const candidate = extension === ".svg"
+        ? importSvg(contents)
+        : extension === ".dxf"
+          ? importDxf(contents, {
+              ...(request.unitlessDxfUnit === null
+                ? {}
+                : { unitlessUnit: request.unitlessDxfUnit }),
+            })
+          : (() => {
+              throw new RangeError("Choose an .svg or .dxf vector file.");
+            })();
+      this.#session.previewVectorImport(candidate, basename(filePath));
+    });
+  }
+
+  public async commitVectorImport(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.commitVectorImport();
+    });
+  }
+
+  public async cancelVectorImport(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.cancelVectorImport();
+    });
+  }
+
+  public async exportVector(
+    request: VectorExportRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#dialogs.chooseExportVector === undefined) {
+        throw new Error("Vector export is not available in this desktop host.");
+      }
+      const current = this.#session.state;
+      const filePath = await this.#dialogs.chooseExportVector(
+        request.format,
+        `${current.project.project.name}.${request.format}`,
+      );
+      if (filePath === null) {
+        return;
+      }
+      const artifact = request.format === "svg"
+        ? exportSvg(current.project.document)
+        : exportDxf(current.project.document);
+      await this.#vectorStorage.write(filePath, artifact.content, request.format);
+      this.#lastExportSummary = artifact.summary;
     });
   }
 

@@ -18,6 +18,10 @@ export const IPC_CHANNELS = {
   openRecent: "laserx:project:open-recent",
   saveProject: "laserx:project:save",
   saveProjectAs: "laserx:project:save-as",
+  previewVectorImport: "laserx:vector:preview-import",
+  commitVectorImport: "laserx:vector:commit-import",
+  cancelVectorImport: "laserx:vector:cancel-import",
+  exportVector: "laserx:vector:export",
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   editorAction: "laserx:editor:action",
@@ -499,6 +503,29 @@ export const resolveRecoveryRequestSchema = z.strictObject({
   action: z.enum(["recover", "discard"]),
 });
 
+export const vectorImportPreviewRequestSchema = z.strictObject({
+  unitlessDxfUnit: z.enum(["millimeters", "inches"]).nullable(),
+});
+
+export const vectorExportRequestSchema = z.strictObject({
+  format: z.enum(["svg", "dxf"]),
+});
+
+const interchangeWarningSchema = z.strictObject({
+  code: z.string().min(1),
+  message: z.string().min(1),
+  source: z.string().nullable(),
+});
+
+const vectorExportSummarySchema = z.strictObject({
+  format: z.enum(["svg", "dxf"]),
+  objectCount: z.number().int().nonnegative(),
+  warningCount: z.number().int().nonnegative(),
+  warnings: z.array(interchangeWarningSchema),
+  units: z.literal("millimeters"),
+  bounds: boundsSchema.nullable(),
+});
+
 export const recentProjectSchema = z.strictObject({
   filePath: z.string(),
   name: z.string(),
@@ -532,6 +559,27 @@ export const desktopStateSchema = z.strictObject({
         message: z.string(),
       })
       .nullable(),
+    importPreview: z
+      .strictObject({
+        sourceName: z.string().min(1),
+        format: z.enum(["svg", "dxf"]),
+        sourceUnit: z.enum([
+          "millimeters",
+          "centimeters",
+          "inches",
+          "pixels",
+          "unitless",
+        ]),
+        dimensionsMm: z
+          .strictObject({ widthMm: positiveNumber, heightMm: positiveNumber })
+          .nullable(),
+        layers: z.array(layerSchema),
+        objects: z.array(documentObjectSchema),
+        warnings: z.array(interchangeWarningSchema),
+        assumptions: z.array(z.string()),
+        bounds: boundsSchema.nullable(),
+      })
+      .nullable(),
     history: z.strictObject({
       undoDepth: z.number().int().nonnegative(),
       redoDepth: z.number().int().nonnegative(),
@@ -550,6 +598,9 @@ export const desktopStateSchema = z.strictObject({
       projectName: z.string(),
     })
     .nullable(),
+  interchange: z.strictObject({
+    exportSummary: vectorExportSummarySchema.nullable(),
+  }),
 });
 
 export const commandResultSchema = z.discriminatedUnion("ok", [
@@ -587,6 +638,10 @@ export type GeometryOperationRequestDto = z.infer<
 export type CancelGeometryOperationRequest = z.infer<
   typeof cancelGeometryOperationRequestSchema
 >;
+export type VectorImportPreviewRequest = z.infer<
+  typeof vectorImportPreviewRequestSchema
+>;
+export type VectorExportRequest = z.infer<typeof vectorExportRequestSchema>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -600,6 +655,10 @@ export interface LaserxDesktopApi {
   openRecent(request: OpenRecentRequest): Promise<CommandResult>;
   saveProject(): Promise<CommandResult>;
   saveProjectAs(): Promise<CommandResult>;
+  previewVectorImport(request: VectorImportPreviewRequest): Promise<CommandResult>;
+  commitVectorImport(): Promise<CommandResult>;
+  cancelVectorImport(): Promise<CommandResult>;
+  exportVector(request: VectorExportRequest): Promise<CommandResult>;
   setDisplayUnit(request: SetDisplayUnitRequest): Promise<CommandResult>;
   setViewportPreferences(
     request: SetViewportPreferencesRequest,

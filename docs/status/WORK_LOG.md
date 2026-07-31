@@ -312,6 +312,36 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
   and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
   advance to M06.
 
+## 2026-07-31 - M06 SVG/DXF interoperability
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #7 implementation
+- Milestone: M06 - Dimensionally Correct SVG and DXF Interoperability
+- Delivered: Bounded safe SVG parsing; explicit physical SVG export; px/in/mm/
+  cm/viewBox-only scale policy; transform and Cartesian-axis normalization;
+  fixture-driven ASCII DXF LINE, LWPOLYLINE/bulge, legacy POLYLINE, CIRCLE, and
+  ARC import; millimeter DXF export; layer mapping; closure preservation;
+  explicit unitless-DXF assumptions; warning/assumption reporting; path-free
+  secure IPC; native dialogs and bounded storage; non-destructive preview
+  overlay; stale-safe one-command commit/undo; and export count, unit, warning,
+  and bounds summaries.
+- Verification: Lint, workspace typecheck, build, 149 unit/integration tests,
+  and the focused packaged M06 workflow pass locally. The complete packaged
+  suite contains 18 Electron E2E scenarios. Scale goldens cover 24 in and 600
+  mm fixtures and exact SVG px/in/mm/cm rules. Independent MIT `dxf-parser`
+  inspection verifies the representative export's `$INSUNITS = 4`, entity
+  type, and closed flag without using the production parser.
+- Decisions: ADR 0016 records the secure main-process file/format boundary,
+  normalized candidate contract, explicit unit assumptions, bounded parsing,
+  0.01 mm flattening, preview fingerprint, and atomic import history policy.
+- Known limitations: SVG path `A` arcs require circle/ellipse elements or cubic
+  conversion; styles, clipping, masks, text, and references are not cut
+  geometry. DXF is ASCII 2D only and excludes splines, 3D/polyface data, CAM,
+  DWG, and G-code. Import preserves source placement rather than auto-fitting.
+- Next allowed work: review M06 only. Keep the implementation PR draft; do not
+  merge, close Issue #7, advance status to M07, or begin later scope until the
+  review and advancement gates pass.
+
 ## 2026-07-31 — M05 controls-aware cleanup repair
 
 - Date: 2026-07-31
