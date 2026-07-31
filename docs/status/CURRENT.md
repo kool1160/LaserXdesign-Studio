@@ -69,6 +69,18 @@ M01 was merged through PR #14 in commit
 Users can import practical SVG/DXF artwork and export files that downstream CAM
 opens at the intended physical size with clean 2D geometry.
 
+## M06 implementation under review
+
+- Draft PR: #21, `feat/m06-svg-dxf` into `main`.
+- Complete implementation commit: `12ae86f7c90554f33bd1529a142a8feabf6a7b2a`.
+- Local gate: `pnpm verify`, production audit, repository guard, and diff check
+  pass; 149 unit/integration tests and 18 packaged Electron E2E scenarios pass.
+- Independent inspection: pinned MIT `dxf-parser` verifies representative DXF
+  millimeter units, entity type, and closed shape flag without using the
+  production parser.
+- State: awaiting review and exact-head GitHub checks. Do not merge, close Issue
+  #7, advance this file to M07, or begin M07 work from `Continue LaserX`.
+
 ## Allowed M06 work
 
 - safe SVG import with supported-element warnings;
