@@ -70,7 +70,10 @@ horizontal center. Corner handles retain their opposite-corner pivot.
 
 Move snapping is evaluated in domain millimeters. Enabled targets are grid
 lines, explicit guides, document bounds/center, and visible editable object
-bounds/centers. Camera position and device-pixel ratio do not affect targets.
+bounds/centers. Candidate distance is compared across enabled target families;
+an exact zero-distance guide, document, or object match cannot be displaced by
+a nearby grid line. Camera position and device-pixel ratio do not affect
+targets.
 
 ## Renderer conversion boundary
 
@@ -90,7 +93,8 @@ yMm = (originScreenYCssPx - screenYCssPx) / zoomCssPxPerMm
 Pan changes only the two screen-origin fields. Zoom changes the CSS-pixel scale
 and screen origin. Zoom around a pointer first resolves the domain point under
 the pointer, then chooses the new screen origin so that domain point remains
-fixed.
+fixed. Explicit Alt-drag and middle-button gestures take precedence over
+artwork and transform-handle hit testing, so panning changes camera state only.
 
 The coordinate round-trip tolerance is `1e-9 mm`. This tolerance covers normal
 IEEE-754 inverse-operation error; it is not a manufacturing tolerance.

@@ -130,3 +130,25 @@ renderer adapter now supplies unambiguous locked-resize intent.
 - Next allowed work: M04 remains blocked until PR #16 is reviewed, Repository
 Guard and both Windows M03 runs pass on the final repair head, and the draft PR
 is merged.
+
+## 2026-07-30 — M03 pan and snap review repair
+
+- Date: 2026-07-30
+- Agent/task: Codex / PR #16 re-review findings
+- Milestone: M03 — Selection, transforms, layers, and history
+- Delivered: Alt-drag and middle-button pan gestures now take precedence over
+artwork and transform-handle hit testing without changing document, selection,
+or history state. Snapping now distinguishes no candidate from an exact
+zero-distance match and compares the actual adjustment distance across
+non-grid and grid targets.
+- Verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
+`pnpm test:e2e`, `pnpm verify`, `pnpm audit --prod`,
+`py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+suite contains 74 unit/integration tests and 10 packaged Playwright tests.
+Final-head Repository Guard and Windows M03 workflows are pending publication.
+- Decisions: no architecture or schema change. Camera state remains
+renderer-local, while snap selection remains deterministic domain behavior.
+- Known limitations: existing M03 limitations remain unchanged.
+- Next allowed work: M04 remains blocked until PR #16 is reviewed, Repository
+Guard and both Windows M03 runs pass on the final repair head, and the draft PR
+is merged.

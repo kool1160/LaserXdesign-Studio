@@ -6,6 +6,11 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Alt-drag and middle-button pan gestures now take precedence over artwork and
+  transform-handle hit testing, so viewport navigation cannot accidentally
+  mutate geometry or history.
+- Exact guide, document, or object snap matches now remain selected when a
+  different grid line is also within tolerance.
 - Aspect-locked exact sizing now follows the last edited Width or Height field,
   and Shift-dragging any edge transform handle applies one uniform scale factor
   without changing the selection's aspect ratio.

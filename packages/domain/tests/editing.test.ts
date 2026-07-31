@@ -562,6 +562,39 @@ describe("editing domain", () => {
     ).toBeLessThanOrEqual(COORDINATE_TOLERANCE_MM);
   });
 
+  it("keeps an exact non-grid snap ahead of a nearby grid candidate", () => {
+    let document = editingDocument();
+    document.settings.viewport.gridSpacingMm = 10;
+    document.settings.viewport.snapping = {
+      enabled: true,
+      snapToGrid: true,
+      snapToGuides: true,
+      snapToObjects: true,
+      snapToDocument: true,
+    };
+
+    document = applyEditorCommand(document, {
+      type: "objects.move",
+      objectIds: [RECT_ONE],
+      deltaXmm: 45,
+      deltaYmm: 0,
+      snapToleranceMm: 6,
+    });
+
+    expect(
+      getObjectBounds(
+        document.objects.find(
+          (object) => object.id === RECT_ONE,
+        ) as DocumentObject,
+      ),
+    ).toEqual({
+      minXmm: 55,
+      minYmm: 10,
+      maxXmm: 75,
+      maxYmm: 20,
+    });
+  });
+
   it("renames, reorders, locks, hides, activates, and deletes layers", () => {
     let document = editingDocument();
     document = applyEditorCommand(document, {

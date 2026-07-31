@@ -294,7 +294,9 @@ export function Viewport({
             | TransformHandleKind
             | undefined;
           const objectId = target.dataset.objectId;
-          if (
+          if (event.button === 1 || event.altKey) {
+            gestureRef.current = { kind: "pan", previous: point };
+          } else if (
             handle !== undefined &&
             selectionBounds !== null &&
             selectionIds.length > 0
@@ -330,8 +332,6 @@ export function Viewport({
                 ? nextSelectionIds
                 : [],
             };
-          } else if (event.button === 1 || event.altKey) {
-            gestureRef.current = { kind: "pan", previous: point };
           } else {
             gestureRef.current = {
               kind: "marquee",
@@ -348,13 +348,14 @@ export function Viewport({
           setCursor(screenToDomain(point, viewport));
           const gesture = gestureRef.current;
           if (gesture?.kind === "pan") {
-            setViewport((current) =>
-              panViewport(current, {
-                xCssPx: point.xCssPx - gesture.previous.xCssPx,
-                yCssPx: point.yCssPx - gesture.previous.yCssPx,
-              }),
-            );
+            const delta = {
+              xCssPx: point.xCssPx - gesture.previous.xCssPx,
+              yCssPx: point.yCssPx - gesture.previous.yCssPx,
+            };
             gesture.previous = point;
+            setViewport((current) =>
+              panViewport(current, delta),
+            );
           } else if (gesture?.kind === "marquee") {
             setMarquee({ start: gesture.start, end: point });
           }

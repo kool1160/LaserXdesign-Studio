@@ -189,8 +189,8 @@ function closestAdjustment(
   movingAnchors: readonly number[],
   targets: readonly number[],
   toleranceMm: number,
-): number {
-  let adjustment = 0;
+): number | null {
+  let adjustment: number | null = null;
   let distance = Number.POSITIVE_INFINITY;
   for (const moving of movingAnchors) {
     for (const target of targets) {
@@ -212,8 +212,8 @@ function gridAdjustment(
   movingAnchors: readonly number[],
   spacingMm: number,
   toleranceMm: number,
-): number {
-  let adjustment = 0;
+): number | null {
+  let adjustment: number | null = null;
   let distance = Number.POSITIVE_INFINITY;
   for (const moving of movingAnchors) {
     const candidate =
@@ -303,16 +303,22 @@ export function snapMoveDelta(
       document.settings.viewport.gridSpacingMm,
       toleranceMm,
     );
-    if (Math.abs(gridX) < Math.abs(adjustX) || adjustX === 0) {
+    if (
+      gridX !== null &&
+      (adjustX === null || Math.abs(gridX) < Math.abs(adjustX))
+    ) {
       adjustX = gridX;
     }
-    if (Math.abs(gridY) < Math.abs(adjustY) || adjustY === 0) {
+    if (
+      gridY !== null &&
+      (adjustY === null || Math.abs(gridY) < Math.abs(adjustY))
+    ) {
       adjustY = gridY;
     }
   }
   return {
-    deltaXmm: requestedDelta.deltaXmm + adjustX,
-    deltaYmm: requestedDelta.deltaYmm + adjustY,
+    deltaXmm: requestedDelta.deltaXmm + (adjustX ?? 0),
+    deltaYmm: requestedDelta.deltaYmm + (adjustY ?? 0),
   };
 }
 

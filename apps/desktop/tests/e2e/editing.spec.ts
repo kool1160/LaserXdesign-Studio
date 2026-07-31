@@ -476,3 +476,113 @@ test("packaged aspect lock honors height input and edge handles", async () => {
     await killAndRemove(launched);
   }
 });
+
+test("packaged pan gestures over artwork and handles preserve edits", async () => {
+  const launched = await launchPackaged();
+  try {
+    const page = await launched.electronApp.firstWindow();
+
+    await page.getByTestId("add-rectangle").click();
+    await expect(page.getByTestId("selection-count")).toHaveText(
+      "1 object selected",
+    );
+    const rectangleId = await page.evaluate(
+      async () => (await window.laserx.getState()).editor.selectionIds[0],
+    );
+    if (rectangleId === undefined) {
+      throw new Error("Expected the added rectangle to be selected.");
+    }
+    await page.getByTestId("fit-view").click();
+    await expect(page.getByTestId("selection-overlay")).toBeVisible();
+    const artwork = page
+      .locator(`[data-object-id="${rectangleId}"]`)
+      .first();
+    const beforeAltPan = await artwork.boundingBox();
+    if (beforeAltPan === null) {
+      throw new Error("The selected artwork has no screen bounds.");
+    }
+    const editorBeforePan = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        document: state.project.document,
+        history: state.editor.history,
+        selectionIds: state.editor.selectionIds,
+      };
+    });
+    const viewport = page.getByTestId("viewport");
+    const stockRegion = page.getByTestId("stock-region");
+    const cameraBeforeAltPan = await stockRegion.boundingBox();
+    if (cameraBeforeAltPan === null) {
+      throw new Error("The stock region has no screen bounds.");
+    }
+
+    await page.mouse.move(
+      beforeAltPan.x + beforeAltPan.width / 2,
+      beforeAltPan.y + beforeAltPan.height / 2,
+    );
+    await page.keyboard.down("Alt");
+    await page.mouse.down();
+    await expect(page.getByTestId("viewport")).toHaveClass(/dragging/);
+    await page.mouse.move(
+      beforeAltPan.x + beforeAltPan.width / 2 + 48,
+      beforeAltPan.y + beforeAltPan.height / 2 + 30,
+      { steps: 5 },
+    );
+    await expect(viewport).toHaveClass(/dragging/);
+    await expect
+      .poll(async () => (await stockRegion.boundingBox())?.x)
+      .toBeCloseTo(cameraBeforeAltPan.x + 48, 1);
+    await expect
+      .poll(async () => (await stockRegion.boundingBox())?.y)
+      .toBeCloseTo(cameraBeforeAltPan.y + 30, 1);
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    expect(
+      await page.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          document: state.project.document,
+          history: state.editor.history,
+          selectionIds: state.editor.selectionIds,
+        };
+      }),
+    ).toEqual(editorBeforePan);
+
+    const eastHandle = await page.getByTestId("handle-east").boundingBox();
+    if (eastHandle === null) {
+      throw new Error("The east handle has no screen bounds.");
+    }
+    const cameraBeforeMiddlePan = await stockRegion.boundingBox();
+    if (cameraBeforeMiddlePan === null) {
+      throw new Error("The stock region has no screen bounds.");
+    }
+    await page.mouse.move(
+      eastHandle.x + eastHandle.width / 2,
+      eastHandle.y + eastHandle.height / 2,
+    );
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(
+      eastHandle.x + eastHandle.width / 2 - 36,
+      eastHandle.y + eastHandle.height / 2 + 24,
+    );
+    await page.mouse.up({ button: "middle" });
+    await expect
+      .poll(async () => (await stockRegion.boundingBox())?.x)
+      .toBeCloseTo(cameraBeforeMiddlePan.x - 36, 1);
+    await expect
+      .poll(async () => (await stockRegion.boundingBox())?.y)
+      .toBeCloseTo(cameraBeforeMiddlePan.y + 24, 1);
+    expect(
+      await page.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          document: state.project.document,
+          history: state.editor.history,
+          selectionIds: state.editor.selectionIds,
+        };
+      }),
+    ).toEqual(editorBeforePan);
+  } finally {
+    await killAndRemove(launched);
+  }
+});
