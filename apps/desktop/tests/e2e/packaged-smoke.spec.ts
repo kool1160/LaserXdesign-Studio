@@ -32,9 +32,12 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
       "cancelGeometryOperation",
+      "cancelVectorImport",
+      "commitVectorImport",
       "createDocument",
       "createText",
       "editorAction",
+      "exportVector",
       "geometryOperation",
       "getFontCatalog",
       "getState",
@@ -42,6 +45,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "onStateChanged",
       "openProject",
       "openRecent",
+      "previewVectorImport",
       "resolveRecovery",
       "saveProject",
       "saveProjectAs",

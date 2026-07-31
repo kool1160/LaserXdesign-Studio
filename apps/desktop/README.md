@@ -34,3 +34,12 @@ and edit history outside component state.
 
 Run `pnpm dev` from the repository root for development. `pnpm test:e2e`
 packages and tests the unpacked Windows application.
+
+## M06 interchange boundary
+
+Electron main owns native SVG/DXF dialogs, bounded UTF-8 reads, atomic writes,
+format parsing, and export serialization. The renderer sends path-free
+validated preview/commit/cancel/export intents, renders an ephemeral import
+overlay, and displays warnings, assumptions, units, dimensions, and summaries.
+Preview does not make the project dirty; commit is one undoable application
+command.

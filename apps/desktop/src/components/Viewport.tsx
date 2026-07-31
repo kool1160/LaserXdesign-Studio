@@ -12,7 +12,9 @@ import type {
 } from "@laserx/application";
 import type {
   BoundsMm,
+  DocumentObject,
   LaserxDocument,
+  Layer,
   PointMm,
 } from "@laserx/domain";
 import {
@@ -49,6 +51,7 @@ interface ViewportProps {
   selectionIds: readonly string[];
   selectionBounds: BoundsMm | null;
   pathSelection: PathSelectionProjection | null;
+  importPreview: { layers: Layer[]; objects: DocumentObject[] } | null;
   onEditorAction: (request: EditorActionRequest) => void;
 }
 
@@ -144,6 +147,7 @@ export function Viewport({
   selectionIds,
   selectionBounds,
   pathSelection,
+  importPreview,
   onEditorAction,
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -202,6 +206,22 @@ export function Viewport({
   const scene = useMemo(
     () => createViewportScene(document, viewport, size, selectionIds),
     [document, selectionIds, size, viewport],
+  );
+  const previewScene = useMemo(
+    () =>
+      importPreview === null
+        ? null
+        : createViewportScene(
+            {
+              ...document,
+              layers: [...document.layers, ...importPreview.layers],
+              objects: importPreview.objects,
+            },
+            viewport,
+            size,
+            [],
+          ),
+    [document, importPreview, size, viewport],
   );
   const pathOverlay = useMemo(() => {
     if (pathSelection === null) {
@@ -667,6 +687,34 @@ export function Viewport({
               ),
             )}
           </g>
+          {previewScene !== null && (
+            <g
+              className="import-preview"
+              data-testid="import-preview-overlay"
+              pointerEvents="none"
+            >
+              {previewScene.objects.map((object) =>
+                object.kind === "compound" ? (
+                  <path
+                    key={`preview-${object.key}`}
+                    d={compoundPathData(object.contours)}
+                    fillRule={object.fillRule}
+                    clipRule={object.fillRule}
+                  />
+                ) : object.closed ? (
+                  <polygon
+                    key={`preview-${object.key}`}
+                    points={pointsAttribute(object.points)}
+                  />
+                ) : (
+                  <polyline
+                    key={`preview-${object.key}`}
+                    points={pointsAttribute(object.points)}
+                  />
+                ),
+              )}
+            </g>
+          )}
           {pathOverlay !== null && (
             <g className="path-edit-overlay" data-testid="path-edit-overlay">
               {pathOverlay.nodes.flatMap((node) => {

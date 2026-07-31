@@ -63,6 +63,9 @@ export function App() {
   const [inputUnit, setInputUnit] = useState<
     "millimeters" | "inches"
   >("inches");
+  const [unitlessDxfUnit, setUnitlessDxfUnit] = useState<
+    "millimeters" | "inches"
+  >("millimeters");
   const [gridSpacing, setGridSpacing] = useState("10");
   const [simplifyTolerance, setSimplifyTolerance] = useState("0.1");
   const [cleanupTolerance, setCleanupTolerance] = useState("0.01");
@@ -486,7 +489,40 @@ export function App() {
         >
           Paste
         </button>
-        <span className="shell-badge">M05 node & geometry</span>
+        <span className="command-divider" />
+        <button
+          type="button"
+          data-testid="preview-vector-import"
+          disabled={busy}
+          onClick={() =>
+            void run(() =>
+              window.laserx.previewVectorImport({ unitlessDxfUnit }),
+            )
+          }
+        >
+          Import SVG/DXF
+        </button>
+        <button
+          type="button"
+          data-testid="export-svg"
+          disabled={busy}
+          onClick={() =>
+            void run(() => window.laserx.exportVector({ format: "svg" }))
+          }
+        >
+          SVG
+        </button>
+        <button
+          type="button"
+          data-testid="export-dxf"
+          disabled={busy}
+          onClick={() =>
+            void run(() => window.laserx.exportVector({ format: "dxf" }))
+          }
+        >
+          DXF
+        </button>
+        <span className="shell-badge">M06 SVG & DXF</span>
       </nav>
 
       {state.recovery !== null && (
@@ -555,6 +591,121 @@ export function App() {
                 <dd>0, 0 mm</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="interchange-panel" data-testid="interchange-panel">
+            <span className="section-label">SVG / DXF interchange</span>
+            <label>
+              Unitless DXF assumption
+              <select
+                aria-label="Unitless DXF assumption"
+                value={unitlessDxfUnit}
+                onChange={(event) =>
+                  setUnitlessDxfUnit(
+                    event.target.value as "millimeters" | "inches",
+                  )
+                }
+              >
+                <option value="millimeters">1 unit = 1 mm</option>
+                <option value="inches">1 unit = 1 in</option>
+              </select>
+            </label>
+            <div className="button-grid compact">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(() =>
+                    window.laserx.previewVectorImport({ unitlessDxfUnit }),
+                  )
+                }
+              >
+                Preview import
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(() => window.laserx.exportVector({ format: "svg" }))
+                }
+              >
+                Export SVG
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void run(() => window.laserx.exportVector({ format: "dxf" }))
+                }
+              >
+                Export DXF
+              </button>
+            </div>
+            {state.editor.importPreview !== null && (
+              <div className="interchange-summary" data-testid="import-preview-summary">
+                <strong>
+                  {state.editor.importPreview.sourceName}: {String(state.editor.importPreview.objects.length)} path(s)
+                </strong>
+                <span>
+                  {state.editor.importPreview.format.toUpperCase()} · source {state.editor.importPreview.sourceUnit}
+                  {state.editor.importPreview.dimensionsMm === null
+                    ? ""
+                    : ` · ${state.editor.importPreview.dimensionsMm.widthMm.toFixed(3)} × ${state.editor.importPreview.dimensionsMm.heightMm.toFixed(3)} mm`}
+                </span>
+                {state.editor.importPreview.assumptions.length > 0 && (
+                  <ul>
+                    {state.editor.importPreview.assumptions.map((assumption) => (
+                      <li key={assumption}>{assumption}</li>
+                    ))}
+                  </ul>
+                )}
+                {state.editor.importPreview.warnings.length > 0 && (
+                  <ul data-testid="import-warnings">
+                    {state.editor.importPreview.warnings.map((item, index) => (
+                      <li key={`${item.code}-${String(index)}`}>{item.message}</li>
+                    ))}
+                  </ul>
+                )}
+                <div className="button-grid compact">
+                  <button
+                    type="button"
+                    data-testid="commit-vector-import"
+                    disabled={busy}
+                    onClick={() => void run(() => window.laserx.commitVectorImport())}
+                  >
+                    Commit import
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    data-testid="cancel-vector-import"
+                    disabled={busy}
+                    onClick={() => void run(() => window.laserx.cancelVectorImport())}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {state.interchange.exportSummary !== null && (
+              <div className="interchange-summary" data-testid="export-summary">
+                <strong>
+                  Exported {state.interchange.exportSummary.objectCount} path(s) as {state.interchange.exportSummary.format.toUpperCase()} in millimeters with {state.interchange.exportSummary.warningCount} warning(s).
+                </strong>
+                {state.interchange.exportSummary.bounds !== null && (
+                  <span>
+                    Bounds: {state.interchange.exportSummary.bounds.minXmm.toFixed(3)}, {state.interchange.exportSummary.bounds.minYmm.toFixed(3)} to {state.interchange.exportSummary.bounds.maxXmm.toFixed(3)}, {state.interchange.exportSummary.bounds.maxYmm.toFixed(3)} mm
+                  </span>
+                )}
+                {state.interchange.exportSummary.warnings.length > 0 && (
+                  <ul>
+                    {state.interchange.exportSummary.warnings.map((item, index) => (
+                      <li key={`${item.code}-${String(index)}`}>{item.message}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
 
           <section>
@@ -772,6 +923,7 @@ export function App() {
             selectionIds={selectionIds}
             selectionBounds={selectionBounds}
             pathSelection={pathSelection}
+            importPreview={state.editor.importPreview}
             onEditorAction={dispatchEditorAction}
           />
         </main>

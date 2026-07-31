@@ -81,18 +81,72 @@ is accepted.
 
 ## SVG
 
-SVG is the planned editable interchange format. Import/export must explicitly
-handle width, height, viewBox, unit suffixes, transforms, path closure, fill
-rules, groups, and unsupported elements. SVG support is not implemented in M03.
+SVG is an editable 2D interchange format. Input is limited to 5 MB, 50,000 XML
+elements, and 200,000 geometry points. DTD/entity declarations, scripts,
+foreign objects, images, event-handler attributes, and references are rejected.
 
-Scripts, event handlers, and unsafe external references will be ignored or
-rejected.
+Supported import elements:
+
+| Element | Behavior |
+| --- | --- |
+| `svg`, `g` | Nested transforms normalize into world millimeters; group labels map to layers. |
+| `line` | Open two-node path. |
+| `rect` | Closed four-node path; rounded rectangles warn and skip. |
+| `polyline`, `polygon` | Open/closed paths with closure preserved. |
+| `circle`, `ellipse` | Closed editable cubic paths. |
+| `path` | M/L/H/V/C/S/Q/T/Z, absolute or relative; quadratic curves normalize to cubics. |
+
+SVG elliptical-arc `A` path commands, text, `use`, and other visible unsupported
+elements warn and skip instead of emitting partial geometry. Styling, fills,
+strokes, clipping, and masks are not cut geometry.
+
+Root `width`/`height` accept `mm`, `cm`, `in`, `px`, or unitless CSS-pixel
+lengths. CSS pixels use exactly 96 px/in. A viewBox-only file uses that same
+ratio and records the assumption. A single missing physical dimension is
+inferred only when a valid viewBox supplies the aspect ratio. `viewBox` and
+`preserveAspectRatio` (`none`, meet, or slice with alignment) determine the
+user-coordinate mapping. Percentages and relative CSS units are rejected.
+
+SVG export writes UTF-8 XML with explicit `width="...mm"`, `height="...mm"`,
+and `viewBox="0 0 width height"`. Visible world geometry is grouped by layer,
+converted from LaserX Cartesian Y-up to SVG Y-down, and emitted as open/closed
+paths. Curves are flattened at 0.01 mm.
 
 ## DXF
 
-Version 1 will target documented 2D entities required by downstream
-plasma/laser CAM. Entity support must be fixture-driven. Physical scale and
-units must be explicit. DXF support is not implemented in M03.
+LaserX reads and writes ASCII 2D DXF group-code/value pairs. Input is limited
+to 5 MB, 500,000 pairs, 100,000 entity records, and 200,000 cumulative expanded
+geometry points. The point budget is checked before sampled arc, circle, or
+bulge arrays are allocated and is checked again before application preview.
+
+Supported import entities:
+
+| Entity | Behavior |
+| --- | --- |
+| `LINE` | Open path. |
+| `LWPOLYLINE` | Open/closed path; bulge arcs flatten at 0.01 mm. |
+| `POLYLINE` + `VERTEX`/`SEQEND` | Legacy 2D open/closed path. |
+| `CIRCLE` | Closed path flattened at 0.01 mm. |
+| `ARC` | Open counterclockwise path flattened at 0.01 mm. |
+
+Circles whose radius is at or below the curve tolerance still materialize at
+least three distinct nodes, preserving the closed-path document invariant.
+Inputs that would exceed the expanded-point budget fail the whole preview
+instead of returning a partial candidate.
+
+Layer group code 8 maps to LaserX layers. `$INSUNITS` 1, 4, and 5 mean inches,
+millimeters, and centimeters. `$INSUNITS` 0 or absent is accepted only with an
+explicit millimeter or inch assumption. Other units are rejected clearly.
+Nonzero Z/elevation, 3D/polyface flags, splines, and unsupported entities warn
+and skip.
+
+DXF export writes AutoCAD 2013 ASCII (`AC1027`), `$INSUNITS = 4`
+(millimeters), a layer table, `LINE` for open two-point paths, and
+`LWPOLYLINE` for remaining open or closed flattened paths. Code 70 bit 1
+preserves closure. Export summaries report path count, warnings, units, and
+bounds. The pinned independent `dxf-parser` inspector verifies the
+representative 600 mm and 24 inch/609.6 mm exports' units, entity type, closed
+flag, vertex coordinates, and physical bounds.
 
 Native DWG is out of scope. Do not rename a DXF file to `.dwg` or claim
 equivalence.

@@ -105,6 +105,11 @@ export type EditorCommand =
       objects: DocumentObject[];
     }
   | {
+      type: "objects.import";
+      layers: Layer[];
+      objects: DocumentObject[];
+    }
+  | {
       type: "objects.replace";
       object: DocumentObject;
     }
@@ -923,6 +928,26 @@ export function applyEditorCommand(
       validateInsertedIds(document, command.objects);
       document.objects.push(...command.objects.map(copyDocumentObject));
       break;
+    case "objects.import": {
+      const incomingLayerIds = command.layers.map((layer) => layer.id);
+      if (
+        new Set(incomingLayerIds).size !== incomingLayerIds.length ||
+        incomingLayerIds.some((id) => findLayer(document, id) !== undefined)
+      ) {
+        throw new RangeError("Imported layer IDs must be unique and new to the document.");
+      }
+      const layers = command.layers.map((layer) => {
+        const name = layer.name.trim();
+        if (name.length === 0 || name.length > 100) {
+          throw new RangeError("Imported layer names must contain 1 to 100 characters.");
+        }
+        return { ...layer, name };
+      });
+      document.layers.push(...layers);
+      validateInsertedIds(document, command.objects);
+      document.objects.push(...command.objects.map(copyDocumentObject));
+      break;
+    }
     case "objects.replace": {
       const index = document.objects.findIndex(
         (object) => object.id === command.object.id,
@@ -1386,6 +1411,7 @@ export function commandSelectionIds(
     case "objects.rotate":
     case "objects.mirror":
     case "objects.duplicate":
+    case "objects.import":
     case "objects.convert-text":
     case "objects.delete":
     case "objects.align":
@@ -1393,7 +1419,9 @@ export function commandSelectionIds(
     case "objects.group":
     case "objects.ungroup":
     case "objects.z-order":
-      return command.objectIds;
+      return command.type === "objects.import"
+        ? command.objects.map((object) => object.id)
+        : command.objectIds;
     case "objects.replace-topology":
       return command.sourceObjectIds;
     case "path.move-nodes":

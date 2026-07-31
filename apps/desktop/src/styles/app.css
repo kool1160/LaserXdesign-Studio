@@ -825,6 +825,49 @@ button:disabled {
   stroke: #55e0ca;
 }
 
+.import-preview {
+  fill: rgb(238 174 78 / 10%);
+  stroke: #f0ad4e;
+  stroke-width: 2;
+  stroke-dasharray: 7 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.interchange-summary {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: #aab5bb;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.interchange-panel > label {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  color: #7c8991;
+  font-size: 10px;
+}
+
+.interchange-panel select {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #303942;
+  border-radius: 5px;
+  color: #d6dfe3;
+  background: #0c1116;
+  font: inherit;
+}
+
+.interchange-summary ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+  color: #efbd75;
+}
+
 .guides line {
   stroke: #e9a959;
   stroke-width: 1;

@@ -122,6 +122,28 @@ curves moves the two endpoint anchors to their midpoint and translates the
 adjacent cubic controls by the same deltas before merging their incoming and
 outgoing controls.
 
+For M06, `packages/domain` defines format-neutral import paths, warnings,
+assumptions, export summaries, and a shared visible-world-geometry flattener.
+`packages/io-svg` and `packages/io-dxf` are replaceable pure adapters that own
+external syntax, unit metadata, supported-entity policy, transform/axis
+normalization, and bounded parsing. They do not own editor state or filesystem
+paths.
+
+Electron main owns native SVG/DXF dialogs and a 5 MB bounded UTF-8 storage
+adapter. Preload validates only `preview`, `commit`, `cancel`, and `export`
+intents. React cannot submit a path or file contents. A normalized preview is
+application state containing fresh paths and any new layers, plus units,
+dimensions, assumptions, warnings, and bounds. It is rendered as a
+noninteractive overlay and does not change the project fingerprint, dirty
+state, or history. Commit rejects a stale fingerprint and applies all preview
+layers/objects through one undoable `objects.import` command. Export reads the
+authoritative document, writes through Electron main, and stores only an
+ephemeral summary. Cubic controls are transformed to world millimeters before
+flattening, while ellipses use the maximum stretch of the complete affine
+transform to preserve the 0.01 mm world-space tolerance. DXF expansion and the
+application preview boundary each enforce a 200,000-point budget. ADR 0016
+records this boundary.
+
 ## State flow
 
 ```text

@@ -69,6 +69,29 @@ M01 was merged through PR #14 in commit
 Users can import practical SVG/DXF artwork and export files that downstream CAM
 opens at the intended physical size with clean 2D geometry.
 
+## M06 implementation under review
+
+- Draft PR: #21, `feat/m06-svg-dxf` into `main`.
+- Complete implementation commit: `12ae86f7c90554f33bd1529a142a8feabf6a7b2a`.
+- Blocking-review repair commit:
+  `8e62cc6b3c862f74475934c5f013ec01834dad78`.
+- Local gate: `pnpm verify`, production audit, repository guard, and diff check
+  pass; 160 unit/integration tests and 18 packaged Electron E2E scenarios pass.
+- Review repairs enforce the 0.01 mm tolerance after complete world transforms,
+  bound DXF expansion and application preview at 200,000 geometry points,
+  preserve tiny-circle validity, and independently verify both 600 mm and
+  24 inch/609.6 mm export coordinates and bounds.
+- Independent inspection: pinned MIT `dxf-parser` verifies representative DXF
+  millimeter units, entity type, closed shape flag, vertex coordinates, and
+  physical bounds without using the production parser.
+- GitHub verification passed on review-handoff head
+  `f0e9680d909dce88e32402f551b3f835a20f0fc8`: Repository Guard run
+  `30642198794`, M04 regression run `30642199580`, M05 regression run
+  `30642198859`, and M06 push/pull-request runs `30642195200`/`30642198383`.
+- State: review repairs are complete and awaiting exact-head CI and re-review.
+  Do not merge, close Issue #7, advance this file to M07, or begin M07 work
+  from `Continue LaserX`.
+
 ## Allowed M06 work
 
 - safe SVG import with supported-element warnings;

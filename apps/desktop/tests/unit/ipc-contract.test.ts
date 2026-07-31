@@ -9,10 +9,28 @@ import {
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
+  vectorExportRequestSchema,
+  vectorImportPreviewRequestSchema,
   textUpdateRequestSchema,
 } from "../../electron/ipc-contract.js";
 
 describe("typed IPC validation", () => {
+  it("keeps vector paths and file contents out of renderer requests", () => {
+    expect(
+      vectorImportPreviewRequestSchema.safeParse({
+        unitlessDxfUnit: "millimeters",
+      }).success,
+    ).toBe(true);
+    expect(
+      vectorImportPreviewRequestSchema.safeParse({
+        unitlessDxfUnit: "millimeters",
+        filePath: "C:\\secret\\sign.dxf",
+      }).success,
+    ).toBe(false);
+    expect(vectorExportRequestSchema.safeParse({ format: "svg" }).success).toBe(true);
+    expect(vectorExportRequestSchema.safeParse({ format: "dwg" }).success).toBe(false);
+  });
+
   it("rejects arbitrary fields, pixels, and invalid viewport values", () => {
     expect(
       setDisplayUnitRequestSchema.safeParse({
@@ -101,6 +119,7 @@ describe("typed IPC validation", () => {
         clipboardHasContent: false,
         pathSelection: null,
         topologySummary: null,
+        importPreview: null,
         history: {
           undoDepth: 0,
           redoDepth: 0,
@@ -113,6 +132,7 @@ describe("typed IPC validation", () => {
       recovered: false,
       recentProjects: [],
       recovery: null,
+      interchange: { exportSummary: null },
     });
     expect(result.success).toBe(true);
   });

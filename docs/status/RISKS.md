@@ -12,6 +12,21 @@ SVG and DXF unit handling can silently produce wrong physical dimensions. Scale 
 
 Raster tracing can create excessive nodes, self-intersections, tiny islands, and unreadable details. Preprocessing and cutability analysis must be part of the same workflow.
 
+## M06 known limitations
+
+- SVG import supports practical 2D geometry but not path `A` arcs, text,
+  references, clipping/masks, or style-to-geometry conversion. Unsupported
+  visible content warns; active content and references are rejected.
+- DXF interoperability is bounded ASCII 2D. Splines, non-planar entities,
+  polyface/3D data, unsupported unit codes, DWG, CAM, and G-code remain out of
+  scope.
+- Imported artwork keeps source coordinates and physical scale. It is not
+  centered or fit to stock automatically.
+- Curves flatten at a 0.01 mm world-space tolerance after complete object/group
+  transforms. Very large files are capped at 5 MB plus explicit
+  pair/entity/element limits and a 200,000-point DXF expansion/application
+  preview budget; high-node production performance remains an M12 measurement.
+
 ## Electron security
 
 File import and AI connectivity increase the risk of unsafe IPC or remote content. Keep privileged APIs narrow.

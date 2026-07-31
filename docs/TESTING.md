@@ -168,6 +168,38 @@ Topology golden comparisons are exact on the `1e-6 mm` engine grid. Curve and
 simplification assertions state their millimeter tolerance and do not broaden
 it to hide defects.
 
+## M06 executable layers
+
+- SVG adapter tests load reviewed 24 in, 600 mm, and viewBox-only fixtures;
+  cover px/in/mm/cm conversion, `preserveAspectRatio`, nested transforms,
+  groups/layers, open/closed primitives, cubic/quadratic paths, warnings, and
+  DTD/entity/script/event/size rejection; and reimport explicit-mm exports.
+- DXF adapter tests load reviewed inch, millimeter, unitless, common-entity,
+  and unsupported-3D fixtures; cover LINE, LWPOLYLINE bulges, legacy POLYLINE,
+  CIRCLE, ARC, closure, layers, units, warnings, and malformed/binary/size
+  rejection; reject a sub-5-MB expanded-geometry bomb before 200,000 sampled
+  points; preserve tiny-circle validity; and reimport explicit-mm exports.
+- The production DXF parser does not participate in the downstream-inspection
+  assertion: pinned MIT `dxf-parser` independently reads the representative
+  600 mm and 24 inch/609.6 mm exports and verifies `$INSUNITS = 4`, LWPOLYLINE
+  type, closed shape flag, vertex coordinates, and physical bounds.
+- Domain/application tests prove import validates new IDs/layers, preview does
+  not mutate project/dirty/history state, commit is one history entry, one undo
+  restores the exact document, redo reapplies it, stale previews are rejected,
+  and an over-budget normalized candidate fails before preview state changes.
+- Desktop unit/integration tests cover strict path-free IPC, bounded UTF-8
+  storage, native-dialog ownership, preview/commit/cancel/export coordination,
+  and export summaries without history changes.
+- Packaged Playwright coverage previews a 600 mm SVG as a noninteractive
+  overlay, commits and undoes it, exports DXF, and independently reads the
+  written file to verify explicit millimeter metadata.
+
+Straight scale assertions use `1e-9 mm`. Curves use the documented 0.01 mm
+world-space chordal tolerance after the full affine transform; uniform,
+nonuniform, shear, and nested-group regressions cover cubic paths and ellipses.
+SVG and DXF export/reimport tests keep transformed cubic bounds within that
+tolerance. No broader tolerance hides unit or closure failures.
+
 Run all milestone checks from the repository root:
 
 ```bash
