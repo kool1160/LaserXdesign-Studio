@@ -142,6 +142,21 @@ from the maximum stretch of that same affine transform, so uniform scale,
 nonuniform scale, shear, and nested groups cannot magnify the exported
 world-space deviation beyond 0.01 mm.
 
+## M07 raster tracing scale
+
+Raster pixels have no implicit manufacturing unit. Every trace request includes
+an explicit output width in millimeters; output height is derived from the
+post-crop, post-rotation trace aspect ratio using square pixels. Trace pixel
+corners map to canonical millimeters, with image Y-down flipped once into
+LaserX Cartesian Y-up. Import does not auto-fit or center the candidate.
+
+Crop fractions resolve to deterministic integer source bounds before rotation.
+If bounded tracing downsamples a source, both axes use the same scale factor.
+The candidate reports its exact trace pixel dimensions and derived physical
+height. Simplification tolerance is an explicit world-millimeter maximum
+source-to-result deviation and is checked at `1e-9 mm` numerical slack. It is
+not a kerf, minimum-feature, or cutability tolerance.
+
 ## Renderer conversion boundary
 
 The screen uses CSS pixels with positive Y downward. `packages/geometry`

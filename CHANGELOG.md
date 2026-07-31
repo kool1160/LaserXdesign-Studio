@@ -6,6 +6,11 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Raster cancellation now reserves before file selection, remains
+  operation-ID-aware through read/decode/worker/encode stages, and always
+  clears timeout/error progress without publishing a late result.
+- Raster candidate and preview media replacement is atomic, so preview encoding
+  failures preserve the previously visible candidate and complete editor state.
 - Selecting text with a missing or changed font fingerprint no longer triggers
   live rematerialization; explicit substitution remains undoable.
 - Editable text now renders and hit-tests even-odd within each glyph and unions
@@ -32,6 +37,11 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Safe bounded PNG/JPEG tracing with crop/rotate/grayscale/contrast/threshold/
+  invert/blur/denoise/background controls, deterministic presets, exact
+  speckle reporting, tolerance-checked simplification, cancellable worker
+  progress, aligned previews, editable one-command acceptance, persistence,
+  cutability-interface warning, reviewed goldens, and packaged Windows E2E.
 - Dimensionally correct SVG/DXF import preview, atomic undoable commit, and
   explicit-mm export with layers, units, transforms, closure, warnings,
   bounds/count summaries, scale fixtures, and independent DXF inspection.

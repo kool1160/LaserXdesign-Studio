@@ -12,6 +12,10 @@ import {
   type GeometryOperationRequest,
 } from "@laserx/application";
 import {
+  analyzeDocumentCutability,
+  type CutabilityAnalysisSummary,
+} from "@laserx/cutability";
+import {
   identityTransform,
   type TextObject,
   type UpdateViewportPreferences,
@@ -22,6 +26,13 @@ import {
   FontEngine,
   type TextLayoutRequest,
 } from "@laserx/fonts";
+import {
+  MAX_RASTER_PREVIEW_DIMENSION_PX,
+  MAX_RASTER_PROCESSING_TIME_MS,
+  inspectRasterSource,
+  type RasterPreviewPixels,
+  type RasterTraceProgress,
+} from "@laserx/import-raster";
 import { exportDxf, importDxf } from "@laserx/io-dxf";
 import { exportSvg, importSvg } from "@laserx/io-svg";
 
@@ -32,6 +43,7 @@ import type {
   ResolveRecoveryRequest,
   SetViewportPreferencesRequest,
   TextUpdateRequestDto,
+  RasterTraceRequest,
   VectorExportRequest,
   VectorImportPreviewRequest,
 } from "./ipc-contract.js";
@@ -40,6 +52,20 @@ import {
   NodeGeometryWorkerService,
   type GeometryWorkerPort,
 } from "./geometry-worker-service.js";
+import {
+  type RasterCodecPort,
+  type RasterPreviewDataUrls,
+} from "./raster-codec.js";
+import {
+  RasterStorage,
+  type RasterFileService,
+} from "./raster-storage.js";
+import {
+  NodeRasterWorkerService,
+  RasterTraceCancelledError,
+  RasterTraceTimeoutError,
+  type RasterWorkerPort,
+} from "./raster-worker-service.js";
 import {
   RecentProjectsStore,
   RecoveryStore,
@@ -60,6 +86,7 @@ export interface DesktopDialogs {
   chooseSaveProject(suggestedName: string): Promise<string | null>;
   confirmUnsavedChanges(projectName: string): Promise<UnsavedChoice>;
   chooseImportVector?(): Promise<string | null>;
+  chooseImportRaster?(): Promise<string | null>;
   chooseExportVector?(
     format: VectorFileFormat,
     suggestedName: string,
@@ -77,6 +104,10 @@ export interface DesktopControllerOptions {
   fontEngine?: FontEngine;
   geometryWorker?: GeometryWorkerPort;
   vectorStorage?: VectorFileService;
+  rasterStorage?: RasterFileService;
+  rasterCodec?: RasterCodecPort;
+  rasterWorker?: RasterWorkerPort;
+  rasterOperationTimeoutMs?: number;
 }
 
 export interface AutosaveScheduler {
@@ -92,6 +123,35 @@ const intervalAutosaveScheduler: AutosaveScheduler = {
     };
   },
 };
+
+const MAX_RASTER_PREVIEW_DATA_URL_LENGTH = 8 * 1024 * 1024;
+
+function validatedRasterPreview(
+  encoded: RasterPreviewDataUrls,
+  pixels: RasterPreviewPixels,
+): RasterPreviewDataUrls {
+  if (
+    !Number.isInteger(encoded.widthPx) ||
+    !Number.isInteger(encoded.heightPx) ||
+    encoded.widthPx !== pixels.widthPx ||
+    encoded.heightPx !== pixels.heightPx ||
+    encoded.widthPx <= 0 ||
+    encoded.heightPx <= 0 ||
+    encoded.widthPx > MAX_RASTER_PREVIEW_DIMENSION_PX ||
+    encoded.heightPx > MAX_RASTER_PREVIEW_DIMENSION_PX
+  ) {
+    throw new RangeError("Encoded raster preview dimensions are invalid or unbounded.");
+  }
+  for (const value of [encoded.original, encoded.blackWhite, encoded.edges]) {
+    if (
+      !value.startsWith("data:image/png;base64,") ||
+      value.length > MAX_RASTER_PREVIEW_DATA_URL_LENGTH
+    ) {
+      throw new RangeError("Encoded raster preview data is invalid or unbounded.");
+    }
+  }
+  return { ...encoded };
+}
 
 export class DesktopController {
   readonly #session = new ProjectSession({
@@ -109,12 +169,24 @@ export class DesktopController {
   readonly #fontEngine: FontEngine;
   readonly #geometryWorker: GeometryWorkerPort;
   readonly #vectorStorage: VectorFileService;
+  readonly #rasterStorage: RasterFileService;
+  readonly #rasterCodec: RasterCodecPort | null;
+  readonly #rasterWorker: RasterWorkerPort;
+  readonly #rasterOperationTimeoutMs: number;
   readonly #geometryAbortControllers = new Map<string, AbortController>();
+  readonly #rasterAbortControllers = new Map<string, AbortController>();
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
   #autosaveInFlight: Promise<void> | null = null;
   #lastExportSummary: VectorExportSummary | null = null;
+  #rasterJob: {
+    operationId: string;
+    percent: number;
+    stage: "selecting" | "reading" | "decoding" | RasterTraceProgress["stage"];
+  } | null = null;
+  #rasterPreview: (RasterPreviewDataUrls & { operationId: string }) | null = null;
+  #cutabilityAnalysis: CutabilityAnalysisSummary | null = null;
 
   public constructor(options: DesktopControllerOptions) {
     this.#storage = options.projectStorage ?? new ProjectStorage();
@@ -131,6 +203,17 @@ export class DesktopController {
     this.#geometryWorker =
       options.geometryWorker ?? new NodeGeometryWorkerService();
     this.#vectorStorage = options.vectorStorage ?? new VectorStorage();
+    this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
+    this.#rasterCodec = options.rasterCodec ?? null;
+    this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
+    this.#rasterOperationTimeoutMs =
+      options.rasterOperationTimeoutMs ?? MAX_RASTER_PROCESSING_TIME_MS;
+    if (
+      !Number.isFinite(this.#rasterOperationTimeoutMs) ||
+      this.#rasterOperationTimeoutMs <= 0
+    ) {
+      throw new RangeError("Raster operation timeout must be a positive finite duration.");
+    }
   }
 
   public async initialize(): Promise<void> {
@@ -168,6 +251,19 @@ export class DesktopController {
             ? null
             : structuredClone(this.#lastExportSummary),
       },
+      raster: {
+        job: this.#rasterJob === null ? null : { ...this.#rasterJob },
+        preview:
+          session.editor.rasterTracePreview === null || this.#rasterPreview === null
+            ? null
+            : { ...this.#rasterPreview },
+      },
+      analysis: {
+        cutability:
+          this.#cutabilityAnalysis === null
+            ? null
+            : structuredClone(this.#cutabilityAnalysis),
+      },
     };
   }
 
@@ -175,6 +271,7 @@ export class DesktopController {
     return this.#run(async () => {
       if (await this.#confirmReplacement()) {
         this.#session.dispatch({ type: "project.new" });
+        this.#clearRasterState();
         await this.#settleAutosaveAndClearRecovery();
       }
     });
@@ -200,6 +297,7 @@ export class DesktopController {
         type: "project.create-document",
         ...request,
       });
+      this.#clearRasterState();
     });
   }
 
@@ -269,6 +367,171 @@ export class DesktopController {
   public async cancelVectorImport(): Promise<CommandResult> {
     return this.#run(() => {
       this.#session.cancelVectorImport();
+    });
+  }
+
+  public async previewRasterTrace(
+    request: RasterTraceRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#dialogs.chooseImportRaster === undefined) {
+        throw new Error("Raster tracing is not available in this desktop host.");
+      }
+      if (this.#rasterCodec === null) {
+        throw new Error("The desktop raster decoder is not configured.");
+      }
+      if (this.#rasterAbortControllers.size > 0) {
+        throw new RangeError("Finish or cancel the active raster trace first.");
+      }
+      if (this.#geometryAbortControllers.size > 0) {
+        throw new RangeError("Finish or cancel the active geometry operation first.");
+      }
+      const operationId = request.operationId;
+      const abortController = new AbortController();
+      this.#rasterAbortControllers.set(operationId, abortController);
+      this.#rasterJob = { operationId, percent: 0, stage: "selecting" };
+      const documentFingerprint = fingerprintGeometryDocument(
+        this.#session.state.project.document,
+      );
+      this.#emit();
+      let deadline: ReturnType<typeof setTimeout> | null = null;
+      const deadlineState = { timedOut: false };
+      const assertActive = (): void => {
+        if (deadlineState.timedOut) {
+          throw new RasterTraceTimeoutError(this.#rasterOperationTimeoutMs);
+        }
+        if (
+          abortController.signal.aborted ||
+          this.#rasterAbortControllers.get(operationId) !== abortController
+        ) {
+          throw new RasterTraceCancelledError();
+        }
+      };
+      const yieldForCancellation = async (): Promise<void> => {
+        await new Promise<void>((resolveYield) => {
+          setImmediate(resolveYield);
+        });
+        assertActive();
+      };
+      try {
+        const filePath = await this.#dialogs.chooseImportRaster();
+        assertActive();
+        if (filePath === null) return;
+        deadline = setTimeout(() => {
+          deadlineState.timedOut = true;
+          abortController.abort();
+        }, this.#rasterOperationTimeoutMs);
+        deadline.unref();
+        this.#rasterJob = { operationId, percent: 2, stage: "reading" };
+        this.#emit();
+        const bytes = await this.#rasterStorage.read(
+          filePath,
+          abortController.signal,
+        );
+        assertActive();
+        const extension = extname(filePath).toLowerCase();
+        const expectedFormat = extension === ".png" ? "png" : "jpeg";
+        const source = inspectRasterSource(bytes, expectedFormat);
+        assertActive();
+        this.#rasterJob = { operationId, percent: 5, stage: "decoding" };
+        this.#emit();
+        const image = await this.#rasterCodec.decode(bytes, source);
+        await yieldForCancellation();
+        const result = await this.#rasterWorker.run(
+          {
+            operationId,
+            source,
+            image,
+            settings: request.settings,
+          },
+          abortController.signal,
+          (progress) => {
+            if (
+              !abortController.signal.aborted &&
+              this.#rasterAbortControllers.get(operationId) === abortController &&
+              progress.operationId === operationId
+            ) {
+              this.#rasterJob = { ...progress };
+              this.#emit();
+            }
+          },
+        );
+        assertActive();
+        if (result.operationId !== operationId) {
+          throw new Error("Raster worker returned a mismatched operation ID.");
+        }
+        if (
+          fingerprintGeometryDocument(this.#session.state.project.document) !==
+          documentFingerprint
+        ) {
+          throw new Error(
+            "The document changed while raster tracing was running; the stale result was not previewed.",
+          );
+        }
+        const encodedPreview = validatedRasterPreview(
+          await this.#rasterCodec.encodePreview(result.preview),
+          result.preview,
+        );
+        await yieldForCancellation();
+        if (
+          fingerprintGeometryDocument(this.#session.state.project.document) !==
+          documentFingerprint
+        ) {
+          throw new Error(
+            "The document changed while raster tracing was running; the stale result was not previewed.",
+          );
+        }
+        this.#session.previewRasterTrace(result.candidate, basename(filePath));
+        this.#rasterPreview = {
+          operationId,
+          ...encodedPreview,
+        };
+        this.#cutabilityAnalysis = null;
+      } catch (error) {
+        if (deadlineState.timedOut) {
+          throw new RasterTraceTimeoutError(this.#rasterOperationTimeoutMs);
+        }
+        if (
+          abortController.signal.aborted ||
+          error instanceof RasterTraceCancelledError
+        ) return;
+        throw error;
+      } finally {
+        if (deadline !== null) clearTimeout(deadline);
+        if (this.#rasterAbortControllers.get(operationId) === abortController) {
+          this.#rasterAbortControllers.delete(operationId);
+        }
+        this.#clearRasterJob(operationId);
+        this.#emit();
+      }
+    });
+  }
+
+  public async cancelRasterTrace(operationId: string): Promise<CommandResult> {
+    return this.#run(() => {
+      const abortController = this.#rasterAbortControllers.get(operationId);
+      if (abortController === undefined) {
+        throw new RangeError("That raster trace operation is not active.");
+      }
+      abortController.abort();
+    });
+  }
+
+  public async acceptRasterTrace(): Promise<CommandResult> {
+    return this.#run(() => {
+      const accepted = this.#session.commitRasterTrace();
+      this.#cutabilityAnalysis = analyzeDocumentCutability(
+        accepted.project.document,
+        accepted.editor.selectionIds,
+      );
+      this.#rasterPreview = null;
+    });
+  }
+
+  public async rejectRasterTrace(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.cancelRasterTrace();
+      this.#rasterPreview = null;
     });
   }
 
@@ -352,6 +615,7 @@ export class DesktopController {
   ): Promise<CommandResult> {
     return this.#run(() => {
       this.#session.performEditorAction(request);
+      this.#refreshCutabilityAnalysis();
     });
   }
 
@@ -556,6 +820,7 @@ export class DesktopController {
     return this.#run(async () => {
       if (request.action === "recover" && this.#pendingRecovery !== null) {
         this.#session.recover(this.#pendingRecovery);
+        this.#clearRasterState();
         await this.#logger.info("recovery-restored");
       } else if (request.action === "discard") {
         await this.#recoveryStore.remove();
@@ -588,12 +853,18 @@ export class DesktopController {
       this.#stopAutosave();
       this.#stopAutosave = null;
     }
+    this.#clearRasterState();
+    for (const controller of this.#geometryAbortControllers.values()) {
+      controller.abort();
+    }
+    this.#geometryAbortControllers.clear();
   }
 
   async #openPath(filePath: string): Promise<void> {
     const normalized = validateProjectPath(filePath);
     const project = await this.#storage.read(normalized);
     this.#session.open(project, normalized);
+    this.#clearRasterState();
     await this.#settleAutosaveAndClearRecovery();
     this.#recentProjects = await this.#recentStore.add({
       filePath: normalized,
@@ -640,6 +911,31 @@ export class DesktopController {
       return this.#save(false);
     }
     return true;
+  }
+
+  #clearRasterState(): void {
+    for (const controller of this.#rasterAbortControllers.values()) {
+      controller.abort();
+    }
+    this.#rasterAbortControllers.clear();
+    this.#rasterJob = null;
+    this.#rasterPreview = null;
+    this.#cutabilityAnalysis = null;
+  }
+
+  #clearRasterJob(operationId: string): void {
+    if (this.#rasterJob?.operationId === operationId) {
+      this.#rasterJob = null;
+    }
+  }
+
+  #refreshCutabilityAnalysis(): void {
+    if (this.#cutabilityAnalysis === null) return;
+    const next = analyzeDocumentCutability(
+      this.#session.state.project.document,
+      this.#cutabilityAnalysis.analyzedObjectIds,
+    );
+    this.#cutabilityAnalysis = next.pathCount === 0 ? null : next;
   }
 
   async #run(action: () => void | Promise<void>): Promise<CommandResult> {

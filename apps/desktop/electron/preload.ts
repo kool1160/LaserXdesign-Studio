@@ -5,6 +5,7 @@ import type { EditorActionRequest } from "@laserx/application";
 import {
   commandResultSchema,
   cancelGeometryOperationRequestSchema,
+  cancelRasterTraceRequestSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
@@ -12,6 +13,7 @@ import {
   IPC_CHANNELS,
   fontCatalogSchema,
   openRecentRequestSchema,
+  rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -21,10 +23,12 @@ import {
   vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
   type CancelGeometryOperationRequest,
+  type CancelRasterTraceRequest,
   type DesktopState,
   type GeometryOperationRequestDto,
   type LaserxDesktopApi,
   type OpenRecentRequest,
+  type RasterTraceRequest,
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
   type SetViewportPreferencesRequest,
@@ -96,6 +100,28 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = vectorExportRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.exportVector, validated),
+    );
+  },
+  async previewRasterTrace(request: RasterTraceRequest) {
+    const validated = rasterTraceRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.previewRasterTrace, validated),
+    );
+  },
+  async cancelRasterTrace(request: CancelRasterTraceRequest) {
+    const validated = cancelRasterTraceRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelRasterTrace, validated),
+    );
+  },
+  async acceptRasterTrace() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.acceptRasterTrace),
+    );
+  },
+  async rejectRasterTrace() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.rejectRasterTrace),
     );
   },
   async setDisplayUnit(request: SetDisplayUnitRequest) {

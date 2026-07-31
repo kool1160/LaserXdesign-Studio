@@ -43,3 +43,24 @@ validated preview/commit/cancel/export intents, renders an ephemeral import
 overlay, and displays warnings, assumptions, units, dimensions, and summaries.
 Preview does not make the project dirty; commit is one undoable application
 command.
+
+## M07 raster tracing boundary
+
+Electron main owns PNG/JPEG dialogs, bounded binary reads, source/header
+inspection, native decode normalization, and preview PNG encoding. A dedicated
+worker owns preprocessing and the replaceable trace adapter. Renderer IPC
+contains only an operation ID and validated settings; local paths and raw pixel
+buffers stay outside the sandboxed renderer.
+
+The controller reserves the operation before the native chooser, rejects a
+second request before another dialog can open, and uses one operation-ID-aware
+abort lifecycle. After file selection, a 30-second deadline covers read,
+inspection, decode, worker execution, preview encoding/validation, and atomic
+candidate/media publication. Any cancellation or failure clears only that
+operation and preserves the previously visible preview and project state.
+
+React displays worker progress, preprocessing controls, original/black-white/
+edge/trace/overlay views, and candidate summaries. Reject and cancellation are
+non-mutating. Acceptance inserts ordinary editable paths as one command and
+immediately projects the standard cutability warning interface without a
+cut-ready claim.

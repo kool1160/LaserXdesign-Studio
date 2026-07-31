@@ -52,6 +52,13 @@ interface ViewportProps {
   selectionBounds: BoundsMm | null;
   pathSelection: PathSelectionProjection | null;
   importPreview: { layers: Layer[]; objects: DocumentObject[] } | null;
+  previewGeometryVisible: boolean;
+  rasterBackground: {
+    dataUrl: string;
+    widthMm: number;
+    heightMm: number;
+    opacity: number;
+  } | null;
   onEditorAction: (request: EditorActionRequest) => void;
 }
 
@@ -148,6 +155,8 @@ export function Viewport({
   selectionBounds,
   pathSelection,
   importPreview,
+  previewGeometryVisible,
+  rasterBackground,
   onEditorAction,
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -223,6 +232,20 @@ export function Viewport({
           ),
     [document, importPreview, size, viewport],
   );
+  const rasterProjection = useMemo(() => {
+    if (rasterBackground === null) return null;
+    const topLeft = domainToScreen(
+      { xMm: 0, yMm: rasterBackground.heightMm },
+      viewport,
+    );
+    return {
+      ...rasterBackground,
+      xCssPx: topLeft.xCssPx,
+      yCssPx: topLeft.yCssPx,
+      widthCssPx: rasterBackground.widthMm * viewport.zoomCssPxPerMm,
+      heightCssPx: rasterBackground.heightMm * viewport.zoomCssPxPerMm,
+    };
+  }, [rasterBackground, viewport]);
   const pathOverlay = useMemo(() => {
     if (pathSelection === null) {
       return null;
@@ -687,7 +710,20 @@ export function Viewport({
               ),
             )}
           </g>
-          {previewScene !== null && (
+          {rasterProjection !== null && (
+            <image
+              data-testid="raster-preview-image"
+              href={rasterProjection.dataUrl}
+              x={rasterProjection.xCssPx}
+              y={rasterProjection.yCssPx}
+              width={rasterProjection.widthCssPx}
+              height={rasterProjection.heightCssPx}
+              opacity={rasterProjection.opacity}
+              preserveAspectRatio="none"
+              pointerEvents="none"
+            />
+          )}
+          {previewScene !== null && previewGeometryVisible && (
             <g
               className="import-preview"
               data-testid="import-preview-overlay"

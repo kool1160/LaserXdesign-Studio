@@ -31,7 +31,9 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasNodeProcess).toBe(false);
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
+      "acceptRasterTrace",
       "cancelGeometryOperation",
+      "cancelRasterTrace",
       "cancelVectorImport",
       "commitVectorImport",
       "createDocument",
@@ -45,7 +47,9 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "onStateChanged",
       "openProject",
       "openRecent",
+      "previewRasterTrace",
       "previewVectorImport",
+      "rejectRasterTrace",
       "resolveRecovery",
       "saveProject",
       "saveProjectAs",

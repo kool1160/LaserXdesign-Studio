@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 
 import {
@@ -6,6 +7,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  nativeImage,
   type MenuItemConstructorOptions,
 } from "electron";
 import {
@@ -22,10 +24,12 @@ import {
 import {
   createDocumentRequestSchema,
   cancelGeometryOperationRequestSchema,
+  cancelRasterTraceRequestSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
+  rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -35,6 +39,7 @@ import {
   vectorImportPreviewRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
+import { ElectronRasterCodec } from "./raster-codec.js";
 
 const testUserDataPath = process.env.LASERX_USER_DATA_PATH;
 if (testUserDataPath !== undefined) {
@@ -69,6 +74,11 @@ function configuredVectorPath(
   name: "LASERX_TEST_IMPORT_PATH" | "LASERX_TEST_EXPORT_PATH",
 ): string | null {
   const value = process.env[name];
+  return value === undefined ? null : resolve(value);
+}
+
+function configuredRasterPath(): string | null {
+  const value = process.env.LASERX_TEST_RASTER_PATH;
   return value === undefined ? null : resolve(value);
 }
 
@@ -142,6 +152,22 @@ const dialogs: DesktopDialogs = {
     });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   },
+  async chooseImportRaster() {
+    const configured = configuredRasterPath();
+    if (configured !== null) {
+      return configured;
+    }
+    const result = await dialog.showOpenDialog(requireMainWindow(), {
+      title: "Trace PNG or JPEG",
+      properties: ["openFile"],
+      filters: [
+        { name: "Raster images", extensions: ["png", "jpg", "jpeg"] },
+        { name: "PNG", extensions: ["png"] },
+        { name: "JPEG", extensions: ["jpg", "jpeg"] },
+      ],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
   async chooseExportVector(format, suggestedName) {
     const configured = configuredVectorPath("LASERX_TEST_EXPORT_PATH");
     if (configured !== null) {
@@ -208,6 +234,20 @@ function registerIpc(): void {
     const validated = vectorExportRequestSchema.parse(request);
     return requireController().exportVector(validated);
   });
+  ipcMain.handle(IPC_CHANNELS.previewRasterTrace, (_event, request: unknown) => {
+    const validated = rasterTraceRequestSchema.parse(request);
+    return requireController().previewRasterTrace(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.cancelRasterTrace, (_event, request: unknown) => {
+    const validated = cancelRasterTraceRequestSchema.parse(request);
+    return requireController().cancelRasterTrace(validated.operationId);
+  });
+  ipcMain.handle(IPC_CHANNELS.acceptRasterTrace, () =>
+    requireController().acceptRasterTrace(),
+  );
+  ipcMain.handle(IPC_CHANNELS.rejectRasterTrace, () =>
+    requireController().rejectRasterTrace(),
+  );
   ipcMain.handle(IPC_CHANNELS.setDisplayUnit, (_event, request: unknown) => {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);
@@ -274,6 +314,29 @@ function buildMenu(): void {
           click: () =>
             void requireController().previewVectorImport({
               unitlessDxfUnit: null,
+            }),
+        },
+        {
+          label: "Trace PNG/JPEG...",
+          click: () =>
+            void requireController().previewRasterTrace({
+              operationId: randomUUID(),
+              settings: {
+                preset: "balanced",
+                outputWidthMm: 150,
+                crop: { left: 0, top: 0, right: 0, bottom: 0 },
+                rotationDeg: 0,
+                grayscaleMode: "luminance",
+                contrast: 0,
+                threshold: 128,
+                invert: false,
+                blurRadiusPx: 1,
+                denoiseRadiusPx: 1,
+                background: "auto",
+                speckleAreaPx: 6,
+                smoothingPasses: 1,
+                simplificationToleranceMm: 0.2,
+              },
             }),
         },
         { type: "separator" },
@@ -421,6 +484,9 @@ async function createWindow(): Promise<void> {
           : [join(process.env.LOCALAPPDATA, "Microsoft", "Windows", "Fonts")]),
       ]),
     ]),
+    rasterCodec: new ElectronRasterCodec({
+      createFromBuffer: (buffer) => nativeImage.createFromBuffer(buffer),
+    }),
   });
   await controller.initialize();
 

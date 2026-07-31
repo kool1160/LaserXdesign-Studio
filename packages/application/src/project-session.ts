@@ -30,6 +30,10 @@ import {
   type VectorSourceUnit,
   type VectorInterchangeFormat,
   type InterchangeWarning,
+  type RasterSourceMetadata,
+  type RasterTraceCandidate,
+  type RasterTraceSettings,
+  type RasterTraceSummary,
 } from "@laserx/domain";
 import {
   applyAffineTransform,
@@ -55,6 +59,7 @@ export interface EditorProjection {
   pathSelection: PathSelectionProjection | null;
   topologySummary: TopologyChangeSummary | null;
   importPreview: VectorImportPreview | null;
+  rasterTracePreview: RasterTracePreview | null;
   history: {
     undoDepth: number;
     redoDepth: number;
@@ -76,6 +81,21 @@ export interface VectorImportPreview {
 }
 
 interface PendingVectorImport extends VectorImportPreview {
+  projectFingerprint: string;
+}
+
+export interface RasterTracePreview {
+  sourceName: string;
+  source: RasterSourceMetadata;
+  settings: RasterTraceSettings;
+  layers: Layer[];
+  objects: PathObject[];
+  warnings: InterchangeWarning[];
+  assumptions: string[];
+  summary: RasterTraceSummary;
+}
+
+interface PendingRasterTrace extends RasterTracePreview {
   projectFingerprint: string;
 }
 
@@ -318,6 +338,34 @@ function copyImportPreview(
       };
 }
 
+function copyRasterTracePreview(
+  preview: PendingRasterTrace | null,
+): RasterTracePreview | null {
+  return preview === null
+    ? null
+    : {
+        sourceName: preview.sourceName,
+        source: { ...preview.source },
+        settings: {
+          ...preview.settings,
+          crop: { ...preview.settings.crop },
+        },
+        layers: preview.layers.map((layer) => ({ ...layer })),
+        objects: preview.objects.map((object) =>
+          copyDocumentObject(object) as PathObject,
+        ),
+        warnings: preview.warnings.map((item) => ({ ...item })),
+        assumptions: [...preview.assumptions],
+        summary: {
+          ...preview.summary,
+          bounds:
+            preview.summary.bounds === null
+              ? null
+              : { ...preview.summary.bounds },
+        },
+      };
+}
+
 function worldPathGeometry(object: PathObject): EditablePathGeometry {
   return {
     closed: object.closed,
@@ -375,6 +423,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
   #pathSelection: PathSelectionProjection | null = null;
   #topologySummary: TopologyChangeSummary | null = null;
   #importPreview: PendingVectorImport | null = null;
+  #rasterTracePreview: PendingRasterTrace | null = null;
 
   public constructor(
     dependencies: LifecycleDependencies,
@@ -408,6 +457,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
         pathSelection: copyPathSelection(this.#pathSelection),
         topologySummary: copyTopologySummary(this.#topologySummary),
         importPreview: copyImportPreview(this.#importPreview),
+        rasterTracePreview: copyRasterTracePreview(this.#rasterTracePreview),
         history: {
           undoDepth: this.#past.length,
           redoDepth: this.#future.length,
@@ -705,6 +755,9 @@ export class ProjectSession implements ProjectCommandDispatcher {
     if (this.#transaction !== null) {
       throw new Error("Commit or cancel the active transaction before importing.");
     }
+    if (this.#rasterTracePreview !== null) {
+      throw new Error("Accept or reject the active raster trace before importing a vector file.");
+    }
     if (candidate.paths.length === 0) {
       throw new RangeError("The selected file contains no supported 2D geometry to preview.");
     }
@@ -836,6 +889,116 @@ export class ProjectSession implements ProjectCommandDispatcher {
       objects: preview.objects,
     });
     this.#importPreview = null;
+    return this.state;
+  }
+
+  public previewRasterTrace(
+    candidate: RasterTraceCandidate,
+    sourceName: string,
+  ): ProjectSessionState {
+    if (this.#transaction !== null) {
+      throw new Error("Commit or cancel the active transaction before tracing.");
+    }
+    if (this.#importPreview !== null) {
+      throw new Error("Commit or cancel the active vector import before tracing a raster file.");
+    }
+    if (candidate.paths.length === 0) {
+      throw new RangeError("The raster trace contains no editable paths to preview.");
+    }
+    if (candidate.paths.length > 100_000) {
+      throw new RangeError("The raster trace contains too many editable paths.");
+    }
+    let geometryPointCount = 0;
+    for (const path of candidate.paths) {
+      if (
+        path.points.length >
+        MAX_VECTOR_IMPORT_GEOMETRY_POINTS - geometryPointCount
+      ) {
+        throw new RangeError(
+          "The raster trace contains more than 200,000 editable geometry points.",
+        );
+      }
+      geometryPointCount += path.points.length;
+    }
+    const document = this.#project.document;
+    const usedLayerNames = new Set(
+      document.layers.map((layer) => layer.name.toLocaleLowerCase()),
+    );
+    const baseName = "Raster Trace";
+    let layerName = baseName;
+    let sequence = 2;
+    while (usedLayerNames.has(layerName.toLocaleLowerCase())) {
+      layerName = `${baseName} (${String(sequence)})`;
+      sequence += 1;
+    }
+    const layer: Layer = {
+      id: this.#dependencies.createId(),
+      name: layerName,
+      visible: true,
+      locked: false,
+    };
+    const objects = candidate.paths.map<PathObject>((path) => ({
+      id: this.#dependencies.createId(),
+      type: "path",
+      layerId: layer.id,
+      transform: identityTransform(),
+      closed: path.closed,
+      points: path.points.map((point) => ({ ...point })),
+      ...(path.handles === undefined
+        ? {}
+        : {
+            handles: path.handles.map((handle) => ({
+              incoming:
+                handle.incoming === null ? null : { ...handle.incoming },
+              outgoing:
+                handle.outgoing === null ? null : { ...handle.outgoing },
+            })),
+          }),
+    }));
+    this.#rasterTracePreview = {
+      sourceName: sourceName.trim() || `Traced ${candidate.source.format.toUpperCase()}`,
+      source: { ...candidate.source },
+      settings: {
+        ...candidate.settings,
+        crop: { ...candidate.settings.crop },
+      },
+      layers: [layer],
+      objects,
+      warnings: candidate.warnings.map((warning) => ({ ...warning })),
+      assumptions: [...candidate.assumptions],
+      summary: {
+        ...candidate.summary,
+        bounds:
+          candidate.summary.bounds === null
+            ? null
+            : { ...candidate.summary.bounds },
+      },
+      projectFingerprint: fingerprint(this.#project),
+    };
+    return this.state;
+  }
+
+  public cancelRasterTrace(): ProjectSessionState {
+    this.#rasterTracePreview = null;
+    return this.state;
+  }
+
+  public commitRasterTrace(): ProjectSessionState {
+    const preview = this.#rasterTracePreview;
+    if (preview === null) {
+      throw new RangeError("There is no raster trace preview to accept.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error(
+        "The project changed after this trace was created. Run the raster trace again before accepting it.",
+      );
+    }
+    this.executeEditorCommand({
+      type: "objects.import",
+      layers: preview.layers,
+      objects: preview.objects,
+    });
+    this.#rasterTracePreview = null;
     return this.state;
   }
 
@@ -1550,5 +1713,6 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#pathSelection = null;
     this.#topologySummary = null;
     this.#importPreview = null;
+    this.#rasterTracePreview = null;
   }
 }

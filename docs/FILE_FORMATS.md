@@ -153,5 +153,23 @@ equivalence.
 
 ## PNG/JPEG
 
-Raster files are future tracing or reference inputs. Original pixels may later
-be embedded or linked in the native project but never exported as cut paths.
+PNG and JPEG are untrusted tracing inputs. Files are limited to 12 MiB,
+10,000 pixels per axis, 20 million decoded pixels, and 80 MiB RGBA. Signatures
+and dimensions are inspected before Electron's main-process decoder runs.
+Animated PNG is rejected; Electron's decoder ignores JPEG EXIF orientation, so
+quarter-turn rotation is an explicit trace setting.
+
+The selected crop/rotation is mapped to an explicit millimeter output width
+with square pixels. Luminance/average grayscale, contrast, threshold, invert,
+box blur, median denoise, alpha-background mode, speckle area, smoothing, and
+simplification settings are deterministic and recorded with the candidate.
+Trace work is capped at 4 million pixels, 800,000 boundary edges, 200,000
+editable nodes, and 30 seconds. A bounded original, black/white, and edge
+preview may cross main-to-renderer state as internally generated PNG data URLs;
+local paths and raw source pixels never cross renderer requests.
+
+Reject/cancel persists nothing. Acceptance stores only ordinary editable
+schema-v5 millimeter paths through one undoable command. Original pixels,
+preview images, trace settings, and engine-specific records are not embedded in
+the current `.laserx` schema and raster pixels are never manufacturing export
+geometry.

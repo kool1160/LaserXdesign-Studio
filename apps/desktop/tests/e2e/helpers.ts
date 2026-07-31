@@ -71,6 +71,7 @@ export interface LaunchEnvironment {
   geometryDelayMs?: string;
   importPath?: string;
   exportPath?: string;
+  rasterPath?: string;
 }
 
 export async function launchPackaged(
@@ -108,6 +109,9 @@ export async function launchPackaged(
       ...(launchEnvironment.exportPath === undefined
         ? {}
         : { LASERX_TEST_EXPORT_PATH: launchEnvironment.exportPath }),
+      ...(launchEnvironment.rasterPath === undefined
+        ? {}
+        : { LASERX_TEST_RASTER_PATH: launchEnvironment.rasterPath }),
     },
   });
   return {

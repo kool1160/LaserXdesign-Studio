@@ -18,3 +18,4 @@ Accepted implementation decisions:
 - ADR 0016 — secure SVG/DXF interchange boundary
 - ADR 0017 — user-owned AI provider credentials
 - ADR 0018 — future machine and controller extensibility
+- ADR 0019 — secure replaceable raster tracing

@@ -200,6 +200,42 @@ nonuniform, shear, and nested-group regressions cover cubic paths and ellipses.
 SVG and DXF export/reimport tests keep transformed cubic bounds within that
 tolerance. No broader tolerance hides unit or closure failures.
 
+## M07 executable layers
+
+- source-inspection tests cover PNG/JPEG signatures and dimensions, extension
+  disagreement, animated PNG rejection, malformed input, byte limits, decoded
+  pixel/memory limits, and decoder/header disagreement;
+- import-raster tests cover deterministic presets, crop/rotation, grayscale,
+  contrast, threshold, invert, blur, denoise, background, black/white and edge
+  previews, four-connected contours, exact speckle count/area reporting,
+  smoothing, and simplification deviation;
+- `fixtures/images/m07-raster-trace-goldens.json` pins SHA-256 hashes and exact
+  geometry/summaries for committed original clean-logo, noisy-photo,
+  anti-aliased-text, and 2560 x 1800 high-resolution PNG assets. The noisy
+  fixture has more than 40 grayscale values, the glyph fixture has genuine
+  intermediate coverage values, and the 4.608-megapixel fixture proves the
+  four-million-pixel downsample path at 2385 x 1677;
+- application and project-format tests prove preview/reject/cancel do not
+  mutate project/dirty/history state, stale results fail, acceptance is one
+  undoable `objects.import`, and only ordinary schema-v5 editable paths persist;
+- desktop tests inject storage, codec, and worker ports to prove reservation
+  before dialogs, duplicate rejection, operation-ID-aware cancellation during
+  read/decode/post-worker stages, whole-operation timeout, unconditional
+  read/decode/worker/codec cleanup, atomic candidate/media replacement,
+  stale-work rejection, bounded preview media, one-command acceptance, and
+  immediate entry into the cutability interface with `cutReady: false`;
+- the packaged Windows workflow imports committed real PNG and JPEG files
+  through Electron's native decoder, changes preview modes,
+  aligns original-plus-trace, accepts paths, opens node editing, receives the
+  standard analysis warning, saves schema v5, and undoes to the exact original
+  document;
+- `pnpm audit:raster` verifies the original LaserX engine identity, version,
+  workspace-only dependency set, accepted ADR, and license review.
+
+The representative 512 x 512 noisy case must finish under 5 seconds. The
+controller and worker enforce the separately documented 30-second safeguards; see
+`docs/research/M07-RASTER-PERFORMANCE.md`.
+
 Run all milestone checks from the repository root:
 
 ```bash
