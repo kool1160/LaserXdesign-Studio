@@ -262,12 +262,12 @@ test("packaged geometry workflow unions, edits, undoes, and persists paths", asy
     }
 
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 5);
+    await waitForProjectSchema(launched.projectPath, 6);
     const disk = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       schemaVersion: number;
       document: unknown;
     };
-    expect(disk.schemaVersion).toBe(5);
+    expect(disk.schemaVersion).toBe(6);
     expect(disk.document).toEqual(editedDocument);
 
     await page.getByRole("button", { name: "New", exact: true }).click();

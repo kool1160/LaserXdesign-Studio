@@ -279,7 +279,7 @@ describe("autosave recovery coordination", () => {
     ]);
     expect(recoveryStore.current).toBeNull();
     expect(projectStorage.get(projectPath)).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
     });
 
     scheduler.trigger();

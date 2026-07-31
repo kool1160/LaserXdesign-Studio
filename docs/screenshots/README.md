@@ -33,3 +33,9 @@ M07 evidence:
 - `m07-raster-tracing.png` - packaged Windows workspace showing the traced
   geometry overlay aligned over the reviewed noisy-photo raster, with exact
   threshold, speckle, smoothing, and simplification controls before acceptance.
+
+M08 evidence:
+
+- `m08-cutability-bridge-preview.png` - packaged Windows workspace showing
+  retained/removed manufacturing regions, measured issue navigation, editable
+  settings, and a non-mutating manual bridge candidate before acceptance.

@@ -37,7 +37,7 @@ G-code, lead-ins, cut order, heat simulation, guaranteed manufacturability, and 
 
 ## Exit checklist
 
-- [ ] Rule suite and false-positive/negative fixtures reviewed.
-- [ ] Manual and auto-bridge workflows pass end-to-end.
-- [ ] Manufacturing-preview limitations documented.
+- [x] Rule suite and false-positive/negative fixtures reviewed.
+- [x] Manual and auto-bridge workflows pass end-to-end.
+- [x] Manufacturing-preview limitations documented.
 - [ ] Status advances to M09.

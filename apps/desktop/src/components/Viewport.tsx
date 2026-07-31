@@ -59,6 +59,15 @@ interface ViewportProps {
     heightMm: number;
     opacity: number;
   } | null;
+  manufacturingPreview: {
+    regions: Array<{
+      id: string;
+      disposition: "retained" | "removed" | "ambiguous";
+      points: PointMm[];
+    }>;
+    focusedIssueLocation: PointMm | null;
+    bridgePolygon: PointMm[] | null;
+  } | null;
   onEditorAction: (request: EditorActionRequest) => void;
 }
 
@@ -157,6 +166,7 @@ export function Viewport({
   importPreview,
   previewGeometryVisible,
   rasterBackground,
+  manufacturingPreview,
   onEditorAction,
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -212,6 +222,28 @@ export function Viewport({
     size.widthCssPx,
   ]);
 
+  useEffect(() => {
+    const location = manufacturingPreview?.focusedIssueLocation;
+    if (
+      location === null ||
+      location === undefined ||
+      size.widthCssPx <= 1 ||
+      size.heightCssPx <= 1
+    ) return;
+    setViewport((current) => ({
+      ...current,
+      originScreenXCssPx:
+        size.widthCssPx / 2 - location.xMm * current.zoomCssPxPerMm,
+      originScreenYCssPx:
+        size.heightCssPx / 2 + location.yMm * current.zoomCssPxPerMm,
+    }));
+  }, [
+    manufacturingPreview?.focusedIssueLocation?.xMm,
+    manufacturingPreview?.focusedIssueLocation?.yMm,
+    size.heightCssPx,
+    size.widthCssPx,
+  ]);
+
   const scene = useMemo(
     () => createViewportScene(document, viewport, size, selectionIds),
     [document, selectionIds, size, viewport],
@@ -246,6 +278,25 @@ export function Viewport({
       heightCssPx: rasterBackground.heightMm * viewport.zoomCssPxPerMm,
     };
   }, [rasterBackground, viewport]);
+  const manufacturingProjection = useMemo(() => {
+    if (manufacturingPreview === null) return null;
+    return {
+      regions: manufacturingPreview.regions.map((region) => ({
+        ...region,
+        points: region.points.map((point) => domainToScreen(point, viewport)),
+      })),
+      focusedIssueLocation:
+        manufacturingPreview.focusedIssueLocation === null
+          ? null
+          : domainToScreen(manufacturingPreview.focusedIssueLocation, viewport),
+      bridgePolygon:
+        manufacturingPreview.bridgePolygon === null
+          ? null
+          : manufacturingPreview.bridgePolygon.map((point) =>
+              domainToScreen(point, viewport),
+            ),
+    };
+  }, [manufacturingPreview, viewport]);
   const pathOverlay = useMemo(() => {
     if (pathSelection === null) {
       return null;
@@ -644,6 +695,22 @@ export function Viewport({
             width={scene.stock.widthCssPx}
             height={scene.stock.heightCssPx}
           />
+          {manufacturingProjection !== null && (
+            <g
+              className="manufacturing-preview"
+              data-testid="manufacturing-preview"
+              pointerEvents="none"
+            >
+              {manufacturingProjection.regions.map((region) => (
+                <polygon
+                  key={region.id}
+                  className={`manufacturing-region ${region.disposition}`}
+                  data-region-disposition={region.disposition}
+                  points={pointsAttribute(region.points)}
+                />
+              ))}
+            </g>
+          )}
           <g className="guides" data-testid="viewport-guides">
             {scene.guides.map((guide) =>
               guide.axis === "x" ? (
@@ -751,6 +818,41 @@ export function Viewport({
               )}
             </g>
           )}
+          {manufacturingProjection?.bridgePolygon !== null &&
+            manufacturingProjection?.bridgePolygon !== undefined && (
+              <polygon
+                className="bridge-proposal-overlay"
+                data-testid="bridge-proposal-overlay"
+                points={pointsAttribute(manufacturingProjection.bridgePolygon)}
+                pointerEvents="none"
+              />
+            )}
+          {manufacturingProjection?.focusedIssueLocation !== null &&
+            manufacturingProjection?.focusedIssueLocation !== undefined && (
+              <g
+                className="manufacturing-issue-marker"
+                data-testid="manufacturing-issue-marker"
+                pointerEvents="none"
+              >
+                <circle
+                  cx={manufacturingProjection.focusedIssueLocation.xCssPx}
+                  cy={manufacturingProjection.focusedIssueLocation.yCssPx}
+                  r={8}
+                />
+                <line
+                  x1={manufacturingProjection.focusedIssueLocation.xCssPx - 12}
+                  y1={manufacturingProjection.focusedIssueLocation.yCssPx}
+                  x2={manufacturingProjection.focusedIssueLocation.xCssPx + 12}
+                  y2={manufacturingProjection.focusedIssueLocation.yCssPx}
+                />
+                <line
+                  x1={manufacturingProjection.focusedIssueLocation.xCssPx}
+                  y1={manufacturingProjection.focusedIssueLocation.yCssPx - 12}
+                  x2={manufacturingProjection.focusedIssueLocation.xCssPx}
+                  y2={manufacturingProjection.focusedIssueLocation.yCssPx + 12}
+                />
+              </g>
+            )}
           {pathOverlay !== null && (
             <g className="path-edit-overlay" data-testid="path-edit-overlay">
               {pathOverlay.nodes.flatMap((node) => {

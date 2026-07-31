@@ -12,7 +12,11 @@ import {
   type GeometryOperationRequest,
 } from "@laserx/application";
 import {
-  analyzeDocumentCutability,
+  CutabilityAnalysisCache,
+  fingerprintCutabilityDocument,
+  materializeBridgeProposal,
+  proposeBridge,
+  type BridgeProposal,
   type CutabilityAnalysisSummary,
 } from "@laserx/cutability";
 import {
@@ -20,6 +24,7 @@ import {
   type TextObject,
   type UpdateViewportPreferences,
   type VectorExportSummary,
+  type ManufacturingSettings,
 } from "@laserx/domain";
 import {
   type FontCatalogEntry,
@@ -44,9 +49,15 @@ import type {
   SetViewportPreferencesRequest,
   TextUpdateRequestDto,
   RasterTraceRequest,
+  BridgeProposalRequestDto,
   VectorExportRequest,
   VectorImportPreviewRequest,
 } from "./ipc-contract.js";
+import {
+  CutabilityAnalysisCancelledError,
+  NodeCutabilityWorkerService,
+  type CutabilityWorkerPort,
+} from "./cutability-worker-service.js";
 import { AppLogger } from "./logger.js";
 import {
   NodeGeometryWorkerService,
@@ -108,6 +119,7 @@ export interface DesktopControllerOptions {
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
   rasterOperationTimeoutMs?: number;
+  cutabilityWorker?: CutabilityWorkerPort;
 }
 
 export interface AutosaveScheduler {
@@ -173,8 +185,11 @@ export class DesktopController {
   readonly #rasterCodec: RasterCodecPort | null;
   readonly #rasterWorker: RasterWorkerPort;
   readonly #rasterOperationTimeoutMs: number;
+  readonly #cutabilityWorker: CutabilityWorkerPort;
+  readonly #cutabilityCache = new CutabilityAnalysisCache();
   readonly #geometryAbortControllers = new Map<string, AbortController>();
   readonly #rasterAbortControllers = new Map<string, AbortController>();
+  readonly #cutabilityAbortControllers = new Map<string, AbortController>();
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -187,6 +202,13 @@ export class DesktopController {
   } | null = null;
   #rasterPreview: (RasterPreviewDataUrls & { operationId: string }) | null = null;
   #cutabilityAnalysis: CutabilityAnalysisSummary | null = null;
+  #cutabilityJob: {
+    operationId: string;
+    percent: number;
+    stage: "normalizing" | "topology" | "spacing" | "classifying";
+  } | null = null;
+  #focusedCutabilityIssueId: string | null = null;
+  #bridgeProposal: BridgeProposal | null = null;
 
   public constructor(options: DesktopControllerOptions) {
     this.#storage = options.projectStorage ?? new ProjectStorage();
@@ -206,6 +228,8 @@ export class DesktopController {
     this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
     this.#rasterCodec = options.rasterCodec ?? null;
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
+    this.#cutabilityWorker =
+      options.cutabilityWorker ?? new NodeCutabilityWorkerService();
     this.#rasterOperationTimeoutMs =
       options.rasterOperationTimeoutMs ?? MAX_RASTER_PROCESSING_TIME_MS;
     if (
@@ -259,6 +283,12 @@ export class DesktopController {
             : { ...this.#rasterPreview },
       },
       analysis: {
+        job: this.#cutabilityJob === null ? null : { ...this.#cutabilityJob },
+        focusedIssueId: this.#focusedCutabilityIssueId,
+        bridgeProposal:
+          this.#bridgeProposal === null
+            ? null
+            : structuredClone(this.#bridgeProposal),
         cutability:
           this.#cutabilityAnalysis === null
             ? null
@@ -361,6 +391,7 @@ export class DesktopController {
   public async commitVectorImport(): Promise<CommandResult> {
     return this.#run(() => {
       this.#session.commitVectorImport();
+      this.#invalidateCutability();
     });
   }
 
@@ -486,7 +517,6 @@ export class DesktopController {
           operationId,
           ...encodedPreview,
         };
-        this.#cutabilityAnalysis = null;
       } catch (error) {
         if (deadlineState.timedOut) {
           throw new RasterTraceTimeoutError(this.#rasterOperationTimeoutMs);
@@ -518,13 +548,11 @@ export class DesktopController {
   }
 
   public async acceptRasterTrace(): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       const accepted = this.#session.commitRasterTrace();
-      this.#cutabilityAnalysis = analyzeDocumentCutability(
-        accepted.project.document,
-        accepted.editor.selectionIds,
-      );
+      this.#invalidateCutability();
       this.#rasterPreview = null;
+      await this.#analyzeCutability(randomUUID(), accepted.editor.selectionIds);
     });
   }
 
@@ -610,12 +638,134 @@ export class DesktopController {
     });
   }
 
+  public async setManufacturingSettings(
+    settings: ManufacturingSettings,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.dispatch({
+        type: "project.set-manufacturing-settings",
+        settings,
+      });
+      this.#invalidateCutability();
+    });
+  }
+
+  public async runCutabilityAnalysis(
+    operationId: string,
+    objectIds: readonly string[],
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      await this.#analyzeCutability(operationId, objectIds);
+    });
+  }
+
+  public async cancelCutabilityAnalysis(
+    operationId: string,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const controller = this.#cutabilityAbortControllers.get(operationId);
+      if (controller === undefined) {
+        throw new RangeError("That manufacturing analysis is not active.");
+      }
+      controller.abort();
+    });
+  }
+
+  public async focusCutabilityIssue(
+    issueId: string | null,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      if (issueId === null) {
+        this.#focusedCutabilityIssueId = null;
+        return;
+      }
+      const issue = this.#cutabilityAnalysis?.issues.find(
+        (candidate) => candidate.id === issueId,
+      );
+      if (issue === undefined) {
+        throw new RangeError("That manufacturing issue is not available.");
+      }
+      this.#focusedCutabilityIssueId = issue.id;
+      this.#session.selectObjectIds(issue.objectIds);
+    });
+  }
+
+  public async previewBridge(
+    request: BridgeProposalRequestDto,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      if (this.#cutabilityAnalysis === null) {
+        throw new RangeError("Run manufacturing analysis before proposing a bridge.");
+      }
+      this.#bridgeProposal = proposeBridge(
+        this.#session.state.project.document,
+        this.#cutabilityAnalysis,
+        request,
+      );
+      this.#focusedCutabilityIssueId = request.issueId;
+    });
+  }
+
+  public async acceptBridge(): Promise<CommandResult> {
+    return this.#run(async () => {
+      const proposal = this.#bridgeProposal;
+      if (proposal === null) {
+        throw new RangeError("There is no bridge proposal to accept.");
+      }
+      const before = this.#session.state.project.document;
+      if (fingerprintCutabilityDocument(before) !== proposal.documentFingerprint) {
+        throw new Error("The document changed after this bridge preview; preview it again.");
+      }
+      const replacements = materializeBridgeProposal(proposal, randomUUID);
+      const beforeNodeCount = before.objects.reduce(
+        (count, object) =>
+          object.type === "path" && proposal.sourceObjectIds.includes(object.id)
+            ? count + object.points.length
+            : count,
+        0,
+      );
+      this.#session.applyTopologyReplacement(
+        {
+          type: "objects.replace-topology",
+          sourceObjectIds: proposal.sourceObjectIds,
+          replacements,
+        },
+        {
+          operation: "Apply bridge",
+          beforeNodeCount,
+          afterNodeCount: replacements.reduce((count, object) => count + object.points.length, 0),
+          replacedObjectIds: replacements.map((object) => object.id),
+          discardedObjectIds: proposal.sourceObjectIds.filter(
+            (id) => !replacements.some((object) => object.id === id),
+          ),
+          warnings: [...proposal.warnings],
+          message: proposal.summary,
+        },
+      );
+      this.#invalidateCutability();
+      const state = this.#session.state;
+      await this.#analyzeCutability(randomUUID(), state.editor.selectionIds);
+    });
+  }
+
+  public async rejectBridge(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#bridgeProposal = null;
+    });
+  }
+
   public async editorAction(
     request: EditorActionRequest,
   ): Promise<CommandResult> {
     return this.#run(() => {
+      const before = fingerprintCutabilityDocument(
+        this.#session.state.project.document,
+      );
       this.#session.performEditorAction(request);
-      this.#refreshCutabilityAnalysis();
+      const after = fingerprintCutabilityDocument(
+        this.#session.state.project.document,
+      );
+      if (after !== before) this.#invalidateCutability();
     });
   }
 
@@ -664,6 +814,7 @@ export class DesktopController {
           },
           materialized.summary,
         );
+        this.#invalidateCutability();
       } finally {
         this.#geometryAbortControllers.delete(request.operationId);
       }
@@ -742,6 +893,7 @@ export class DesktopController {
         type: "objects.insert",
         objects: [object],
       });
+      this.#invalidateCutability();
     });
   }
 
@@ -811,6 +963,7 @@ export class DesktopController {
           missingFont: false,
         },
       });
+      this.#invalidateCutability();
     });
   }
 
@@ -918,9 +1071,17 @@ export class DesktopController {
       controller.abort();
     }
     this.#rasterAbortControllers.clear();
+    for (const controller of this.#cutabilityAbortControllers.values()) {
+      controller.abort();
+    }
+    this.#cutabilityAbortControllers.clear();
     this.#rasterJob = null;
     this.#rasterPreview = null;
     this.#cutabilityAnalysis = null;
+    this.#cutabilityJob = null;
+    this.#focusedCutabilityIssueId = null;
+    this.#bridgeProposal = null;
+    this.#cutabilityCache.invalidate();
   }
 
   #clearRasterJob(operationId: string): void {
@@ -929,13 +1090,78 @@ export class DesktopController {
     }
   }
 
-  #refreshCutabilityAnalysis(): void {
-    if (this.#cutabilityAnalysis === null) return;
-    const next = analyzeDocumentCutability(
-      this.#session.state.project.document,
-      this.#cutabilityAnalysis.analyzedObjectIds,
-    );
-    this.#cutabilityAnalysis = next.pathCount === 0 ? null : next;
+  #clearCutabilityJob(operationId: string): void {
+    if (this.#cutabilityJob?.operationId === operationId) {
+      this.#cutabilityJob = null;
+    }
+  }
+
+  #invalidateCutability(): void {
+    for (const controller of this.#cutabilityAbortControllers.values()) {
+      controller.abort();
+    }
+    this.#cutabilityAbortControllers.clear();
+    this.#cutabilityCache.invalidate();
+    this.#cutabilityAnalysis = null;
+    this.#cutabilityJob = null;
+    this.#focusedCutabilityIssueId = null;
+    this.#bridgeProposal = null;
+  }
+
+  async #analyzeCutability(
+    operationId: string,
+    objectIds: readonly string[],
+  ): Promise<void> {
+    if (this.#cutabilityAbortControllers.size > 0) {
+      throw new RangeError("Finish or cancel the active manufacturing analysis first.");
+    }
+    const document = this.#session.state.project.document;
+    const cached = this.#cutabilityCache.get(document, objectIds);
+    if (cached !== null) {
+      this.#cutabilityAnalysis = { ...cached, operationId };
+      return;
+    }
+    const fingerprint = fingerprintCutabilityDocument(document);
+    const abortController = new AbortController();
+    this.#cutabilityAbortControllers.set(operationId, abortController);
+    this.#cutabilityJob = { operationId, percent: 0, stage: "normalizing" };
+    this.#emit();
+    try {
+      const analysis = await this.#cutabilityWorker.run(
+        { operationId, document, objectIds: [...objectIds] },
+        abortController.signal,
+        (progress) => {
+          if (
+            this.#cutabilityAbortControllers.get(operationId) === abortController &&
+            !abortController.signal.aborted
+          ) {
+            this.#cutabilityJob = { ...progress };
+            this.#emit();
+          }
+        },
+      );
+      if (analysis.operationId !== operationId) {
+        throw new Error("Manufacturing analysis worker returned a mismatched operation ID.");
+      }
+      if (
+        fingerprintCutabilityDocument(this.#session.state.project.document) !== fingerprint
+      ) {
+        throw new Error("The document changed while manufacturing analysis was running; the stale result was discarded.");
+      }
+      this.#cutabilityAnalysis = analysis;
+      this.#cutabilityCache.set(document, objectIds, analysis);
+      this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
+      this.#bridgeProposal = null;
+    } catch (error) {
+      if (error instanceof CutabilityAnalysisCancelledError) return;
+      throw error;
+    } finally {
+      if (this.#cutabilityAbortControllers.get(operationId) === abortController) {
+        this.#cutabilityAbortControllers.delete(operationId);
+      }
+      this.#clearCutabilityJob(operationId);
+      this.#emit();
+    }
   }
 
   async #run(action: () => void | Promise<void>): Promise<CommandResult> {

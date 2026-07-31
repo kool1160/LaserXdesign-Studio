@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import {
+  DEFAULT_MANUFACTURING_SETTINGS,
   createBlankProject,
   identityTransform,
   objectUsesLayerRecursively,
@@ -146,7 +147,7 @@ function editingProject(): LaserxProject {
   );
 }
 
-describe("schema version 5", () => {
+describe("schema version 6", () => {
   it("round trips layers, groups, transforms, guides, and order deterministically", () => {
     const project = editingProject();
     const first = serializeProject(project);
@@ -154,7 +155,7 @@ describe("schema version 5", () => {
 
     expect(reopened).toEqual(project);
     expect(serializeProject(reopened)).toBe(first);
-    expect(first).toContain('"schemaVersion": 5');
+    expect(first).toContain('"schemaVersion": 6');
     expect(reopened.document.layers.map((layer) => layer.id)).toEqual([
       ARTWORK_LAYER,
       NOTES_LAYER,
@@ -169,12 +170,15 @@ describe("schema version 5", () => {
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
     const migrated = parseProject(fixture("populated-v2.laserx"));
-    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.schemaVersion).toBe(6);
     expect(migrated.migrationHistory.at(-1)).toEqual({
-      fromVersion: 4,
-      toVersion: 5,
+      fromVersion: 5,
+      toVersion: 6,
       migratedAt: NOW,
     });
+    expect(migrated.document.settings.manufacturing).toEqual(
+      DEFAULT_MANUFACTURING_SETTINGS,
+    );
     expect(
       migrated.document.objects.every(
         (object) =>
@@ -185,9 +189,9 @@ describe("schema version 5", () => {
     ).toBe(true);
   });
 
-  it("chains schema v1 through v2, v3, v4, and v5 without rewriting source metadata", () => {
+  it("chains schema v1 through v6 without rewriting source metadata", () => {
     const migrated = parseProject(fixture("blank-v1.laserx"));
-    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.schemaVersion).toBe(6);
     expect(migrated.document.id).toBe(PROJECT_ID);
     expect(migrated.document.dimensions).toEqual({
       widthMm: 304.8,
@@ -198,20 +202,26 @@ describe("schema version 5", () => {
       { fromVersion: 2, toVersion: 3, migratedAt: NOW },
       { fromVersion: 3, toVersion: 4, migratedAt: NOW },
       { fromVersion: 4, toVersion: 5, migratedAt: NOW },
+      { fromVersion: 5, toVersion: 6, migratedAt: NOW },
     ]);
   });
 
-  it("migrates schema v3 through v5 and persists editable text geometry", () => {
+  it("migrates schema v3 through v6 and persists editable text geometry", () => {
     const v3 = JSON.parse(fixture("editing-v3.laserx")) as unknown;
     const migrated = parseProjectValue(v3);
-    expect(migrated.migrationHistory.at(-2)).toEqual({
+    expect(migrated.migrationHistory.at(-3)).toEqual({
       fromVersion: 3,
       toVersion: 4,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 4,
       toVersion: 5,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 5,
+      toVersion: 6,
       migratedAt: NOW,
     });
 
@@ -259,11 +269,20 @@ describe("schema version 5", () => {
       document: unknown;
     };
     const migrated = parseProjectValue(legacy);
-    expect(migrated.schemaVersion).toBe(5);
-    expect(migrated.document).toEqual(legacy.document);
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.schemaVersion).toBe(6);
+    const { manufacturing, ...migratedSettings } = migrated.document.settings;
+    expect({ ...migrated.document, settings: migratedSettings }).toEqual(
+      legacy.document,
+    );
+    expect(manufacturing).toEqual(DEFAULT_MANUFACTURING_SETTINGS);
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 4,
       toVersion: 5,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 5,
+      toVersion: 6,
       migratedAt: NOW,
     });
 
@@ -289,7 +308,7 @@ describe("schema version 5", () => {
     expectProjectError(() => serializeProject(project), "INVALID_PROJECT");
   });
 
-  it("persists accepted raster traces as ordinary editable schema-v5 paths", () => {
+  it("persists accepted raster traces as ordinary editable schema-v6 paths", () => {
     const project = createBlankProject({
       id: PROJECT_ID,
       documentId: DOCUMENT_ID,
@@ -402,13 +421,24 @@ describe("schema version 5", () => {
     expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
-  it("registers every explicit migration through schema v5", () => {
-    expect(projectMigrationRegistry).toHaveLength(4);
+  it("persists customized manufacturing settings and registers every migration through schema v6", () => {
+    const project = editingProject();
+    project.document.settings.manufacturing = {
+      ...project.document.settings.manufacturing,
+      kerfWidthMm: 0.35,
+      minimumBridgeWidthMm: 2.5,
+      customizedFields: ["kerfWidthMm", "minimumBridgeWidthMm"],
+    };
+    expect(parseProject(serializeProject(project)).document.settings.manufacturing).toEqual(
+      project.document.settings.manufacturing,
+    );
+    expect(projectMigrationRegistry).toHaveLength(5);
     expect(projectMigrationRegistry).toMatchObject([
       { fromVersion: 1, toVersion: 2 },
       { fromVersion: 2, toVersion: 3 },
       { fromVersion: 3, toVersion: 4 },
       { fromVersion: 4, toVersion: 5 },
+      { fromVersion: 5, toVersion: 6 },
     ]);
   });
 });

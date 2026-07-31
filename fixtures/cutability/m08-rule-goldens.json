@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "assumption": "The stock/background outside all closed contours is retained; each valid contour crossing toggles retained and removed material.",
+  "cases": [
+    {
+      "name": "nested-stencil-regions",
+      "paths": [
+        { "id": "20000000-0000-4000-8000-000000000001", "closed": true, "points": [[10, 10], [110, 10], [110, 110], [10, 110]] },
+        { "id": "30000000-0000-4000-8000-000000000001", "closed": true, "points": [[30, 30], [90, 30], [90, 90], [30, 90]] },
+        { "id": "40000000-0000-4000-8000-000000000001", "closed": true, "points": [[45, 45], [75, 45], [75, 75], [45, 75]] }
+      ],
+      "expectedStatus": "complete",
+      "expectedRegions": ["removed", "retained", "removed"],
+      "requiredCodes": ["DISCONNECTED_ISLAND", "ENCLOSED_DROPOUT"],
+      "forbiddenCodes": ["OPEN_CONTOUR", "SELF_INTERSECTION", "FEATURE_TOO_NARROW"]
+    },
+    {
+      "name": "open-contour-is-ambiguous",
+      "paths": [
+        { "id": "50000000-0000-4000-8000-000000000001", "closed": true, "points": [[10, 10], [110, 10], [110, 110], [10, 110]] },
+        { "id": "60000000-0000-4000-8000-000000000001", "closed": false, "points": [[30, 30], [90, 30], [90, 90], [30, 90]] }
+      ],
+      "expectedStatus": "ambiguous",
+      "expectedRegions": ["ambiguous"],
+      "requiredCodes": ["OPEN_CONTOUR"],
+      "forbiddenCodes": ["DISCONNECTED_ISLAND", "ENCLOSED_DROPOUT"]
+    },
+    {
+      "name": "safe-single-cutout",
+      "paths": [
+        { "id": "70000000-0000-4000-8000-000000000001", "closed": true, "points": [[20, 20], [120, 20], [120, 100], [20, 100]] }
+      ],
+      "expectedStatus": "complete",
+      "expectedRegions": ["removed"],
+      "requiredCodes": [],
+      "forbiddenCodes": ["OPEN_CONTOUR", "DUPLICATE_SEGMENT", "OVERLAPPING_SEGMENT", "SELF_INTERSECTION", "DISCONNECTED_ISLAND", "ENCLOSED_DROPOUT", "BRIDGE_TOO_NARROW", "FEATURE_TOO_NARROW", "GAP_TOO_SMALL", "CONTOURS_TOO_CLOSE", "KERF_COLLAPSE_RISK", "UNSUPPORTED_GEOMETRY"]
+    },
+    {
+      "name": "narrow-and-close",
+      "paths": [
+        { "id": "80000000-0000-4000-8000-000000000001", "closed": true, "points": [[10, 10], [10.1, 10], [10.1, 50], [10, 50]] },
+        { "id": "90000000-0000-4000-8000-000000000001", "closed": true, "points": [[10.4, 10], [30, 10], [30, 50], [10.4, 50]] }
+      ],
+      "expectedStatus": "complete",
+      "expectedRegions": ["removed", "removed"],
+      "requiredCodes": ["FEATURE_TOO_NARROW", "KERF_COLLAPSE_RISK", "GAP_TOO_SMALL", "CONTOURS_TOO_CLOSE"],
+      "forbiddenCodes": ["OPEN_CONTOUR", "SELF_INTERSECTION", "DISCONNECTED_ISLAND"]
+    }
+  ]
+}

@@ -74,16 +74,16 @@ test("preprocesses a PNG, previews overlays, accepts editable paths, analyzes, s
   await expect(page.getByTestId("raster-trace-summary")).toHaveCount(0);
   await expect(page.getByTestId("selection-count")).toContainText("selected");
   await expect(page.getByTestId("cutability-analysis")).toContainText(
-    "Cutability review required",
+    "Analysis complete",
   );
   await expect(page.getByTestId("cutability-analysis")).toContainText(
-    "cut-ready: no",
+    "cut-ready claim: no",
   );
   await page.getByTestId("edit-path-nodes").click();
   await expect(page.getByTestId("path-edit-overlay")).toBeVisible();
 
   await clickAndWaitForCommand(page, "Save");
-  await waitForProjectSchema(testLaunch.projectPath, 5);
+  await waitForProjectSchema(testLaunch.projectPath, 6);
   const saved = JSON.parse(await readFile(testLaunch.projectPath, "utf8")) as {
     document: { objects: Array<{ type: string; closed?: boolean; points?: unknown[] }> };
   };
@@ -126,6 +126,9 @@ test("decodes a real JPEG through Electron and traces the reviewed exact geometr
   });
 
   await page.getByTestId("accept-raster-trace").click();
+  await expect(page.getByTestId("cutability-analysis")).toContainText(
+    "Analysis complete",
+  );
   const acceptedState = await page.evaluate(() => window.laserx.getState());
   expect(
     acceptedState.project.document.objects.map((object) =>
@@ -139,7 +142,7 @@ test("decodes a real JPEG through Electron and traces the reviewed exact geometr
   ]);
   expect(acceptedState.editor.history.undoDepth).toBe(1);
   expect(acceptedState.analysis.cutability).toMatchObject({
-    status: "requires-settings",
+    status: "complete",
     cutReady: false,
   });
 });

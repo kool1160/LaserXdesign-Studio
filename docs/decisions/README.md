@@ -19,3 +19,4 @@ Accepted implementation decisions:
 - ADR 0017 — user-owned AI provider credentials
 - ADR 0018 — future machine and controller extensibility
 - ADR 0019 — secure replaceable raster tracing
+- ADR 0020 — deterministic cutability and bridge proposals

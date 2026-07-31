@@ -20,7 +20,7 @@ export type {
   PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 5 as const;
+export const PROJECT_SCHEMA_VERSION = 6 as const;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -51,9 +51,68 @@ export interface ViewportPreferences {
   snapping: SnappingPreferences;
 }
 
+export type ManufacturingProcess =
+  | "laser"
+  | "plasma"
+  | "waterjet"
+  | "router";
+
+export type ManufacturingMaterial =
+  | "mild-steel"
+  | "stainless-steel"
+  | "aluminum"
+  | "wood"
+  | "acrylic"
+  | "other";
+
+export type ManufacturingTolerancePreset = "fine" | "balanced" | "robust";
+
+export type ManufacturingSettingField =
+  | "process"
+  | "material"
+  | "thicknessMm"
+  | "kerfWidthMm"
+  | "minimumFeatureWidthMm"
+  | "minimumBridgeWidthMm"
+  | "minimumGapMm"
+  | "contourSpacingMm"
+  | "heatDistortionSpacingMm"
+  | "tolerancePreset";
+
+export interface ManufacturingSettings {
+  presetId: string;
+  process: ManufacturingProcess;
+  material: ManufacturingMaterial;
+  thicknessMm: number;
+  kerfWidthMm: number;
+  minimumFeatureWidthMm: number;
+  minimumBridgeWidthMm: number;
+  minimumGapMm: number;
+  contourSpacingMm: number;
+  heatDistortionSpacingMm: number | null;
+  tolerancePreset: ManufacturingTolerancePreset;
+  customizedFields: ManufacturingSettingField[];
+}
+
+export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
+  presetId: "laser-mild-steel-3mm",
+  process: "laser",
+  material: "mild-steel",
+  thicknessMm: 3,
+  kerfWidthMm: 0.2,
+  minimumFeatureWidthMm: 1,
+  minimumBridgeWidthMm: 2,
+  minimumGapMm: 0.8,
+  contourSpacingMm: 1,
+  heatDistortionSpacingMm: null,
+  tolerancePreset: "balanced",
+  customizedFields: [],
+};
+
 export interface DocumentSettings {
   displayUnit: DisplayUnit;
   viewport: ViewportPreferences;
+  manufacturing: ManufacturingSettings;
 }
 
 export interface Layer {
@@ -222,6 +281,7 @@ export interface CreateDocumentInput {
   activeLayerId?: string;
   guides?: Guide[];
   objects?: DocumentObject[];
+  manufacturing?: ManufacturingSettings;
 }
 
 export interface CreateBlankProjectInput {
@@ -237,6 +297,7 @@ export interface CreateBlankProjectInput {
   activeLayerId?: string;
   guides?: Guide[];
   objects?: DocumentObject[];
+  manufacturing?: ManufacturingSettings;
 }
 
 export interface UpdateViewportPreferences {
@@ -249,6 +310,8 @@ export interface UpdateViewportPreferences {
   snapToObjects?: boolean;
   snapToDocument?: boolean;
 }
+
+export type UpdateManufacturingSettings = ManufacturingSettings;
 
 export interface HitTestRequest {
   point: PointMm;
@@ -421,6 +484,9 @@ export function createDocument(input: CreateDocumentInput): LaserxDocument {
     settings: {
       displayUnit: input.displayUnit ?? input.inputUnit,
       viewport: copyViewportPreferences(DEFAULT_VIEWPORT_PREFERENCES),
+      manufacturing: copyManufacturingSettings(
+        input.manufacturing ?? DEFAULT_MANUFACTURING_SETTINGS,
+      ),
     },
     layers,
     activeLayerId,
@@ -447,6 +513,9 @@ export function createBlankProject(
       : { activeLayerId: input.activeLayerId }),
     ...(input.guides === undefined ? {} : { guides: input.guides }),
     ...(input.objects === undefined ? {} : { objects: input.objects }),
+    ...(input.manufacturing === undefined
+      ? {}
+      : { manufacturing: input.manufacturing }),
   };
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -532,6 +601,108 @@ export function setViewportPreferences(
               updates.snapToDocument ?? current.snapping.snapToDocument,
           },
         },
+      },
+    },
+  };
+}
+
+const MANUFACTURING_SETTING_FIELDS: readonly ManufacturingSettingField[] = [
+  "process",
+  "material",
+  "thicknessMm",
+  "kerfWidthMm",
+  "minimumFeatureWidthMm",
+  "minimumBridgeWidthMm",
+  "minimumGapMm",
+  "contourSpacingMm",
+  "heatDistortionSpacingMm",
+  "tolerancePreset",
+];
+const MANUFACTURING_PROCESSES: readonly ManufacturingProcess[] = [
+  "laser",
+  "plasma",
+  "waterjet",
+  "router",
+];
+const MANUFACTURING_MATERIALS: readonly ManufacturingMaterial[] = [
+  "mild-steel",
+  "stainless-steel",
+  "aluminum",
+  "wood",
+  "acrylic",
+  "other",
+];
+const MANUFACTURING_TOLERANCE_PRESETS: readonly ManufacturingTolerancePreset[] = [
+  "fine",
+  "balanced",
+  "robust",
+];
+
+export function validateManufacturingSettings(
+  settings: ManufacturingSettings,
+): void {
+  if (settings.presetId.trim().length === 0 || settings.presetId.length > 100) {
+    throw new RangeError("Manufacturing preset ID must contain 1 to 100 characters.");
+  }
+  if (!MANUFACTURING_PROCESSES.includes(settings.process)) {
+    throw new RangeError("Manufacturing process is not supported.");
+  }
+  if (!MANUFACTURING_MATERIALS.includes(settings.material)) {
+    throw new RangeError("Manufacturing material is not supported.");
+  }
+  if (!MANUFACTURING_TOLERANCE_PRESETS.includes(settings.tolerancePreset)) {
+    throw new RangeError("Manufacturing tolerance preset is not supported.");
+  }
+  assertPositiveFinite(settings.thicknessMm, "Material thickness");
+  assertPositiveFinite(settings.kerfWidthMm, "Kerf width");
+  assertPositiveFinite(settings.minimumFeatureWidthMm, "Minimum feature width");
+  assertPositiveFinite(settings.minimumBridgeWidthMm, "Minimum bridge width");
+  assertPositiveFinite(settings.minimumGapMm, "Minimum gap");
+  assertPositiveFinite(settings.contourSpacingMm, "Contour spacing");
+  if (settings.heatDistortionSpacingMm !== null) {
+    assertPositiveFinite(
+      settings.heatDistortionSpacingMm,
+      "Heat-distortion spacing",
+    );
+  }
+  if (
+    new Set(settings.customizedFields).size !== settings.customizedFields.length ||
+    settings.customizedFields.some(
+      (field) => !MANUFACTURING_SETTING_FIELDS.includes(field),
+    )
+  ) {
+    throw new RangeError("Customized manufacturing fields must be unique and supported.");
+  }
+}
+
+export function copyManufacturingSettings(
+  settings: ManufacturingSettings,
+): ManufacturingSettings {
+  validateManufacturingSettings(settings);
+  return {
+    ...settings,
+    presetId: settings.presetId.trim(),
+    customizedFields: [...settings.customizedFields],
+  };
+}
+
+export function setManufacturingSettings(
+  project: LaserxProject,
+  manufacturing: UpdateManufacturingSettings,
+  updatedAt: string,
+): LaserxProject {
+  const validated = copyManufacturingSettings(manufacturing);
+  return {
+    ...copyProject(project),
+    project: {
+      ...project.project,
+      updatedAt,
+    },
+    document: {
+      ...copyDocument(project.document),
+      settings: {
+        ...project.document.settings,
+        manufacturing: validated,
       },
     },
   };
@@ -814,6 +985,9 @@ export function copyDocument(document: LaserxDocument): LaserxDocument {
     settings: {
       ...document.settings,
       viewport: copyViewportPreferences(document.settings.viewport),
+      manufacturing: copyManufacturingSettings(
+        document.settings.manufacturing,
+      ),
     },
     layers: document.layers.map(copyLayer),
     guides: document.guides.map(copyGuide),

@@ -12,7 +12,7 @@ Round trips, transform inverses, scale invariants, winding/containment rules, id
 
 ### Golden fixtures
 
-Reviewed SVG, DXF, trace, and project outputs. Golden changes require an explanation of the geometric difference.
+Reviewed SVG, DXF, trace, cutability, and project outputs. Golden changes require an explanation of the geometric difference.
 
 ### Integration
 
@@ -217,7 +217,7 @@ tolerance. No broader tolerance hides unit or closure failures.
   four-million-pixel downsample path at 2385 x 1677;
 - application and project-format tests prove preview/reject/cancel do not
   mutate project/dirty/history state, stale results fail, acceptance is one
-  undoable `objects.import`, and only ordinary schema-v5 editable paths persist;
+  undoable `objects.import`, and only ordinary editable paths persist;
 - desktop tests inject storage, codec, and worker ports to prove reservation
   before dialogs, duplicate rejection, operation-ID-aware cancellation during
   read/decode/post-worker stages, whole-operation timeout, unconditional
@@ -227,7 +227,7 @@ tolerance. No broader tolerance hides unit or closure failures.
 - the packaged Windows workflow imports committed real PNG and JPEG files
   through Electron's native decoder, changes preview modes,
   aligns original-plus-trace, accepts paths, opens node editing, receives the
-  standard analysis warning, saves schema v5, and undoes to the exact original
+  standard analysis result, saves schema v6, and undoes to the exact original
   document;
 - `pnpm audit:raster` verifies the original LaserX engine identity, version,
   workspace-only dependency set, accepted ADR, and license review.
@@ -235,6 +235,41 @@ tolerance. No broader tolerance hides unit or closure failures.
 The representative 512 x 512 noisy case must finish under 5 seconds. The
 controller and worker enforce the separately documented 30-second safeguards; see
 `docs/research/M07-RASTER-PERFORMANCE.md`.
+
+## M08 executable layers
+
+- domain and project-format tests cover complete manufacturing-setting
+  validation/copying, one-command settings undo/redo, schema-v6 deterministic
+  round trips, and the v1-through-v6 migration registry;
+- pure cutability tests cover all twelve rule codes, geometry-derived nested
+  retained/drop-out depth, conservative ambiguity for open, degenerate,
+  duplicate/overlapping, self-intersecting, and mutually intersecting geometry,
+  explicit measured/limit evidence, exact cache invalidation, ellipse
+  flattening without adjacent-segment false positives, and a 400-contour gross
+  performance regression boundary;
+- `fixtures/cutability/m08-rule-goldens.json` pins nested classification,
+  open-contour ambiguity, a safe single-contour false-positive guard, and
+  narrow/close geometry against repository-owned millimeter coordinates;
+- bridge tests prove manual and automatic candidates meet the minimum width,
+  automatic direction selection is deterministic, previews do not mutate the
+  source, accepted replacements are ordinary closed paths, rejection is
+  inert, acceptance adds one history entry, and one undo restores the exact
+  document;
+- desktop integration tests inject the worker port to prove progress,
+  cancellation, exact cache reuse, command invalidation, and fingerprint-based
+  rejection of a late result even when a worker ignores abort;
+- strict IPC tests reject renderer-supplied analysis geometry and replacement
+  contours, while renderer-state schemas validate issue evidence, region
+  polygons, progress, focus, and bridge proposals;
+- two packaged Windows scenarios open a nested-contour project, run the real
+  worker, navigate/highlight the island issue, preview a manual bridge and an
+  automatic bridge, accept each as one command, undo exactly, and persist
+  schema-v6 editable paths and manufacturing settings.
+
+The 400-contour/1,600-segment representative case must finish under 5 seconds.
+Heavy work remains off the renderer thread, cancellation terminates the worker,
+and analysis-input fingerprints prevent stale publication. These limits do not turn
+the conservative analysis into a manufacturability guarantee.
 
 Run all milestone checks from the repository root:
 

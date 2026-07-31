@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bridgeProposalRequestSchema,
+  cutabilityAnalysisRequestSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
   fontCatalogSchema,
   openRecentRequestSchema,
   rasterTraceRequestSchema,
+  setManufacturingSettingsRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
@@ -71,6 +74,44 @@ describe("typed IPC validation", () => {
         settings: { ...request.settings, threshold: 300 },
       }).success,
     ).toBe(false);
+  });
+
+  it("keeps manufacturing geometry in the trusted host and validates settings", () => {
+    const analysisRequest = {
+      operationId: "60000000-0000-4000-8000-000000000072",
+      objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+    };
+    expect(cutabilityAnalysisRequestSchema.safeParse(analysisRequest).success).toBe(true);
+    expect(cutabilityAnalysisRequestSchema.safeParse({
+      ...analysisRequest,
+      document: { objects: [] },
+    }).success).toBe(false);
+    const bridgeRequest = {
+      issueId: "DISCONNECTED_ISLAND:1",
+      widthMm: 2,
+      mode: "automatic",
+    };
+    expect(bridgeProposalRequestSchema.safeParse(bridgeRequest).success).toBe(true);
+    expect(bridgeProposalRequestSchema.safeParse({
+      ...bridgeRequest,
+      replacementContours: [],
+    }).success).toBe(false);
+    expect(setManufacturingSettingsRequestSchema.safeParse({
+      settings: {
+        presetId: "laser-mild-steel-3mm",
+        process: "laser",
+        material: "mild-steel",
+        thicknessMm: 3,
+        kerfWidthMm: -0.2,
+        minimumFeatureWidthMm: 1,
+        minimumBridgeWidthMm: 2,
+        minimumGapMm: 0.8,
+        contourSpacingMm: 1,
+        heatDistortionSpacingMm: null,
+        tolerancePreset: "balanced",
+        customizedFields: [],
+      },
+    }).success).toBe(false);
   });
 
   it("rejects arbitrary fields, pixels, and invalid viewport values", () => {
@@ -141,6 +182,20 @@ describe("typed IPC validation", () => {
                 snapToDocument: true,
               },
             },
+            manufacturing: {
+              presetId: "laser-mild-steel-3mm",
+              process: "laser",
+              material: "mild-steel",
+              thicknessMm: 3,
+              kerfWidthMm: 0.2,
+              minimumFeatureWidthMm: 1,
+              minimumBridgeWidthMm: 2,
+              minimumGapMm: 0.8,
+              contourSpacingMm: 1,
+              heatDistortionSpacingMm: null,
+              tolerancePreset: "balanced",
+              customizedFields: [],
+            },
           },
           layers: [
             {
@@ -177,7 +232,12 @@ describe("typed IPC validation", () => {
       recovery: null,
       interchange: { exportSummary: null },
       raster: { job: null, preview: null },
-      analysis: { cutability: null },
+      analysis: {
+        job: null,
+        focusedIssueId: null,
+        bridgeProposal: null,
+        cutability: null,
+      },
     });
     expect(result.success).toBe(true);
   });

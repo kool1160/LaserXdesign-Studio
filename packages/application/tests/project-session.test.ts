@@ -68,6 +68,30 @@ describe("ProjectSession", () => {
     expect(session.state.dirty).toBe(true);
   });
 
+  it("persists manufacturing settings as one undoable project change", () => {
+    const session = new ProjectSession(dependencies());
+    const before = session.state.project.document.settings.manufacturing;
+    session.dispatch({
+      type: "project.set-manufacturing-settings",
+      settings: {
+        ...before,
+        kerfWidthMm: 0.35,
+        minimumBridgeWidthMm: 2.5,
+        customizedFields: ["kerfWidthMm", "minimumBridgeWidthMm"],
+      },
+    });
+    expect(session.state.project.document.settings.manufacturing).toMatchObject({
+      kerfWidthMm: 0.35,
+      minimumBridgeWidthMm: 2.5,
+      customizedFields: ["kerfWidthMm", "minimumBridgeWidthMm"],
+    });
+    expect(session.state.editor.history.undoDepth).toBe(1);
+    session.undo();
+    expect(session.state.project.document.settings.manufacturing).toEqual(before);
+    session.redo();
+    expect(session.state.project.document.settings.manufacturing.kerfWidthMm).toBe(0.35);
+  });
+
   it("restores recovery as dirty and retains the original path", () => {
     const session = new ProjectSession(dependencies());
     const project = createBlankProject({

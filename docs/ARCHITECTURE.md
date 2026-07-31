@@ -171,10 +171,47 @@ original-plus-trace views remain non-authoritative. Encoded previews validate
 before candidate publication so replacement is atomic. Reject, cancel, timeout,
 and any stage failure cannot alter the prior candidate, document, dirty state,
 or history. Accept uses one `objects.import`
-command, after which ordinary schema-v5 paths enter the standard
-`packages/cutability` interface. M07 reports that manufacturing settings are
-required and `cutReady` is false; M08 owns actual manufacturing-rule analysis.
-ADR 0019 records the engine, licensing, trust boundary, and limits.
+command, after which ordinary editable paths enter the standard
+`packages/cutability` interface. M07 originally stopped at a review-required
+boundary; M08 now runs the accepted paths through actual manufacturing-rule
+analysis. ADR 0019 records the trace engine, licensing, trust boundary, and
+limits.
+
+For M08, schema v6 persists editable manufacturing settings and records which
+numeric values differ from the selected starting preset. `packages/cutability`
+normalizes visible lines, rectangles, ellipses, paths, text contours, and group
+descendants to world-millimeter polylines under the established 0.01 mm
+flattening tolerance. Analysis is capped at 50,000 flattened segments and
+reports deterministic issue IDs, severity, affected object/segment IDs,
+measured and configured millimeter values, location, explanation, and repair
+guidance for every required rule class.
+
+Region classification uses geometry containment rather than text or character
+names. Stock outside all valid closed contours is explicitly retained, and
+each containment depth toggles removed/retained material. Any open,
+degenerate, self-intersecting, or mutually intersecting contour makes the whole
+preview ambiguous. The renderer therefore cannot present a definitive
+retained/drop-out classification when the topology does not support one.
+
+Electron runs the pure analysis task in a dedicated worker. Renderer requests
+contain only an operation ID and an optional selected-object scope; geometry
+comes from the authoritative main-process session. Cancellation terminates the
+worker. An exact analysis-input fingerprint—manufacturing settings, layer
+visibility/lock state, and visible objects—rejects late relevant results, and
+the one-entry cache keys both that fingerprint and the normalized object
+scope. Geometry/import/text/manufacturing commands invalidate analysis and
+bridge state, while display preferences, guides, layer names, and
+selection-only issue navigation do not.
+
+Bridge proposals are derived candidates. Manual mode evaluates one cardinal
+direction; automatic mode deterministically chooses the shortest of four
+collision-free cardinal candidates. The proposal must meet the configured
+minimum width and leaves project, dirty state, and history unchanged. The M08
+baseline repairs only a disconnected island and its containing top-level paths
+on the same editable layer. Acceptance rechecks the fingerprint, materializes
+ordinary closed paths through the existing Clipper2 boundary, and dispatches
+one undoable topology replacement. Rejection is non-mutating. ADR 0020 records
+the settings, classification, worker/cache, ambiguity, and repair decisions.
 
 ## State flow
 

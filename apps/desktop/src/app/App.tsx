@@ -2,7 +2,16 @@ import {
   previewSelectedPathJoin,
   type EditorActionRequest,
 } from "@laserx/application";
-import type { RasterTracePreset, RasterTraceSettings } from "@laserx/domain";
+import type {
+  ManufacturingSettingField,
+  ManufacturingSettings,
+  RasterTracePreset,
+  RasterTraceSettings,
+} from "@laserx/domain";
+import {
+  MANUFACTURING_PRESETS,
+  settingsForManufacturingPreset,
+} from "@laserx/cutability";
 import { settingsForRasterTracePreset } from "@laserx/import-raster";
 import {
   useCallback,
@@ -62,6 +71,20 @@ export function App() {
     useState<string | null>(null);
   const [activeRasterOperationId, setActiveRasterOperationId] =
     useState<string | null>(null);
+  const [activeCutabilityOperationId, setActiveCutabilityOperationId] =
+    useState<string | null>(null);
+  const [manufacturingSettings, setManufacturingSettings] =
+    useState<ManufacturingSettings>(() =>
+      settingsForManufacturingPreset("laser-mild-steel-3mm"),
+    );
+  const [manufacturingPreviewVisible, setManufacturingPreviewVisible] =
+    useState(true);
+  const [issueSeverityFilter, setIssueSeverityFilter] = useState<
+    "all" | "error" | "warning"
+  >("all");
+  const [bridgeDirection, setBridgeDirection] = useState<
+    "left" | "right" | "up" | "down"
+  >("right");
   const [rasterSettings, setRasterSettings] = useState<RasterTraceSettings>(
     () => settingsForRasterTracePreset("balanced"),
   );
@@ -125,6 +148,17 @@ export function App() {
     state?.project.document.settings.displayUnit,
     state?.project.document.settings.viewport.gridSpacingMm,
   ]);
+
+  useEffect(() => {
+    if (state !== null) {
+      setManufacturingSettings({
+        ...state.project.document.settings.manufacturing,
+        customizedFields: [
+          ...state.project.document.settings.manufacturing.customizedFields,
+        ],
+      });
+    }
+  }, [state?.project.id, state?.project.document.settings.manufacturing]);
 
   useEffect(() => {
     if (state?.editor.selectionBounds === null || state === null) {
@@ -222,6 +256,46 @@ export function App() {
       background: current.background,
     }));
   }, []);
+
+  const runCutability = useCallback(async (objectIds: readonly string[]) => {
+    const operationId = window.crypto.randomUUID();
+    setActiveCutabilityOperationId(operationId);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.laserx.runCutabilityAnalysis({
+        operationId,
+        objectIds: [...objectIds],
+      });
+      setState(result.state);
+      if (!result.ok) setError(result.error);
+    } catch {
+      setError("The manufacturing analysis worker returned an invalid response.");
+    } finally {
+      setActiveCutabilityOperationId(null);
+      setBusy(false);
+    }
+  }, []);
+
+  const chooseManufacturingPreset = useCallback((presetId: string) => {
+    setManufacturingSettings(settingsForManufacturingPreset(presetId));
+  }, []);
+
+  const updateManufacturingField = useCallback(
+    <Field extends ManufacturingSettingField,>(
+      field: Field,
+      value: ManufacturingSettings[Field],
+    ) => {
+      setManufacturingSettings((current) => ({
+        ...current,
+        [field]: value,
+        customizedFields: current.customizedFields.includes(field)
+          ? [...current.customizedFields]
+          : [...current.customizedFields, field],
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     if (state === null) {
@@ -363,6 +437,14 @@ export function App() {
   );
   const unit = document.settings.displayUnit;
   const unitLabel = unit === "inches" ? "in" : "mm";
+  const cutability = state.analysis.cutability;
+  const focusedCutabilityIssue = cutability?.issues.find(
+    (issue) => issue.id === state.analysis.focusedIssueId,
+  ) ?? null;
+  const visibleCutabilityIssues = (cutability?.issues ?? []).filter(
+    (issue) =>
+      issueSeverityFilter === "all" || issue.severity === issueSeverityFilter,
+  );
 
   const createExactDocument = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -571,7 +653,7 @@ export function App() {
         >
           DXF
         </button>
-        <span className="shell-badge">M07 Raster tracing</span>
+        <span className="shell-badge">M08 Manufacturing review</span>
       </nav>
 
       {state.recovery !== null && (
@@ -627,7 +709,7 @@ export function App() {
             <dl className="project-facts">
               <div>
                 <dt>Format</dt>
-                <dd>.laserx v5</dd>
+                <dd>.laserx v6</dd>
               </div>
               <div>
                 <dt>Stock</dt>
@@ -1019,15 +1101,251 @@ export function App() {
                 </div>
               </div>
             )}
-            {state.analysis.cutability !== null && (
-              <div className="raster-summary" data-testid="cutability-analysis">
-                <strong>Cutability review required</strong>
-                <span>{state.analysis.cutability.issueCount} warning(s); cut-ready: no</span>
-                <ul>
-                  {state.analysis.cutability.issues.map((issue) => (
-                    <li key={`${issue.code}-${issue.objectId ?? "global"}`}>{issue.message}</li>
+          </section>
+
+          <section className="manufacturing-panel" data-testid="manufacturing-panel">
+            <span className="section-label">Manufacturing analysis</span>
+            <p className="manufacturing-disclaimer">
+              Guidance from editable values—not a certification of machine safety or part quality.
+            </p>
+            <label>
+              Starting preset
+              <select
+                aria-label="Manufacturing preset"
+                value={manufacturingSettings.presetId}
+                disabled={busy}
+                onChange={(event) => chooseManufacturingPreset(event.target.value)}
+              >
+                {MANUFACTURING_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>{preset.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="manufacturing-settings-grid">
+              {([
+                ["Thickness", "thicknessMm"],
+                ["Kerf", "kerfWidthMm"],
+                ["Min feature", "minimumFeatureWidthMm"],
+                ["Min bridge", "minimumBridgeWidthMm"],
+                ["Min gap", "minimumGapMm"],
+                ["Contour spacing", "contourSpacingMm"],
+              ] as const).map(([label, field]) => (
+                <label key={field}>
+                  {label} (mm)
+                  <input
+                    aria-label={`${label} millimeters`}
+                    type="number"
+                    min="0.001"
+                    step="0.1"
+                    value={manufacturingSettings[field]}
+                    disabled={busy}
+                    onChange={(event) =>
+                      updateManufacturingField(field, Number(event.target.value))
+                    }
+                  />
+                </label>
+              ))}
+              <label>
+                Heat spacing (mm)
+                <input
+                  aria-label="Heat distortion spacing millimeters"
+                  type="number"
+                  min="0.001"
+                  step="0.1"
+                  placeholder="Optional"
+                  value={manufacturingSettings.heatDistortionSpacingMm ?? ""}
+                  disabled={busy}
+                  onChange={(event) =>
+                    updateManufacturingField(
+                      "heatDistortionSpacingMm",
+                      event.target.value === "" ? null : Number(event.target.value),
+                    )
+                  }
+                />
+              </label>
+            </div>
+            <span className="preset-transparency" data-testid="preset-transparency">
+              {manufacturingSettings.customizedFields.length === 0
+                ? "Using preset values"
+                : `Edited: ${manufacturingSettings.customizedFields.join(", ")}`}
+            </span>
+            <div className="button-grid compact">
+              <button
+                type="button"
+                data-testid="apply-manufacturing-settings"
+                disabled={busy}
+                onClick={() =>
+                  void run(() =>
+                    window.laserx.setManufacturingSettings({
+                      settings: manufacturingSettings,
+                    }),
+                  )
+                }
+              >
+                Apply settings
+              </button>
+              <button
+                type="button"
+                data-testid="run-cutability-analysis"
+                disabled={busy || document.objects.length === 0}
+                onClick={() => void runCutability([])}
+              >
+                Analyze all
+              </button>
+            </div>
+            {state.analysis.job !== null && (
+              <div className="analysis-progress" data-testid="cutability-progress">
+                <strong>{state.analysis.job.stage}</strong>
+                <progress max="100" value={state.analysis.job.percent} />
+                <button
+                  type="button"
+                  className="quiet"
+                  data-testid="cancel-cutability-analysis"
+                  onClick={() =>
+                    void window.laserx.cancelCutabilityAnalysis({
+                      operationId:
+                        state.analysis.job?.operationId ??
+                        activeCutabilityOperationId ??
+                        "",
+                    })
+                  }
+                >
+                  Cancel analysis
+                </button>
+              </div>
+            )}
+            {cutability !== null && (
+              <div className="cutability-summary" data-testid="cutability-analysis">
+                <strong>
+                  {cutability.status === "ambiguous" ? "Ambiguous preview" : "Analysis complete"}
+                </strong>
+                <span data-testid="cutability-summary">
+                  {cutability.errorCount} error(s) · {cutability.warningCount} warning(s) · cut-ready claim: no
+                </span>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={manufacturingPreviewVisible}
+                    onChange={(event) => setManufacturingPreviewVisible(event.target.checked)}
+                  />
+                  Show retained / removed preview
+                </label>
+                <label>
+                  Issue filter
+                  <select
+                    aria-label="Manufacturing issue severity"
+                    value={issueSeverityFilter}
+                    onChange={(event) =>
+                      setIssueSeverityFilter(event.target.value as typeof issueSeverityFilter)
+                    }
+                  >
+                    <option value="all">All</option>
+                    <option value="error">Errors</option>
+                    <option value="warning">Warnings</option>
+                  </select>
+                </label>
+                <ul className="cutability-issues" data-testid="cutability-issues">
+                  {visibleCutabilityIssues.map((issue) => (
+                    <li key={issue.id}>
+                      <button
+                        type="button"
+                        className={state.analysis.focusedIssueId === issue.id ? "active" : ""}
+                        data-issue-code={issue.code}
+                        onClick={() =>
+                          void run(() =>
+                            window.laserx.focusCutabilityIssue({ issueId: issue.id }),
+                          )
+                        }
+                      >
+                        <strong>{issue.code.replaceAll("_", " ")}</strong>
+                        <span>{issue.message}</span>
+                        <small>
+                          {issue.measuredValueMm.toFixed(3)} mm measured / {issue.configuredLimitMm.toFixed(3)} mm limit
+                        </small>
+                      </button>
+                    </li>
                   ))}
                 </ul>
+                {focusedCutabilityIssue?.code === "DISCONNECTED_ISLAND" && (
+                  <div className="bridge-controls" data-testid="bridge-controls">
+                    <label>
+                      Manual direction
+                      <select
+                        aria-label="Manual bridge direction"
+                        value={bridgeDirection}
+                        onChange={(event) =>
+                          setBridgeDirection(event.target.value as typeof bridgeDirection)
+                        }
+                      >
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                        <option value="up">Up</option>
+                        <option value="down">Down</option>
+                      </select>
+                    </label>
+                    <div className="button-grid compact">
+                      <button
+                        type="button"
+                        data-testid="preview-manual-bridge"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(() =>
+                            window.laserx.previewBridge({
+                              issueId: focusedCutabilityIssue.id,
+                              widthMm: manufacturingSettings.minimumBridgeWidthMm,
+                              mode: "manual",
+                              direction: bridgeDirection,
+                            }),
+                          )
+                        }
+                      >
+                        Preview manual
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="preview-auto-bridge"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(() =>
+                            window.laserx.previewBridge({
+                              issueId: focusedCutabilityIssue.id,
+                              widthMm: manufacturingSettings.minimumBridgeWidthMm,
+                              mode: "automatic",
+                            }),
+                          )
+                        }
+                      >
+                        Preview auto
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {state.analysis.bridgeProposal !== null && (
+                  <div className="bridge-preview-summary" data-testid="bridge-preview-summary">
+                    <strong>{state.analysis.bridgeProposal.summary}</strong>
+                    <span>Original geometry is unchanged until accepted.</span>
+                    <div className="button-grid compact">
+                      <button
+                        type="button"
+                        data-testid="accept-bridge"
+                        disabled={busy}
+                        onClick={() => void run(() => window.laserx.acceptBridge())}
+                      >
+                        Accept bridge
+                      </button>
+                      <button
+                        type="button"
+                        className="quiet"
+                        data-testid="reject-bridge"
+                        disabled={busy}
+                        onClick={() => void run(() => window.laserx.rejectBridge())}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <p className="preview-assumption">{cutability.previewAssumption}</p>
               </div>
             )}
           </section>
@@ -1275,6 +1593,21 @@ export function App() {
                       rasterPreviewMode === "overlay"
                         ? rasterOverlayOpacity
                         : 1,
+                  }
+            }
+            manufacturingPreview={
+              cutability === null || !manufacturingPreviewVisible
+                ? null
+                : {
+                    regions: cutability.regions.map((region) => ({
+                      id: region.id,
+                      disposition: region.disposition,
+                      points: region.points,
+                    })),
+                    focusedIssueLocation:
+                      focusedCutabilityIssue?.location ?? null,
+                    bridgePolygon:
+                      state.analysis.bridgeProposal?.bridgePolygon ?? null,
                   }
             }
             onEditorAction={dispatchEditorAction}
@@ -2034,7 +2367,7 @@ export function App() {
           {selectionIds.length} selected · undo {state.editor.history.undoDepth} ·
           redo {state.editor.history.redoDepth}
         </span>
-        <span>Cartesian · +X right · +Y up · schema v5</span>
+        <span>Cartesian · +X right · +Y up · schema v6</span>
       </footer>
     </div>
   );

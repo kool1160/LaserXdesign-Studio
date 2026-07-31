@@ -37,6 +37,11 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Schema-v6 editable manufacturing settings, transparent process presets,
+  deterministic measured cutability issues, retained/removed/ambiguous
+  preview, exact cache invalidation, cancellable worker execution, and
+  non-mutating manual/automatic bridge proposals with one-command acceptance,
+  undo, persistence, reviewed goldens, and packaged Windows coverage.
 - Safe bounded PNG/JPEG tracing with crop/rotate/grayscale/contrast/threshold/
   invert/blur/denoise/background controls, deterministic presets, exact
   speckle reporting, tolerance-checked simplification, cancellable worker

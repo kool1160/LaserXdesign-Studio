@@ -91,7 +91,7 @@ test("packaged text stays editable, arcs, converts, undoes, and reopens", async 
       .toBe("text");
 
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 5);
+    await waitForProjectSchema(launched.projectPath, 6);
     const disk = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       document: { objects: Array<{ type: string; content?: string }> };
     };
@@ -139,7 +139,7 @@ test("changed font fingerprint preserves geometry until explicit substitution", 
       )
       .toBe("text");
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 5);
+    await waitForProjectSchema(launched.projectPath, 6);
   } finally {
     await kill(launched);
   }

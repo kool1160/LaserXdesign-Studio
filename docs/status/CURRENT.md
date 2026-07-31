@@ -100,6 +100,38 @@ Do not implement G-code, lead-ins, cut order, heat simulation, guaranteed
 manufacturability, authoritative machine process tables, M09 sign tools, AI,
 CAM, DWG, or machine control.
 
+## M08 implementation candidate
+
+The isolated `feat/m08-cutability` candidate implements the complete Issue #9
+vertical slice while M08 remains the active gate:
+
+- schema v6 persists transparent preset-derived manufacturing settings and
+  migrates schema v1 through v5 deterministically;
+- the pure world-millimeter rule engine reports all twelve required issue
+  classes with measured/configured evidence and conservatively marks invalid
+  topology ambiguous;
+- geometry-derived containment classifies retained islands and enclosed
+  drop-outs without character-name rules;
+- exact cache keys, document-command invalidation, worker cancellation, and
+  fingerprint checks prevent stale results from publishing;
+- manual and shortest-cardinal automatic bridge candidates remain
+  non-mutating until one undoable topology command is accepted;
+- the packaged Windows renderer exposes editable settings, progress/cancel,
+  issue severity filters, focused navigation/highlighting, manufacturing
+  regions, bridge preview/accept/reject, assumptions, and the required
+  non-certification disclaimer;
+- reviewed repository-owned rule goldens, a 400-contour performance boundary,
+  persistence/integration regressions, and manual/automatic packaged E2E
+  scenarios provide executable evidence.
+
+Local `pnpm verify`, `pnpm audit --prod`, Repository Guard, and
+`git diff --check` pass. The suite records 213 unit/integration tests and 22
+packaged Windows Electron scenarios.
+
+This candidate is not a merge or milestone advancement. Issue #9 stays open,
+M09 remains blocked, and exact-head review plus required green CI are still
+required.
+
 ## M08 exit rule
 
 Do not advance to M09 until every acceptance test and exit item in

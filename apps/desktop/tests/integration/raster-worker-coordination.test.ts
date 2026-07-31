@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { RasterTraceCandidate, RasterTraceSettings } from "@laserx/domain";
+import { analyzeDocumentCutability } from "@laserx/cutability";
 import type {
   DecodedRaster,
   RasterTraceTaskRequest,
@@ -14,6 +15,7 @@ import {
   DesktopController,
   type DesktopDialogs,
 } from "../../electron/desktop-controller.js";
+import type { CutabilityWorkerPort } from "../../electron/cutability-worker-service.js";
 import type {
   RasterCodecPort,
   RasterPreviewDataUrls,
@@ -154,6 +156,18 @@ const rasterCodec: RasterCodecPort = {
   encodePreview: encodedPreview,
 };
 
+const cutabilityWorker: CutabilityWorkerPort = {
+  run: (request, _signal, onProgress) => {
+    onProgress?.({ operationId: request.operationId, percent: 100, stage: "classifying" });
+    return Promise.resolve(
+      analyzeDocumentCutability(request.document, {
+        operationId: request.operationId,
+        objectIds: request.objectIds,
+      }),
+    );
+  },
+};
+
 interface DesktopOverrides {
   chooseImportRaster?: () => Promise<string | null>;
   onStateChanged?: (state: DesktopController["state"]) => void;
@@ -183,6 +197,7 @@ async function desktop(
     rasterStorage: overrides.rasterStorage ?? rasterStorage,
     rasterCodec: overrides.rasterCodec ?? rasterCodec,
     rasterWorker: worker,
+    cutabilityWorker,
     ...(overrides.rasterOperationTimeoutMs === undefined
       ? {}
       : { rasterOperationTimeoutMs: overrides.rasterOperationTimeoutMs }),
@@ -233,7 +248,7 @@ describe("raster worker coordination", () => {
     });
     expect(controller.state.editor.history.undoDepth).toBe(1);
     expect(controller.state.analysis.cutability).toMatchObject({
-      status: "requires-settings",
+      status: "complete",
       pathCount: 1,
       cutReady: false,
     });
