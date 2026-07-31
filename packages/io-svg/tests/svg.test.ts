@@ -4,6 +4,53 @@ import { describe, expect, it } from "vitest";
 
 import { exportSvg, importSvg } from "../src/index.js";
 
+function transformedCubicProject() {
+  const layerId = "00000000-0000-5000-8000-000000000034";
+  return createBlankProject({
+    id: "00000000-0000-5000-8000-000000000031",
+    now: "2026-07-31T00:00:00.000Z",
+    width: 600,
+    height: 500,
+    layers: [{ id: layerId, name: "Cut", visible: true, locked: false }],
+    activeLayerId: layerId,
+    objects: [{
+      id: "00000000-0000-5000-8000-000000000032",
+      type: "group",
+      layerId,
+      transform: { a: 5, b: 0, c: 0, d: 5, eMm: 20, fMm: 30 },
+      children: [{
+        id: "00000000-0000-5000-8000-000000000033",
+        type: "path",
+        layerId,
+        transform: { a: 10, b: 0, c: 0, d: 10, eMm: 2, fMm: 3 },
+        closed: false,
+        points: [{ xMm: 0, yMm: 0 }, { xMm: 10, yMm: 0 }],
+        handles: [
+          { incoming: null, outgoing: { xMm: 0, yMm: 10 } },
+          { incoming: { xMm: 10, yMm: 10 }, outgoing: null },
+        ],
+      }],
+    }],
+  });
+}
+
+function pathBounds(points: readonly { xMm: number; yMm: number }[]) {
+  return points.reduce(
+    (bounds, point) => ({
+      minXmm: Math.min(bounds.minXmm, point.xMm),
+      minYmm: Math.min(bounds.minYmm, point.yMm),
+      maxXmm: Math.max(bounds.maxXmm, point.xMm),
+      maxYmm: Math.max(bounds.maxYmm, point.yMm),
+    }),
+    {
+      minXmm: Number.POSITIVE_INFINITY,
+      minYmm: Number.POSITIVE_INFINITY,
+      maxXmm: Number.NEGATIVE_INFINITY,
+      maxYmm: Number.NEGATIVE_INFINITY,
+    },
+  );
+}
+
 describe("SVG interchange", () => {
   it("loads the representative 24 inch and 600 mm fixtures at physical scale", () => {
     const inches = importSvg(
@@ -143,5 +190,16 @@ describe("SVG interchange", () => {
     expect(candidate.paths[0]).toMatchObject({ closed: true });
     expect(candidate.paths[0]?.points[1]?.xMm).toBeCloseTo(609.6, 9);
     expect(candidate.paths[0]?.points[2]?.yMm).toBeCloseTo(304.8, 9);
+  });
+
+  it("round-trips nested transformed cubic bounds within the 0.01 mm world tolerance", () => {
+    const artifact = exportSvg(transformedCubicProject().document);
+    const candidate = importSvg(artifact.content);
+    const bounds = pathBounds(candidate.paths[0]?.points ?? []);
+    expect(Math.abs(bounds.minXmm - 30)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(bounds.minYmm - 45)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(bounds.maxXmm - 530)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(bounds.maxYmm - 420)).toBeLessThanOrEqual(0.01);
+    expect(artifact.summary.bounds).toEqual(bounds);
   });
 });

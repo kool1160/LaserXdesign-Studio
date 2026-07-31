@@ -92,4 +92,25 @@ describe("vector import preview", () => {
     expect(() => session.commitVectorImport()).toThrow(/project changed/u);
     expect(session.state.project.document.objects).toHaveLength(0);
   });
+
+  it("rejects an expanded-geometry overflow before preview state or history changes", () => {
+    const session = new ProjectSession(dependencies());
+    const before = session.state;
+    const oversized = candidate();
+    oversized.paths = [{
+      layerName: "Cut",
+      closed: false,
+      points: Array.from({ length: 200_001 }, (_unused, index) => ({
+        xMm: index,
+        yMm: 0,
+      })),
+    }];
+
+    expect(() => session.previewVectorImport(oversized, "expansion-bomb.dxf"))
+      .toThrow(/200,000 expanded geometry points/u);
+    expect(session.state.project).toEqual(before.project);
+    expect(session.state.dirty).toBe(false);
+    expect(session.state.editor.importPreview).toBeNull();
+    expect(session.state.editor.history).toEqual(before.editor.history);
+  });
 });

@@ -12,6 +12,7 @@ import {
 const MAX_DXF_BYTES = 5_000_000;
 const MAX_DXF_PAIRS = 500_000;
 const MAX_DXF_ENTITIES = 100_000;
+const MAX_DXF_GEOMETRY_POINTS = 200_000;
 const DEFAULT_TOLERANCE_MM = 0.01;
 
 export type UnitlessDxfUnit = "millimeters" | "inches";
@@ -29,6 +30,27 @@ interface DxfPair {
 interface DxfEntity {
   type: string;
   pairs: DxfPair[];
+}
+
+class DxfGeometryPointLimitError extends RangeError {
+  public constructor() {
+    super("DXF input expands beyond the 200,000 geometry-point safety limit.");
+    this.name = "DxfGeometryPointLimitError";
+  }
+}
+
+class DxfGeometryPointBudget {
+  #used = 0;
+
+  public reserve(pointCount: number): void {
+    if (!Number.isSafeInteger(pointCount) || pointCount < 0) {
+      throw new RangeError("DXF geometry point allocation must be a nonnegative safe integer.");
+    }
+    if (pointCount > MAX_DXF_GEOMETRY_POINTS - this.#used) {
+      throw new DxfGeometryPointLimitError();
+    }
+    this.#used += pointCount;
+  }
 }
 
 function parsePairs(source: string): DxfPair[] {
@@ -179,14 +201,22 @@ function entitySections(pairs: readonly DxfPair[]): DxfEntity[] {
   return entities;
 }
 
-function arcPointCount(radiusMm: number, sweepRadians: number, toleranceMm: number): number {
+function arcPointCount(
+  radiusMm: number,
+  sweepRadians: number,
+  toleranceMm: number,
+  minimumSegmentCount = 2,
+): number {
   if (radiusMm <= toleranceMm) {
-    return 2;
+    return minimumSegmentCount;
   }
   const maximumAngle = 2 * Math.acos(Math.max(-1, 1 - toleranceMm / radiusMm));
   return Math.min(
     4_096,
-    Math.max(2, Math.ceil(Math.abs(sweepRadians) / Math.max(maximumAngle, 1e-6))),
+    Math.max(
+      minimumSegmentCount,
+      Math.ceil(Math.abs(sweepRadians) / Math.max(maximumAngle, 1e-6)),
+    ),
   );
 }
 
@@ -196,9 +226,17 @@ function sampleArc(
   startRadians: number,
   sweepRadians: number,
   toleranceMm: number,
+  pointBudget: DxfGeometryPointBudget,
   includeStart = true,
+  minimumSegmentCount = 2,
 ): PointMm[] {
-  const segmentCount = arcPointCount(radiusMm, sweepRadians, toleranceMm);
+  const segmentCount = arcPointCount(
+    radiusMm,
+    sweepRadians,
+    toleranceMm,
+    minimumSegmentCount,
+  );
+  pointBudget.reserve(segmentCount + (includeStart ? 1 : 0));
   return Array.from(
     { length: segmentCount + (includeStart ? 1 : 0) },
     (_unused, index) => {
@@ -218,10 +256,12 @@ function appendBulgeSegment(
   end: PointMm,
   bulge: number,
   toleranceMm: number,
+  pointBudget: DxfGeometryPointBudget,
   omitFinalPoint: boolean,
 ): void {
   if (Math.abs(bulge) <= 1e-12) {
     if (!omitFinalPoint) {
+      pointBudget.reserve(1);
       output.push(end);
     }
     return;
@@ -242,7 +282,15 @@ function appendBulgeSegment(
   const radius = Math.hypot(start.xMm - center.xMm, start.yMm - center.yMm);
   const startAngle = Math.atan2(start.yMm - center.yMm, start.xMm - center.xMm);
   const sweep = 4 * Math.atan(bulge);
-  const sampled = sampleArc(center, radius, startAngle, sweep, toleranceMm, false);
+  const sampled = sampleArc(
+    center,
+    radius,
+    startAngle,
+    sweep,
+    toleranceMm,
+    pointBudget,
+    false,
+  );
   if (omitFinalPoint) {
     sampled.pop();
   }
@@ -253,6 +301,7 @@ function parseLwPolyline(
   entity: DxfEntity,
   scaleToMm: number,
   toleranceMm: number,
+  pointBudget: DxfGeometryPointBudget,
 ): InterchangePath {
   const vertices: Array<PointMm & { bulge: number }> = [];
   for (let index = 0; index < entity.pairs.length; index += 1) {
@@ -284,12 +333,21 @@ function parseLwPolyline(
     throw new RangeError("LWPOLYLINE does not contain enough vertices.");
   }
   const first = vertices[0] as PointMm & { bulge: number };
+  pointBudget.reserve(1);
   const points: PointMm[] = [{ xMm: first.xMm, yMm: first.yMm }];
   const segmentCount = closed ? vertices.length : vertices.length - 1;
   for (let index = 0; index < segmentCount; index += 1) {
     const start = vertices[index] as PointMm & { bulge: number };
     const end = vertices[(index + 1) % vertices.length] as PointMm & { bulge: number };
-    appendBulgeSegment(points, start, end, start.bulge, toleranceMm, closed && index === segmentCount - 1);
+    appendBulgeSegment(
+      points,
+      start,
+      end,
+      start.bulge,
+      toleranceMm,
+      pointBudget,
+      closed && index === segmentCount - 1,
+    );
   }
   return {
     layerName: stringValue(entity, 8, "0"),
@@ -315,6 +373,7 @@ export function importDxf(
   const entities = entitySections(pairs);
   const paths: InterchangePath[] = [];
   const warnings: InterchangeWarning[] = [];
+  const pointBudget = new DxfGeometryPointBudget();
   for (let index = 0; index < entities.length; index += 1) {
     const entity = entities[index] as DxfEntity;
     const sourceLabel = `${entity.type} ${String(index + 1)}`;
@@ -328,6 +387,7 @@ export function importDxf(
     try {
       switch (entity.type) {
         case "LINE":
+          pointBudget.reserve(2);
           paths.push({
             layerName: stringValue(entity, 8, "0"),
             closed: false,
@@ -338,7 +398,14 @@ export function importDxf(
           });
           break;
         case "LWPOLYLINE":
-          paths.push(parseLwPolyline(entity, units.scaleToMm, toleranceMm));
+          paths.push(
+            parseLwPolyline(
+              entity,
+              units.scaleToMm,
+              toleranceMm,
+              pointBudget,
+            ),
+          );
           break;
         case "CIRCLE": {
           const radiusMm = requiredNumber(entity, 40) * units.scaleToMm;
@@ -354,6 +421,9 @@ export function importDxf(
               0,
               Math.PI * 2,
               toleranceMm,
+              pointBudget,
+              true,
+              3,
             ).slice(0, -1),
           });
           break;
@@ -377,6 +447,7 @@ export function importDxf(
               (startDegrees * Math.PI) / 180,
               ((endDegrees - startDegrees) * Math.PI) / 180,
               toleranceMm,
+              pointBudget,
             ),
           });
           break;
@@ -412,6 +483,7 @@ export function importDxf(
           const closed = (flags & 1) === 1;
           if (vertices.length >= (closed ? 3 : 2)) {
             const first = vertices[0] as PointMm & { bulge: number };
+            pointBudget.reserve(1);
             const points: PointMm[] = [{ xMm: first.xMm, yMm: first.yMm }];
             const segmentCount = closed ? vertices.length : vertices.length - 1;
             for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex += 1) {
@@ -423,6 +495,7 @@ export function importDxf(
                 end,
                 start.bulge,
                 toleranceMm,
+                pointBudget,
                 closed && segmentIndex === segmentCount - 1,
               );
             }
@@ -434,6 +507,9 @@ export function importDxf(
           warnings.push(warning("unsupported-dxf-entity", `${sourceLabel} is not supported and was skipped.`, sourceLabel));
       }
     } catch (error) {
+      if (error instanceof DxfGeometryPointLimitError) {
+        throw error;
+      }
       warnings.push(
         warning(
           "invalid-dxf-entity",

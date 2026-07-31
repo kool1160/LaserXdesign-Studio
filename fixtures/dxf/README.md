@@ -8,6 +8,9 @@
 - `unsupported-3d.dxf` contains SPLINE and nonzero-Z data that must warn and
   skip rather than being silently projected.
 
-Adapter tests also construct legacy POLYLINE/VERTEX, bulge, malformed, binary,
-and oversized cases. Representative exports are parsed by independent
-`dxf-parser` in addition to LaserX round-trip parsing.
+Adapter tests also construct legacy POLYLINE/VERTEX, bulge, tiny-circle,
+sub-5-MB expanded-geometry-bomb, malformed, binary, and oversized cases.
+Representative 600 mm and 24 inch/609.6 mm exports are parsed by independent
+`dxf-parser`; the independent assertions cover `$INSUNITS`, entity type,
+closure, vertex coordinates, and exact physical bounds in addition to LaserX
+round-trip parsing.

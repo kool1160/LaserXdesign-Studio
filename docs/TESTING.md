@@ -177,14 +177,16 @@ it to hide defects.
 - DXF adapter tests load reviewed inch, millimeter, unitless, common-entity,
   and unsupported-3D fixtures; cover LINE, LWPOLYLINE bulges, legacy POLYLINE,
   CIRCLE, ARC, closure, layers, units, warnings, and malformed/binary/size
-  rejection; and reimport explicit-mm exports.
+  rejection; reject a sub-5-MB expanded-geometry bomb before 200,000 sampled
+  points; preserve tiny-circle validity; and reimport explicit-mm exports.
 - The production DXF parser does not participate in the downstream-inspection
   assertion: pinned MIT `dxf-parser` independently reads the representative
-  export and verifies `$INSUNITS = 4`, LWPOLYLINE type, and closed shape flag.
+  600 mm and 24 inch/609.6 mm exports and verifies `$INSUNITS = 4`, LWPOLYLINE
+  type, closed shape flag, vertex coordinates, and physical bounds.
 - Domain/application tests prove import validates new IDs/layers, preview does
   not mutate project/dirty/history state, commit is one history entry, one undo
-  restores the exact document, redo reapplies it, and stale previews are
-  rejected.
+  restores the exact document, redo reapplies it, stale previews are rejected,
+  and an over-budget normalized candidate fails before preview state changes.
 - Desktop unit/integration tests cover strict path-free IPC, bounded UTF-8
   storage, native-dialog ownership, preview/commit/cancel/export coordination,
   and export summaries without history changes.
@@ -193,7 +195,10 @@ it to hide defects.
   written file to verify explicit millimeter metadata.
 
 Straight scale assertions use `1e-9 mm`. Curves use the documented 0.01 mm
-chordal tolerance; no broader tolerance hides unit or closure failures.
+world-space chordal tolerance after the full affine transform; uniform,
+nonuniform, shear, and nested-group regressions cover cubic paths and ellipses.
+SVG and DXF export/reimport tests keep transformed cubic bounds within that
+tolerance. No broader tolerance hides unit or closure failures.
 
 Run all milestone checks from the repository root:
 

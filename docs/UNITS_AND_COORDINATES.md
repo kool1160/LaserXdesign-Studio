@@ -136,6 +136,11 @@ The `0.01 mm` interchange flattening value is a maximum chordal-deviation
 target for cubic paths, ellipses, circles, arcs, and bulges. Scale-golden tests
 use `1e-9 mm` for straight coordinate conversion and the declared 0.01 mm
 curve tolerance for sampled geometry. Neither is a kerf or CAM tolerance.
+The complete accumulated object/group transform is applied to cubic anchors
+and controls before flattening. Ellipses derive a conservative local tolerance
+from the maximum stretch of that same affine transform, so uniform scale,
+nonuniform scale, shear, and nested groups cannot magnify the exported
+world-space deviation beyond 0.01 mm.
 
 ## Renderer conversion boundary
 

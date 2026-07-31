@@ -23,7 +23,10 @@ on group order. `$INSUNITS` values for inches, millimeters, and centimeters are
 accepted. A missing or zero `$INSUNITS` requires the user to choose whether one
 drawing unit is one millimeter or one inch, and the recorded preview states
 that assumption. Nonzero Z/elevation, 3D/polyface data, and unsupported entity
-types are skipped with warnings.
+types are skipped with warnings. A cumulative 200,000-point budget is reserved
+before DXF curve-sampling allocations and checked again at the application
+preview boundary; overflow fails without project, dirty-state, or history
+changes. Tiny circles retain at least three distinct nodes.
 
 Both adapters exchange normalized open/closed paths with layer names. Import
 preview materializes fresh object/layer IDs but does not mutate the project,
@@ -59,4 +62,5 @@ SVG path arcs must be converted to circle/ellipse elements or cubic curves
 before import. DXF curves and all exported document curves are flattened at a
 documented 0.01 mm chordal tolerance. Hidden-layer objects are not exported and
 produce a summary warning. The independent `dxf-parser` test dependency
-inspects representative exports without participating in production parsing.
+inspects representative 600 mm and 24 inch/609.6 mm export coordinates and
+bounds without participating in production parsing.

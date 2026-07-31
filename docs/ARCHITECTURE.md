@@ -138,7 +138,11 @@ noninteractive overlay and does not change the project fingerprint, dirty
 state, or history. Commit rejects a stale fingerprint and applies all preview
 layers/objects through one undoable `objects.import` command. Export reads the
 authoritative document, writes through Electron main, and stores only an
-ephemeral summary. ADR 0016 records this boundary.
+ephemeral summary. Cubic controls are transformed to world millimeters before
+flattening, while ellipses use the maximum stretch of the complete affine
+transform to preserve the 0.01 mm world-space tolerance. DXF expansion and the
+application preview boundary each enforce a 200,000-point budget. ADR 0016
+records this boundary.
 
 ## State flow
 

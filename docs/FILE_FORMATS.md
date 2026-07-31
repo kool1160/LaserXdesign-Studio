@@ -115,7 +115,9 @@ paths. Curves are flattened at 0.01 mm.
 ## DXF
 
 LaserX reads and writes ASCII 2D DXF group-code/value pairs. Input is limited
-to 5 MB, 500,000 pairs, and 100,000 entity records.
+to 5 MB, 500,000 pairs, 100,000 entity records, and 200,000 cumulative expanded
+geometry points. The point budget is checked before sampled arc, circle, or
+bulge arrays are allocated and is checked again before application preview.
 
 Supported import entities:
 
@@ -127,6 +129,11 @@ Supported import entities:
 | `CIRCLE` | Closed path flattened at 0.01 mm. |
 | `ARC` | Open counterclockwise path flattened at 0.01 mm. |
 
+Circles whose radius is at or below the curve tolerance still materialize at
+least three distinct nodes, preserving the closed-path document invariant.
+Inputs that would exceed the expanded-point budget fail the whole preview
+instead of returning a partial candidate.
+
 Layer group code 8 maps to LaserX layers. `$INSUNITS` 1, 4, and 5 mean inches,
 millimeters, and centimeters. `$INSUNITS` 0 or absent is accepted only with an
 explicit millimeter or inch assumption. Other units are rejected clearly.
@@ -137,8 +144,9 @@ DXF export writes AutoCAD 2013 ASCII (`AC1027`), `$INSUNITS = 4`
 (millimeters), a layer table, `LINE` for open two-point paths, and
 `LWPOLYLINE` for remaining open or closed flattened paths. Code 70 bit 1
 preserves closure. Export summaries report path count, warnings, units, and
-bounds. The pinned independent `dxf-parser` inspector verifies the representative
-600 mm export's units, entity type, and closed flag.
+bounds. The pinned independent `dxf-parser` inspector verifies the
+representative 600 mm and 24 inch/609.6 mm exports' units, entity type, closed
+flag, vertex coordinates, and physical bounds.
 
 Native DWG is out of scope. Do not rename a DXF file to `.dwg` or claim
 equivalence.

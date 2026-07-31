@@ -41,6 +41,7 @@ import { previewSelectedPathJoin } from "./path-preview.js";
 
 export const DEFAULT_HISTORY_LIMIT = 100;
 export const DEFAULT_DUPLICATE_OFFSET_MM = 10;
+export const MAX_VECTOR_IMPORT_GEOMETRY_POINTS = 200_000;
 
 export interface LifecycleDependencies {
   createId(): string;
@@ -709,6 +710,18 @@ export class ProjectSession implements ProjectCommandDispatcher {
     }
     if (candidate.paths.length > 100_000) {
       throw new RangeError("The selected file contains too many imported paths.");
+    }
+    let geometryPointCount = 0;
+    for (const path of candidate.paths) {
+      if (
+        path.points.length >
+        MAX_VECTOR_IMPORT_GEOMETRY_POINTS - geometryPointCount
+      ) {
+        throw new RangeError(
+          "The selected file contains more than 200,000 expanded geometry points.",
+        );
+      }
+      geometryPointCount += path.points.length;
     }
     const document = this.#project.document;
     const editableLayers = document.layers.filter(
