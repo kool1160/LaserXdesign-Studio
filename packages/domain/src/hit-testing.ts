@@ -6,6 +6,7 @@ import {
   composeAffineTransforms,
   distancePointToSegment,
   invertAffineTransform,
+  pointInCompoundPolygonUnionEvenOdd,
   pointInPolygon,
   type AffineTransformMm,
   type BoundsMm,
@@ -15,6 +16,7 @@ import {
 import {
   getObjectBounds,
   getObjectsInRenderOrder,
+  groupTextContoursByCompound,
   isLayerEditable,
   type DocumentObject,
   type HitTestRequest,
@@ -93,6 +95,18 @@ function primitiveWorldPoints(
       return object.points.map((point) =>
         applyAffineTransform(point, transform),
       );
+    case "text":
+      return object.contours.flatMap((contour) =>
+        contour.points.map((point) =>
+          applyAffineTransform(
+            {
+              xMm: point.xMm + object.origin.xMm,
+              yMm: point.yMm + object.origin.yMm,
+            },
+            transform,
+          ),
+        ),
+      );
   }
 }
 
@@ -101,6 +115,40 @@ function primitiveHitDistance(
   point: PointMm,
   transform: AffineTransformMm,
 ): number {
+  if (object.type === "text") {
+    const contours = object.contours.map((contour) => ({
+      compoundIndex: contour.compoundIndex,
+      closed: contour.closed,
+      points: contour.points.map((candidate) =>
+        applyAffineTransform(
+          {
+            xMm: candidate.xMm + object.origin.xMm,
+            yMm: candidate.yMm + object.origin.yMm,
+          },
+          transform,
+        ),
+      ),
+    }));
+    const filled = pointInCompoundPolygonUnionEvenOdd(
+      point,
+      groupTextContoursByCompound(contours).map((compound) =>
+        compound
+          .filter((contour) => contour.closed)
+          .map((contour) => contour.points),
+      ),
+    );
+    if (filled) {
+      return 0;
+    }
+    return contours.reduce(
+      (minimum, contour) =>
+        Math.min(
+          minimum,
+          distanceToPolyline(point, contour.points, contour.closed),
+        ),
+      Number.POSITIVE_INFINITY,
+    );
+  }
   if (object.type === "ellipse") {
     const local = applyAffineTransform(
       point,

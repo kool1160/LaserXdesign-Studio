@@ -11,6 +11,7 @@ import type {
   DesktopState,
 } from "../../electron/ipc-contract.js";
 import { Viewport } from "../components/Viewport.js";
+import { TextPanel } from "../components/TextPanel.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -351,7 +352,7 @@ export function App() {
         >
           Paste
         </button>
-        <span className="shell-badge">M03 editing core</span>
+        <span className="shell-badge">M04 text & fonts</span>
       </nav>
 
       {state.recovery !== null && (
@@ -407,7 +408,7 @@ export function App() {
             <dl className="project-facts">
               <div>
                 <dt>Format</dt>
-                <dd>.laserx v3</dd>
+                <dd>.laserx v4</dd>
               </div>
               <div>
                 <dt>Stock</dt>
@@ -444,6 +445,8 @@ export function App() {
               )}
             </div>
           </section>
+
+          <TextPanel state={state} busy={busy} run={run} />
 
           <section>
             <span className="section-label">New exact document</span>

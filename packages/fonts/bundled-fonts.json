@@ -1,0 +1,56 @@
+[
+  {
+    "id": "bundled:noto-sans",
+    "family": "Noto Sans",
+    "categories": ["industrial", "display"],
+    "package": "@fontsource-variable/noto-sans",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic) NotoSans-Italic[wdth,wght].ttf: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)"
+  },
+  {
+    "id": "bundled:noto-serif",
+    "family": "Noto Serif",
+    "categories": ["serif", "display"],
+    "package": "@fontsource-variable/noto-serif",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic) NotoSerif-Italic[wdth,wght].ttf: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)"
+  },
+  {
+    "id": "bundled:roboto-slab",
+    "family": "Roboto Slab",
+    "categories": ["slab", "industrial"],
+    "package": "@fontsource-variable/roboto-slab",
+    "version": "5.3.0",
+    "license": "Apache-2.0",
+    "copyright": "Copyright 2018 The Roboto Slab Project Authors (https://github.com/googlefonts/robotoslab)"
+  },
+  {
+    "id": "bundled:pacifico",
+    "family": "Pacifico",
+    "categories": ["script", "display"],
+    "package": "@fontsource/pacifico",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2018 The Pacifico Project Authors (https://github.com/googlefonts/Pacifico)"
+  },
+  {
+    "id": "bundled:rye",
+    "family": "Rye",
+    "categories": ["western", "display"],
+    "package": "@fontsource/rye",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "copyright": "Copyright (c) 2012, Sorkin Type Co (eben@eyebytes.com) with Reserved Font Name 'Rye'"
+  },
+  {
+    "id": "bundled:saira-stencil-one",
+    "family": "Saira Stencil One",
+    "categories": ["stencil", "industrial"],
+    "package": "@fontsource/saira-stencil-one",
+    "version": "5.3.0",
+    "license": "OFL-1.1",
+    "copyright": "Copyright 2019 The Saira Stencil Project Authors (https://github.com/Omnibus-Type/Saira)"
+  }
+]

@@ -154,3 +154,75 @@ renderer-local, while snap selection remains deterministic domain behavior.
 - Next allowed work: M04 remains blocked until PR #16 is reviewed, Repository
 Guard and both Windows M03 runs pass on the final repair head, and the draft PR
 is merged.
+
+## 2026-07-30 — M04 text, fonts, and outline conversion
+
+- Date: 2026-07-30
+- Agent/task: Codex / Issue #5 implementation
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Secure main-process installed-font discovery; six pinned,
+redistributable
+bundled families covering stencil, script, serif, slab, western, industrial,
+and display categories; path-free catalog IPC; search, categories, favorites,
+and recents; editable live text with alignment and letter/word/line spacing;
+deterministic Fontkit contour materialization; simple arc text; missing-font
+fingerprint warnings with geometry preservation; undoable outline conversion
+with optional source metadata; strict schema-v4 persistence and deterministic
+v1/v2/v3 migrations; license/provenance CI audit.
+- Verification: `pnpm verify`, `pnpm audit:fonts`,
+`py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+suite contains 82 unit/integration tests and 11 packaged Windows E2E scenarios.
+The packaged text workflow creates, edits, arcs, converts, undoes, saves, and
+reopens exact materialized contours.
+- Decisions: ADR 0012 keeps discovery, bytes, shaping, and contour generation
+out of the sandboxed renderer. ADR 0013 records schema v4 and saved
+font-fingerprint/materialized-contour semantics.
+- Known limitations: Arc text uses a simple deterministic circular warp;
+advanced OpenType feature controls, arbitrary path text, embedded font files,
+automatic bridging, and node editing remain excluded.
+- Next allowed work: review M04 only. Do not merge, close Issue #5, advance to
+M05, or begin M05 implementation until final-head Windows CI and review pass.
+
+## 2026-07-31 — M04 review correctness repairs
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #18 blocking review findings
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Live text materialization now pauses when the saved font ID and
+fingerprint do not exactly match the catalog, with the rule enforced in both
+the renderer and main process; explicit substitution remains undoable. Text
+objects now project as one even-odd compound SVG path, and domain hit testing
+uses the same rule so enclosed counters remain empty. Outline conversion still
+preserves every contour.
+- Verification: focused geometry, domain, IPC, viewport, and packaged
+regressions cover compound counters and same-ID/changed-fingerprint reopen,
+selection, explicit substitution, and undo. The complete suite contains 85
+unit/integration tests and 12 packaged Windows E2E scenarios.
+- Decisions: ADR 0012 now records the explicit substitution boundary and the
+shared even-odd compound-fill policy.
+- Known limitations: existing documented M04 exclusions remain unchanged.
+- Next allowed work: review M04 only after final-head local verification and
+GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
+
+## 2026-07-31 — M04 re-review correctness repairs
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #18 blocking re-review findings
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Font materialization and schema-v4 contours now preserve a
+deterministic glyph-compound index. Viewport projection and hit testing apply
+even-odd inside each glyph and union separate glyphs, keeping counters empty
+without XOR holes in overlapping script or negatively tracked lettering. The
+text form now follows authoritative content/style/arc changes for the same
+selected object ID after undo/redo, while an equality guard prevents form
+synchronization from creating a redundant live command.
+- Verification: focused font, geometry, domain, project-format, viewport, and
+packaged regressions cover compound grouping, counter holes, inter-glyph
+overlap, lossless outline conversion, same-ID form restoration, stable history,
+and a subsequent edit that preserves the undone content/font intent. The full
+suite contains 86 unit/integration tests and 13 packaged Windows E2E scenarios.
+- Decisions: ADRs 0012–0013 now record per-glyph compound indexing and the
+even-odd-within/union-across fill policy.
+- Known limitations: existing documented M04 exclusions remain unchanged.
+- Next allowed work: review M04 only after final-head local verification and
+GitHub CI pass. Do not merge, close Issue #5, or advance to M05.

@@ -4,9 +4,12 @@ import {
   createDocumentRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
+  fontCatalogSchema,
   openRecentRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
+  textLayoutRequestSchema,
+  textUpdateRequestSchema,
 } from "../../electron/ipc-contract.js";
 
 describe("typed IPC validation", () => {
@@ -110,6 +113,66 @@ describe("typed IPC validation", () => {
       recovery: null,
     });
     expect(result.success).toBe(true);
+  });
+
+  it("keeps font paths and generated contours outside renderer requests", () => {
+    expect(
+      textLayoutRequestSchema.safeParse({
+        fontId: "bundled:noto-sans",
+        content: "LaserX",
+        sizeMm: 20,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+        arc: null,
+        fontPath: "C:\\Windows\\Fonts\\arial.ttf",
+      }).success,
+    ).toBe(false);
+    expect(
+      textUpdateRequestSchema.safeParse({
+        fontId: "bundled:noto-sans",
+        content: "LaserX",
+        sizeMm: 20,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+        arc: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      textUpdateRequestSchema.safeParse({
+        fontId: "bundled:noto-sans",
+        content: "LaserX",
+        sizeMm: 20,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+        arc: null,
+        mode: "explicit",
+      }).success,
+    ).toBe(true);
+    expect(
+      fontCatalogSchema.safeParse([
+        {
+          id: "bundled:noto-sans",
+          family: "Noto Sans",
+          style: "Regular",
+          source: "bundled",
+          categories: ["industrial"],
+          fingerprint: "a".repeat(64),
+          license: {
+            spdx: "OFL-1.1",
+            copyright: "Copyright holder",
+            licenseFile: "packages/fonts/licenses/OFL-1.1.txt",
+            provenance: "@fontsource-variable/noto-sans@5.3.0",
+          },
+          path: "C:\\secret.ttf",
+        },
+      ]).success,
+    ).toBe(false);
   });
 
   it("accepts signed exact coordinates and zero line extents", () => {

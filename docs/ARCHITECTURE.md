@@ -79,6 +79,19 @@ objects and selection handles to SVG, but SVG and CSS state are never
 authoritative geometry. ADRs 0010–0011 record the editing and persistence
 decisions.
 
+For M04, `packages/fonts` owns font discovery, catalog metadata, licensed
+bundled assets, shaping, curve flattening, and deterministic arc
+materialization. Electron main is the only process that reads system-font
+directories or font bytes. The renderer receives catalog records without
+paths and submits only validated font IDs, content, and layout settings.
+Authoritative editable text and materialized millimeter contours live in the
+domain document and schema v4. Missing fonts never trigger implicit
+re-materialization. Materialization persists a glyph-compound index with each
+contour. Text projection and hit testing apply even-odd within each glyph and
+union separate glyph compounds, so enclosed counters remain empty without
+turning overlapping script or negatively tracked glyphs into holes. ADRs
+0012–0013 record the font boundary and persistence decisions.
+
 ## State flow
 
 ```text

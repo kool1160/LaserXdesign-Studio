@@ -6,6 +6,14 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Selecting text with a missing or changed font fingerprint no longer triggers
+  live rematerialization; explicit substitution remains undoable.
+- Editable text now renders and hit-tests even-odd within each glyph and unions
+  separate glyph compounds, so counters remain empty, overlapping glyphs stay
+  filled, and outline conversion preserves every contour.
+- Undo and redo now synchronize authoritative same-ID text content, font, and
+  layout values back into the text panel without creating a redundant live
+  update or allowing the next edit to reapply stale intent.
 - Alt-drag and middle-button pan gestures now take precedence over artwork and
   transform-handle hit testing, so viewport navigation cannot accidentally
   mutate geometry or history.
@@ -24,6 +32,13 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Editable schema-v4 text with installed fonts and six audited redistributable
+  bundled font
+  catalogs, search/categories/favorites/recents, exact typography spacing,
+  simple arc text, secure main-process shaping, missing-font preservation, and
+  undoable text-to-outline conversion with optional source metadata.
+- Font license/provenance CI audit plus deterministic shaping, migration,
+  boundary, persistence, and packaged Windows save/reopen coverage.
 - Repository operating contract and product requirements.
 - M00–M12 gated delivery plan.
 - Monorepo package, desktop, fixture, tool, and documentation scaffold.

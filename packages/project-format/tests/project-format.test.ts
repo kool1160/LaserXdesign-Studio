@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseProject,
+  parseProjectValue,
   ProjectFormatError,
   projectMigrationRegistry,
   serializeProject,
@@ -145,7 +146,7 @@ function editingProject(): LaserxProject {
   );
 }
 
-describe("schema version 3", () => {
+describe("schema version 4", () => {
   it("round trips layers, groups, transforms, guides, and order deterministically", () => {
     const project = editingProject();
     const first = serializeProject(project);
@@ -153,7 +154,7 @@ describe("schema version 3", () => {
 
     expect(reopened).toEqual(project);
     expect(serializeProject(reopened)).toBe(first);
-    expect(first).toBe(fixture("editing-v3.laserx"));
+    expect(first).toBe(fixture("editing-v4.laserx"));
     expect(reopened.document.layers.map((layer) => layer.id)).toEqual([
       ARTWORK_LAYER,
       NOTES_LAYER,
@@ -168,9 +169,9 @@ describe("schema version 3", () => {
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
     const migrated = parseProject(fixture("populated-v2.laserx"));
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(serializeProject(migrated)).toBe(
-      fixture("migrated-v2-to-v3.laserx"),
+      fixture("migrated-v2-to-v4.laserx"),
     );
     expect(
       migrated.document.objects.every(
@@ -182,9 +183,9 @@ describe("schema version 3", () => {
     ).toBe(true);
   });
 
-  it("chains schema v1 through v2 to v3 without rewriting source metadata", () => {
+  it("chains schema v1 through v2, v3, and v4 without rewriting source metadata", () => {
     const migrated = parseProject(fixture("blank-v1.laserx"));
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.document.id).toBe(PROJECT_ID);
     expect(migrated.document.dimensions).toEqual({
       widthMm: 304.8,
@@ -193,7 +194,56 @@ describe("schema version 3", () => {
     expect(migrated.migrationHistory).toEqual([
       { fromVersion: 1, toVersion: 2, migratedAt: NOW },
       { fromVersion: 2, toVersion: 3, migratedAt: NOW },
+      { fromVersion: 3, toVersion: 4, migratedAt: NOW },
     ]);
+  });
+
+  it("migrates schema v3 and persists editable text geometry in v4", () => {
+    const v3 = JSON.parse(fixture("editing-v3.laserx")) as unknown;
+    const migrated = parseProjectValue(v3);
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 3,
+      toVersion: 4,
+      migratedAt: NOW,
+    });
+
+    const project = editingProject();
+    project.document.objects.push({
+      id: "523e4567-e89b-42d3-a456-426614174001",
+      type: "text",
+      layerId: ARTWORK_LAYER,
+      transform: identityTransform(),
+      content: "O",
+      origin: { xMm: 20, yMm: 30 },
+      style: {
+        fontId: "bundled:noto-sans",
+        fontFamily: "Noto Sans",
+        fontStyle: "Regular",
+        fontFingerprint: "a".repeat(64),
+        sizeMm: 24,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+      },
+      arc: { radiusMm: 80, startAngleDeg: -45, clockwise: false },
+      contours: [
+        {
+          compoundIndex: 0,
+          closed: true,
+          points: [
+            { xMm: 0, yMm: 0 },
+            { xMm: 10, yMm: 0 },
+            { xMm: 10, yMm: 16 },
+          ],
+        },
+      ],
+      missingFont: false,
+    });
+    const reopened = parseProject(serializeProject(project));
+    expect(reopened.document.objects.at(-1)).toEqual(
+      project.document.objects.at(-1),
+    );
   });
 
   it("rejects corrupt, future, duplicate-ID, and dangling-layer projects safely", () => {
@@ -273,11 +323,12 @@ describe("schema version 3", () => {
     expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
-  it("registers explicit v1-to-v2 and v2-to-v3 migrations", () => {
-    expect(projectMigrationRegistry).toHaveLength(2);
+  it("registers every explicit migration through schema v4", () => {
+    expect(projectMigrationRegistry).toHaveLength(3);
     expect(projectMigrationRegistry).toMatchObject([
       { fromVersion: 1, toVersion: 2 },
       { fromVersion: 2, toVersion: 3 },
+      { fromVersion: 3, toVersion: 4 },
     ]);
   });
 });

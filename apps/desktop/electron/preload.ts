@@ -8,10 +8,13 @@ import {
   desktopStateSchema,
   editorActionRequestSchema,
   IPC_CHANNELS,
+  fontCatalogSchema,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
+  textLayoutRequestSchema,
+  textUpdateRequestSchema,
   type CreateDocumentRequest,
   type DesktopState,
   type LaserxDesktopApi,
@@ -19,6 +22,8 @@ import {
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
   type SetViewportPreferencesRequest,
+  type TextLayoutRequestDto,
+  type TextUpdateRequestDto,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -82,6 +87,26 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = editorActionRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.editorAction, validated),
+    );
+  },
+  async getFontCatalog() {
+    return fontCatalogSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.getFontCatalog),
+    );
+  },
+  async createText(request: TextLayoutRequestDto) {
+    const validated = textLayoutRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.createText, validated),
+    );
+  },
+  async updateSelectedText(request: TextUpdateRequestDto) {
+    const validated = textUpdateRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(
+        IPC_CHANNELS.updateSelectedText,
+        validated,
+      ),
     );
   },
   async resolveRecovery(request: ResolveRecoveryRequest) {

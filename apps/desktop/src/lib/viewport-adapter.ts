@@ -5,6 +5,7 @@ import {
   getDocumentBounds,
   getObjectsInRenderOrder,
   getSelectionBounds,
+  groupTextContoursByCompound,
   nonnegativeLengthToMillimeters,
   toMillimeters,
   type AffineTransformMm,
@@ -41,13 +42,31 @@ export interface StockPrimitive {
   heightCssPx: number;
 }
 
-export interface ObjectPrimitive {
+interface ObjectPrimitiveBase {
   key: string;
   objectId: string;
   sourceId: string;
+}
+
+export interface PointObjectPrimitive extends ObjectPrimitiveBase {
+  kind: "points";
   closed: boolean;
   points: ScreenPointCssPx[];
 }
+
+export interface CompoundObjectPrimitive extends ObjectPrimitiveBase {
+  kind: "compound";
+  compoundIndex: number;
+  fillRule: "evenodd";
+  contours: Array<{
+    closed: boolean;
+    points: ScreenPointCssPx[];
+  }>;
+}
+
+export type ObjectPrimitive =
+  | PointObjectPrimitive
+  | CompoundObjectPrimitive;
 
 export interface GuidePrimitive {
   id: string;
@@ -316,7 +335,7 @@ export function resetDocumentView(
 }
 
 function primitiveDomainPoints(
-  object: Exclude<DocumentObject, { type: "group" }>,
+  object: Exclude<DocumentObject, { type: "group" | "text" }>,
 ): { points: PointMm[]; closed: boolean } {
   switch (object.type) {
     case "line":
@@ -371,9 +390,38 @@ function objectPrimitives(
       objectPrimitives(child, viewport, worldTransform, selectionId),
     );
   }
+  if (object.type === "text") {
+    return groupTextContoursByCompound(object.contours).map((compound) => {
+      const compoundIndex = compound[0]?.compoundIndex ?? 0;
+      return {
+        kind: "compound",
+        key: `${selectionId}:${object.id}:text:${String(compoundIndex)}`,
+        objectId: selectionId,
+        sourceId: object.id,
+        compoundIndex,
+        fillRule: "evenodd",
+        contours: compound.map((contour) => ({
+          closed: contour.closed,
+          points: contour.points.map((point) =>
+            domainToScreen(
+              applyAffineTransform(
+                {
+                  xMm: point.xMm + object.origin.xMm,
+                  yMm: point.yMm + object.origin.yMm,
+                },
+                worldTransform,
+              ),
+              viewport,
+            ),
+          ),
+        })),
+      };
+    });
+  }
   const primitive = primitiveDomainPoints(object);
   return [
     {
+      kind: "points",
       key: `${selectionId}:${object.id}`,
       objectId: selectionId,
       sourceId: object.id,

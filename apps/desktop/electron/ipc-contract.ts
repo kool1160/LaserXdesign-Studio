@@ -4,6 +4,7 @@ import {
   type AffineTransformMm,
   type DocumentObject,
 } from "@laserx/domain";
+import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
 import { z } from "zod";
 
 export const IPC_CHANNELS = {
@@ -17,6 +18,9 @@ export const IPC_CHANNELS = {
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   editorAction: "laserx:editor:action",
+  getFontCatalog: "laserx:fonts:catalog",
+  createText: "laserx:text:create",
+  updateSelectedText: "laserx:text:update-selected",
   resolveRecovery: "laserx:recovery:resolve",
   stateChanged: "laserx:state:changed",
 } as const;
@@ -52,6 +56,34 @@ const objectBaseShape = {
   layerId: z.uuid(),
   transform: transformSchema,
 };
+const textStyleSchema = z.strictObject({
+  fontId: z.string().min(1).max(200),
+  fontFamily: z.string().min(1).max(200),
+  fontStyle: z.string().min(1).max(100),
+  fontFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  sizeMm: positiveNumber,
+  trackingMm: finiteNumber,
+  wordSpacingMm: finiteNumber,
+  lineSpacing: positiveNumber,
+  alignment: z.enum(["left", "center", "right"]),
+});
+const textArcSchema = z.strictObject({
+  radiusMm: positiveNumber,
+  startAngleDeg: finiteNumber,
+  clockwise: z.boolean(),
+});
+const textContourSchema = z.strictObject({
+  compoundIndex: z.number().int().nonnegative(),
+  closed: z.boolean(),
+  points: z.array(pointSchema).min(2),
+});
+const editableTextSourceSchema = z.strictObject({
+  content: z.string().min(1).max(10_000),
+  origin: pointSchema,
+  style: textStyleSchema,
+  arc: textArcSchema.nullable(),
+  contours: z.array(textContourSchema).min(1),
+});
 const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
   z.discriminatedUnion("type", [
     z.strictObject({
@@ -82,8 +114,19 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
     }),
     z.strictObject({
       ...objectBaseShape,
+      type: z.literal("text"),
+      content: z.string().min(1).max(10_000),
+      origin: pointSchema,
+      style: textStyleSchema,
+      arc: textArcSchema.nullable(),
+      contours: z.array(textContourSchema).min(1),
+      missingFont: z.boolean(),
+    }),
+    z.strictObject({
+      ...objectBaseShape,
       type: z.literal("group"),
       children: z.array(documentObjectSchema).min(1),
+      sourceText: editableTextSourceSchema.optional(),
     }),
   ]),
 );
@@ -157,6 +200,50 @@ export const setViewportPreferencesRequestSchema = z.strictObject({
   snapToDocument: z.boolean().optional(),
 });
 
+const textLayoutRequestShape = {
+  fontId: z.string().trim().min(1).max(200),
+  content: z.string().min(1).max(10_000),
+  sizeMm: positiveNumber,
+  trackingMm: finiteNumber,
+  wordSpacingMm: finiteNumber,
+  lineSpacing: positiveNumber,
+  alignment: z.enum(["left", "center", "right"]),
+  arc: textArcSchema.nullable(),
+};
+export const textLayoutRequestSchema: z.ZodType<TextLayoutRequest> =
+  z.strictObject(textLayoutRequestShape);
+export const textUpdateRequestSchema = z.strictObject({
+  ...textLayoutRequestShape,
+  mode: z.enum(["live", "explicit"]),
+});
+
+const fontCategorySchema = z.enum([
+  "stencil",
+  "script",
+  "serif",
+  "slab",
+  "western",
+  "industrial",
+  "display",
+]);
+const fontLicenseSchema = z.strictObject({
+  spdx: z.enum(["OFL-1.1", "Apache-2.0", "MIT", "SYSTEM"]),
+  copyright: z.string(),
+  licenseFile: z.string().nullable(),
+  provenance: z.string(),
+});
+export const fontCatalogEntrySchema: z.ZodType<FontCatalogEntry> =
+  z.strictObject({
+    id: z.string().min(1),
+    family: z.string().min(1),
+    style: z.string().min(1),
+    source: z.enum(["bundled", "system"]),
+    categories: z.array(fontCategorySchema),
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    license: fontLicenseSchema,
+  });
+export const fontCatalogSchema = z.array(fontCatalogEntrySchema);
+
 const selectionModeSchema = z.enum(["replace", "add", "toggle"]);
 
 export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
@@ -178,6 +265,10 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
     z.strictObject({ type: z.literal("clipboard.paste") }),
     z.strictObject({ type: z.literal("objects.duplicate-selection") }),
     z.strictObject({ type: z.literal("objects.group-selection") }),
+    z.strictObject({
+      type: z.literal("objects.convert-selected-text"),
+      preserveSource: z.boolean(),
+    }),
     z.strictObject({ type: z.literal("history.undo") }),
     z.strictObject({ type: z.literal("history.redo") }),
     z.strictObject({
@@ -375,6 +466,8 @@ export type SetViewportPreferencesRequest = z.infer<
 export type ResolveRecoveryRequest = z.infer<
   typeof resolveRecoveryRequestSchema
 >;
+export type TextLayoutRequestDto = z.infer<typeof textLayoutRequestSchema>;
+export type TextUpdateRequestDto = z.infer<typeof textUpdateRequestSchema>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -393,6 +486,11 @@ export interface LaserxDesktopApi {
     request: SetViewportPreferencesRequest,
   ): Promise<CommandResult>;
   editorAction(request: EditorActionRequest): Promise<CommandResult>;
+  getFontCatalog(): Promise<FontCatalogEntry[]>;
+  createText(request: TextLayoutRequestDto): Promise<CommandResult>;
+  updateSelectedText(
+    request: TextUpdateRequestDto,
+  ): Promise<CommandResult>;
   resolveRecovery(request: ResolveRecoveryRequest): Promise<CommandResult>;
   onStateChanged(listener: (state: DesktopState) => void): () => void;
 }

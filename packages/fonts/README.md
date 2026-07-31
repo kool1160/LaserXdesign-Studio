@@ -1,3 +1,8 @@
 # @laserx/fonts
 
-System-font discovery interfaces, font metadata, favorites/categories, bundled-font provenance, licensing checks, shaping boundary, and text-to-outline conversion adapters. Font binaries are never added without compatible licenses.
+Owns secure Windows system-font discovery, path-free catalog metadata,
+deterministic Fontkit shaping/flattening, arc layout, and a six-family bundled
+catalog with five OFL-1.1 families and one Apache-2.0 family. Font binaries and
+filesystem paths remain in Electron
+main. `pnpm audit:fonts` enforces the manifest, pinned versions, license text,
+provenance, and representative sign-style category coverage.

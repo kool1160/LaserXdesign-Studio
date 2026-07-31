@@ -90,6 +90,17 @@ export type EditorCommand =
       type: "objects.insert";
       objects: DocumentObject[];
     }
+  | {
+      type: "objects.replace";
+      object: DocumentObject;
+    }
+  | {
+      type: "objects.convert-text";
+      objectIds: string[];
+      groupIds: Record<string, string>;
+      contourIds: Record<string, string[]>;
+      preserveSource: boolean;
+    }
   | { type: "objects.delete"; objectIds: string[] }
   | {
       type: "objects.align";
@@ -716,6 +727,92 @@ export function applyEditorCommand(
       validateInsertedIds(document, command.objects);
       document.objects.push(...command.objects.map(copyDocumentObject));
       break;
+    case "objects.replace": {
+      const index = document.objects.findIndex(
+        (object) => object.id === command.object.id,
+      );
+      const previous = document.objects[index];
+      if (
+        previous === undefined ||
+        !isLayerEditable(document, previous.layerId) ||
+        command.object.layerId !== previous.layerId ||
+        collectObjectIds(command.object).some(
+          (id) =>
+            id !== previous.id &&
+            document.objects.some((object) =>
+              collectObjectIds(object).includes(id),
+            ),
+        )
+      ) {
+        throw new RangeError("Replacement object is invalid or not editable.");
+      }
+      document.objects[index] = copyDocumentObject(command.object);
+      break;
+    }
+    case "objects.convert-text": {
+      const editableIds = editableObjectIds(document, command.objectIds);
+      const existingIds = new Set(
+        document.objects.flatMap((object) => collectObjectIds(object)),
+      );
+      const generatedIds = new Set<string>();
+      document.objects = document.objects.map((object) => {
+        if (object.type !== "text" || !editableIds.has(object.id)) {
+          return object;
+        }
+        const groupId = command.groupIds[object.id];
+        const contourIds = command.contourIds[object.id];
+        if (
+          groupId === undefined ||
+          contourIds === undefined ||
+          contourIds.length !== object.contours.length
+        ) {
+          throw new RangeError(
+            "Outline conversion requires IDs for every contour.",
+          );
+        }
+        for (const id of [groupId, ...contourIds]) {
+          if (existingIds.has(id) || generatedIds.has(id)) {
+            throw new RangeError("Outline conversion IDs must be unique.");
+          }
+          generatedIds.add(id);
+        }
+        const sourceText = object;
+        return {
+          id: groupId,
+          type: "group",
+          layerId: object.layerId,
+          transform: { ...object.transform },
+          children: object.contours.map((contour, index) => ({
+            id: contourIds[index] as string,
+            type: "path",
+            layerId: object.layerId,
+            transform: { ...IDENTITY_AFFINE_TRANSFORM },
+            closed: contour.closed,
+            points: contour.points.map((point) => ({
+              xMm: point.xMm + object.origin.xMm,
+              yMm: point.yMm + object.origin.yMm,
+            })),
+          })),
+          ...(command.preserveSource
+            ? {
+                sourceText: {
+                  content: sourceText.content,
+                  origin: { ...sourceText.origin },
+                  style: { ...sourceText.style },
+                  arc:
+                    sourceText.arc === null ? null : { ...sourceText.arc },
+                  contours: sourceText.contours.map((contour) => ({
+                    compoundIndex: contour.compoundIndex,
+                    closed: contour.closed,
+                    points: contour.points.map((point) => ({ ...point })),
+                  })),
+                },
+              }
+            : {}),
+        };
+      });
+      break;
+    }
     case "objects.delete": {
       const editableIds = editableObjectIds(document, command.objectIds);
       document.objects = document.objects.filter(
@@ -905,6 +1002,7 @@ export function commandSelectionIds(
     case "objects.rotate":
     case "objects.mirror":
     case "objects.duplicate":
+    case "objects.convert-text":
     case "objects.delete":
     case "objects.align":
     case "objects.distribute":

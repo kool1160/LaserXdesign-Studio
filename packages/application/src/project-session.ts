@@ -20,6 +20,7 @@ import {
   type EditorCommand,
   type LaserxProject,
   type PointMm,
+  type TextObject,
   type UpdateViewportPreferences,
 } from "@laserx/domain";
 
@@ -68,6 +69,8 @@ export type ApplicationCommand =
 type GeneratedEditorCommand =
   | Extract<EditorCommand, { type: "objects.duplicate" }>
   | Extract<EditorCommand, { type: "objects.insert" }>
+  | Extract<EditorCommand, { type: "objects.replace" }>
+  | Extract<EditorCommand, { type: "objects.convert-text" }>
   | Extract<EditorCommand, { type: "objects.group" }>
   | Extract<EditorCommand, { type: "layer.add" }>
   | Extract<EditorCommand, { type: "guide.add" }>;
@@ -98,6 +101,7 @@ export type EditorActionRequest =
   | { type: "clipboard.paste" }
   | { type: "objects.duplicate-selection" }
   | { type: "objects.group-selection" }
+  | { type: "objects.convert-selected-text"; preserveSource: boolean }
   | { type: "history.undo" }
   | { type: "history.redo" }
   | { type: "history.begin-transaction"; label: string }
@@ -339,6 +343,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
         return this.duplicateSelection();
       case "objects.group-selection":
         return this.groupSelection();
+      case "objects.convert-selected-text":
+        return this.convertSelectedText(request.preserveSource);
       case "history.undo":
         return this.undo();
       case "history.redo":
@@ -419,6 +425,11 @@ export class ProjectSession implements ProjectCommandDispatcher {
         break;
       case "objects.group":
         this.#selectionIds = [command.groupId];
+        break;
+      case "objects.convert-text":
+        this.#selectionIds = command.objectIds
+          .map((id) => command.groupIds[id])
+          .filter((id): id is string => id !== undefined);
         break;
       case "objects.ungroup":
         this.#selectionIds = ungroupedChildIds;
@@ -609,6 +620,32 @@ export class ProjectSession implements ProjectCommandDispatcher {
       groupId: this.#dependencies.createId(),
       layerId:
         selected[0]?.layerId ?? this.#project.document.activeLayerId,
+    });
+  }
+
+  public convertSelectedText(preserveSource: boolean): ProjectSessionState {
+    const selected = this.#project.document.objects.filter(
+      (object): object is TextObject =>
+        object.type === "text" &&
+        this.#selectionIds.includes(object.id) &&
+        isLayerEditable(this.#project.document, object.layerId),
+    );
+    if (selected.length === 0) {
+      return this.state;
+    }
+    return this.executeEditorCommand({
+      type: "objects.convert-text",
+      objectIds: selected.map((object) => object.id),
+      groupIds: Object.fromEntries(
+        selected.map((object) => [object.id, this.#dependencies.createId()]),
+      ),
+      contourIds: Object.fromEntries(
+        selected.map((object) => [
+          object.id,
+          object.contours.map(() => this.#dependencies.createId()),
+        ]),
+      ),
+      preserveSource,
     });
   }
 

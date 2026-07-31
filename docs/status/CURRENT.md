@@ -89,3 +89,16 @@ Do not advance to M05 until every acceptance test and exit item in
 `docs/milestones/M04-text-fonts.md` passes, the M04 pull request is reviewed,
 required Windows CI is green, the pull request is merged, Issue #5 is closed,
 and this file records the verified merge commit.
+
+## M04 implementation review state
+
+The `feat/m04-text-fonts` implementation is complete locally and awaiting pull
+request review. It includes secure installed-font discovery, six audited
+redistributable bundled families, editable/live text layout, arc text, path conversion
+with optional source preservation, missing-font geometry preservation, and
+schema-v4 persistence/migration.
+
+Local `pnpm verify`, the font audit, repository guard, and `git diff --check`
+pass with 86 unit/integration tests and 13 packaged Windows E2E scenarios.
+M04 remains the active gate. Do not advance to M05, merge the pull request, or
+close Issue #5 until review and final-head Windows CI are complete.

@@ -32,7 +32,9 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
       "createDocument",
+      "createText",
       "editorAction",
+      "getFontCatalog",
       "getState",
       "newProject",
       "onStateChanged",
@@ -44,6 +46,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "security",
       "setDisplayUnit",
       "setViewportPreferences",
+      "updateSelectedText",
     ]);
     expect(await page.evaluate(() => window.laserx.security)).toEqual({
       contextIsolated: true,

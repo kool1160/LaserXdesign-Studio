@@ -918,3 +918,40 @@ button:disabled {
   left: 12px;
   color: #70808a;
 }
+
+.text-panel,
+.text-panel form,
+.outline-conversion {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.text-panel label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.text-panel textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.font-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.35rem;
+}
+
+.text-number-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.font-warning {
+  margin: 0;
+  border-left: 3px solid #f1b84b;
+  padding: 0.55rem 0.65rem;
+  color: #ffd98f;
+  background: rgb(241 184 75 / 10%);
+}

@@ -17,7 +17,7 @@ export type {
   PointMm,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 3 as const;
+export const PROJECT_SCHEMA_VERSION = 4 as const;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -68,7 +68,7 @@ export interface Guide {
 
 export interface DocumentObjectBase {
   id: string;
-  type: "line" | "rectangle" | "ellipse" | "path" | "group";
+  type: "line" | "rectangle" | "ellipse" | "path" | "text" | "group";
   layerId: string;
   transform: AffineTransformMm;
 }
@@ -99,9 +99,71 @@ export interface PathObject extends DocumentObjectBase {
   points: PointMm[];
 }
 
+export type TextAlignment = "left" | "center" | "right";
+
+export interface TextArc {
+  radiusMm: number;
+  startAngleDeg: number;
+  clockwise: boolean;
+}
+
+export interface TextStyle {
+  fontId: string;
+  fontFamily: string;
+  fontStyle: string;
+  fontFingerprint: string;
+  sizeMm: number;
+  trackingMm: number;
+  wordSpacingMm: number;
+  lineSpacing: number;
+  alignment: TextAlignment;
+}
+
+export interface TextContour {
+  compoundIndex: number;
+  closed: boolean;
+  points: PointMm[];
+}
+
+export function groupTextContoursByCompound(
+  contours: readonly TextContour[],
+): TextContour[][] {
+  const groups = new Map<number, TextContour[]>();
+  for (const contour of contours) {
+    const group = groups.get(contour.compoundIndex);
+    if (group === undefined) {
+      groups.set(contour.compoundIndex, [contour]);
+    } else {
+      group.push(contour);
+    }
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, group]) => group);
+}
+
+export interface TextObject extends DocumentObjectBase {
+  type: "text";
+  content: string;
+  origin: PointMm;
+  style: TextStyle;
+  arc: TextArc | null;
+  contours: TextContour[];
+  missingFont: boolean;
+}
+
+export interface EditableTextSource {
+  content: string;
+  origin: PointMm;
+  style: TextStyle;
+  arc: TextArc | null;
+  contours: TextContour[];
+}
+
 export interface GroupObject extends DocumentObjectBase {
   type: "group";
   children: DocumentObject[];
+  sourceText?: EditableTextSource | undefined;
 }
 
 export type DocumentObject =
@@ -109,6 +171,7 @@ export type DocumentObject =
   | RectangleObject
   | EllipseObject
   | PathObject
+  | TextObject
   | GroupObject;
 
 export interface LaserxDocument {
@@ -136,14 +199,14 @@ export interface MigrationRecord {
   migratedAt: string;
 }
 
-export interface LaserxProjectV3 {
+export interface LaserxProjectV4 {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: ProjectMetadata;
   document: LaserxDocument;
   migrationHistory: MigrationRecord[];
 }
 
-export type LaserxProject = LaserxProjectV3;
+export type LaserxProject = LaserxProjectV4;
 
 export interface CreateDocumentInput {
   id: string;
@@ -530,6 +593,20 @@ function transformedPrimitiveBounds(
           applyAffineTransform(point, transform),
         ),
       );
+    case "text":
+      return boundsFromPoints(
+        object.contours.flatMap((contour) =>
+          contour.points.map((point) =>
+            applyAffineTransform(
+              {
+                xMm: point.xMm + object.origin.xMm,
+                yMm: point.yMm + object.origin.yMm,
+              },
+              transform,
+            ),
+          ),
+        ),
+      );
   }
 }
 
@@ -675,11 +752,42 @@ export function copyDocumentObject(object: DocumentObject): DocumentObject {
         transform: copyAffineTransform(object.transform),
         points: object.points.map((point) => ({ ...point })),
       };
+    case "text":
+      return {
+        ...object,
+        transform: copyAffineTransform(object.transform),
+        origin: { ...object.origin },
+        style: { ...object.style },
+        arc: object.arc === null ? null : { ...object.arc },
+        contours: object.contours.map((contour) => ({
+          compoundIndex: contour.compoundIndex,
+          closed: contour.closed,
+          points: contour.points.map((point) => ({ ...point })),
+        })),
+      };
     case "group":
       return {
         ...object,
         transform: copyAffineTransform(object.transform),
         children: object.children.map(copyDocumentObject),
+        ...(object.sourceText === undefined
+          ? {}
+          : {
+              sourceText: {
+                ...object.sourceText,
+                origin: { ...object.sourceText.origin },
+                style: { ...object.sourceText.style },
+                arc:
+                  object.sourceText.arc === null
+                    ? null
+                    : { ...object.sourceText.arc },
+                contours: object.sourceText.contours.map((contour) => ({
+                  compoundIndex: contour.compoundIndex,
+                  closed: contour.closed,
+                  points: contour.points.map((point) => ({ ...point })),
+                })),
+              },
+            }),
       };
   }
 }
