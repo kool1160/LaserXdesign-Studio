@@ -145,7 +145,9 @@ non-grid and grid targets.
 `pnpm test:e2e`, `pnpm verify`, `pnpm audit --prod`,
 `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
 suite contains 74 unit/integration tests and 10 packaged Playwright tests.
-Final-head Repository Guard and Windows M03 workflows are pending publication.
+Focused code commit `ea3b61645cc9feb77274c92526e4f467dac866fc`
+passed Repository Guard run `30595655590`, Windows push run `30595654053`,
+and Windows pull-request run `30595655524`.
 - Decisions: no architecture or schema change. Camera state remains
 renderer-local, while snap selection remains deterministic domain behavior.
 - Known limitations: existing M03 limitations remain unchanged.

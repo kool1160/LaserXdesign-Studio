@@ -61,7 +61,7 @@ M01 was merged through PR #14 in commit
 - [x] ADRs 0010–0011 and architecture, units, format, testing, risk, fixture,
   screenshot, changelog, and work-log documentation are updated.
 - [ ] Draft pull request reviewed.
-- [ ] Repository Guard and both Windows M03 Editing Core runs green on the
+- [x] Repository Guard and both Windows M03 Editing Core runs green on the
   published pan/snap repair head.
 - [ ] Pull request merged and Issue #4 closed.
 
