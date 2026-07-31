@@ -78,8 +78,12 @@ opens at the intended physical size with clean 2D geometry.
 - Independent inspection: pinned MIT `dxf-parser` verifies representative DXF
   millimeter units, entity type, and closed shape flag without using the
   production parser.
-- State: awaiting review and exact-head GitHub checks. Do not merge, close Issue
-  #7, advance this file to M07, or begin M07 work from `Continue LaserX`.
+- GitHub verification passed on review-handoff head
+  `be1c83d50e353c39d06d726e9259990f51a0f1fa`: Repository Guard run
+  `30641865418`, M04 regression run `30641865714`, M05 regression run
+  `30641866194`, and M06 push/pull-request runs `30641860932`/`30641865158`.
+- State: awaiting review. Do not merge, close Issue #7, advance this file to
+  M07, or begin M07 work from `Continue LaserX`.
 
 ## Allowed M06 work
 
