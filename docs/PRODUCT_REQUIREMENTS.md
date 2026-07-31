@@ -43,7 +43,7 @@ Import SVG, preserve scale when known, edit paths, validate cutability, and expo
 
 ### Prompt-generated sign
 
-Enter a prompt and machine constraints, generate concept options, choose one, convert it into normalized editable geometry, validate it, and continue editing.
+Enter a prompt and machine constraints, generate concept options, choose one, convert it into normalized editable geometry, validate it, and continue editing. The initial commercial model uses user-owned OpenAI API access and direct OpenAI billing behind a provider-neutral adapter. Credentials remain outside projects, renderer code, logs, fixtures, telemetry, and source control. Future delegated OpenAI/ChatGPT authorization may replace manual API-key setup without changing the generation pipeline.
 
 ### Layered sign
 
@@ -75,7 +75,10 @@ Separate front artwork, backing plate, spacers/holes, and export each manufactur
 - project files must be versioned and migratable;
 - critical workflows must have automated end-to-end coverage;
 - renderer security must follow Electron isolation practices;
-- user content must remain local unless explicitly sent to an AI provider.
+- user content must remain local unless explicitly sent to an AI provider;
+- AI provider credentials must use operating-system secure storage and remain
+  replaceable independently from generation behavior;
+- ordinary editing, tracing, analysis, and export must not depend on AI access.
 
 ## Version 1 non-goals
 
@@ -88,6 +91,24 @@ Separate front artwork, backing plate, spacers/holes, and export each manufactur
 - cloud collaboration;
 - mobile editor;
 - a marketplace of copyrighted logos or commercial fonts.
+
+## Future expansion requirement
+
+Machine control is a version 1 non-goal, not a permanent product prohibition.
+LaserX must preserve a post-version-1 path for owner-built CNC control hardware
+and broader manufacturing modules without rewriting the editor.
+
+Core project, geometry, text, tracing, AI, cutability, and sign-tool behavior
+must remain independent from controller boards, firmware, machine transports,
+and process-specific execution. Future hardware support must enter through
+capability-based machine and controller adapters, with privileged device access,
+deterministic job preparation, simulation/review, explicit operator approval,
+and separately gated safety requirements.
+
+The future extension model must allow a custom LaserX control board and other
+machine modules to expand the software beyond sign-file creation and beyond one
+cutting process. AI and the renderer may never command motion or process output
+directly. ADR 0018 governs this boundary.
 
 ## Success criteria
 
