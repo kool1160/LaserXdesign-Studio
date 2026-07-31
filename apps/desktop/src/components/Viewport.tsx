@@ -6,13 +6,20 @@ import {
   useState,
 } from "react";
 
-import type { EditorActionRequest } from "@laserx/application";
+import type {
+  EditorActionRequest,
+  PathSelectionProjection,
+} from "@laserx/application";
 import type {
   BoundsMm,
   LaserxDocument,
   PointMm,
 } from "@laserx/domain";
 import {
+  COORDINATE_TOLERANCE_MM,
+  applyAffineTransform,
+  domainToScreen,
+  evaluatePathSegment,
   panViewport,
   screenToDomain,
   type ScreenPointCssPx,
@@ -41,6 +48,7 @@ interface ViewportProps {
   document: LaserxDocument;
   selectionIds: readonly string[];
   selectionBounds: BoundsMm | null;
+  pathSelection: PathSelectionProjection | null;
   onEditorAction: (request: EditorActionRequest) => void;
 }
 
@@ -66,6 +74,19 @@ type Gesture =
       bounds: BoundsMm;
       objectIds: string[];
       lockAspectRatio: boolean;
+    }
+  | {
+      kind: "path-node";
+      startDomain: PointMm;
+      objectId: string;
+      nodeIndices: number[];
+    }
+  | {
+      kind: "path-handle";
+      startDomain: PointMm;
+      objectId: string;
+      nodeIndex: number;
+      handle: "incoming" | "outgoing";
     };
 
 function pointsAttribute(points: readonly ScreenPointCssPx[]): string {
@@ -122,6 +143,7 @@ export function Viewport({
   document,
   selectionIds,
   selectionBounds,
+  pathSelection,
   onEditorAction,
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -181,6 +203,47 @@ export function Viewport({
     () => createViewportScene(document, viewport, size, selectionIds),
     [document, selectionIds, size, viewport],
   );
+  const pathOverlay = useMemo(() => {
+    if (pathSelection === null) {
+      return null;
+    }
+    const object = document.objects.find(
+      (candidate) =>
+        candidate.id === pathSelection.objectId && candidate.type === "path",
+    );
+    if (object?.type !== "path") {
+      return null;
+    }
+    const screenPoint = (point: PointMm): ScreenPointCssPx =>
+      domainToScreen(applyAffineTransform(point, object.transform), viewport);
+    const segmentCount = object.closed
+      ? object.points.length
+      : object.points.length - 1;
+    return {
+      object,
+      nodes: object.points.map((point, index) => {
+        const handles = object.handles?.[index];
+        return {
+          index,
+          point: screenPoint(point),
+          selected: pathSelection.nodeIndices.includes(index),
+          incoming:
+            handles?.incoming === null || handles?.incoming === undefined
+              ? null
+              : screenPoint(handles.incoming),
+          outgoing:
+            handles?.outgoing === null || handles?.outgoing === undefined
+              ? null
+              : screenPoint(handles.outgoing),
+        };
+      }),
+      segments: Array.from({ length: segmentCount }, (_unused, index) => ({
+        index,
+        point: screenPoint(evaluatePathSegment(object, index, 0.5)),
+        selected: pathSelection.segmentIndices.includes(index),
+      })),
+    };
+  }, [document.objects, pathSelection, viewport]);
 
   const pointFromEvent = useCallback(
     (clientX: number, clientY: number): ScreenPointCssPx => {
@@ -235,6 +298,39 @@ export function Viewport({
           );
         } else if (gesture.mode === "replace") {
           onEditorAction({ type: "selection.clear" });
+        }
+        return;
+      }
+      if (gesture.kind === "path-node") {
+        const target = screenToDomain(point, viewport);
+        const deltaXmm = target.xMm - gesture.startDomain.xMm;
+        const deltaYmm = target.yMm - gesture.startDomain.yMm;
+        if (Math.hypot(deltaXmm, deltaYmm) > COORDINATE_TOLERANCE_MM) {
+          onEditorAction({
+            type: "path.move-nodes",
+            objectId: gesture.objectId,
+            nodeIndices: gesture.nodeIndices,
+            deltaXmm,
+            deltaYmm,
+          });
+        }
+        return;
+      }
+      if (gesture.kind === "path-handle") {
+        const target = screenToDomain(point, viewport);
+        if (
+          Math.hypot(
+            target.xMm - gesture.startDomain.xMm,
+            target.yMm - gesture.startDomain.yMm,
+          ) > COORDINATE_TOLERANCE_MM
+        ) {
+          onEditorAction({
+            type: "path.set-handle",
+            objectId: gesture.objectId,
+            nodeIndex: gesture.nodeIndex,
+            handle: gesture.handle,
+            point: target,
+          });
         }
         return;
       }
@@ -319,8 +415,69 @@ export function Viewport({
             | TransformHandleKind
             | undefined;
           const objectId = target.dataset.objectId;
+          const pathNodeIndex =
+            target.dataset.pathNodeIndex === undefined
+              ? null
+              : Number(target.dataset.pathNodeIndex);
+          const pathSegmentIndex =
+            target.dataset.pathSegmentIndex === undefined
+              ? null
+              : Number(target.dataset.pathSegmentIndex);
+          const pathHandle = target.dataset.pathHandle as
+            | "incoming"
+            | "outgoing"
+            | undefined;
           if (event.button === 1 || event.altKey) {
             gestureRef.current = { kind: "pan", previous: point };
+          } else if (
+            pathHandle !== undefined &&
+            pathNodeIndex !== null &&
+            pathOverlay !== null
+          ) {
+            gestureRef.current = {
+              kind: "path-handle",
+              startDomain: screenToDomain(point, viewport),
+              objectId: pathOverlay.object.id,
+              nodeIndex: pathNodeIndex,
+              handle: pathHandle,
+            };
+          } else if (
+            pathNodeIndex !== null &&
+            pathOverlay !== null &&
+            pathSelection !== null
+          ) {
+            const mode = selectionMode(event);
+            const nextNodeIndices =
+              mode === "replace"
+                ? [pathNodeIndex]
+                : mode === "add"
+                  ? [...new Set([...pathSelection.nodeIndices, pathNodeIndex])]
+                  : pathSelection.nodeIndices.includes(pathNodeIndex)
+                    ? pathSelection.nodeIndices.filter((index) => index !== pathNodeIndex)
+                    : [...pathSelection.nodeIndices, pathNodeIndex];
+            onEditorAction({
+              type: "selection.path-node",
+              objectId: pathOverlay.object.id,
+              nodeIndex: pathNodeIndex,
+              mode,
+            });
+            gestureRef.current =
+              nextNodeIndices.length === 0
+                ? null
+                : {
+                    kind: "path-node",
+                    startDomain: screenToDomain(point, viewport),
+                    objectId: pathOverlay.object.id,
+                    nodeIndices: nextNodeIndices,
+                  };
+          } else if (pathSegmentIndex !== null && pathOverlay !== null) {
+            onEditorAction({
+              type: "selection.path-segment",
+              objectId: pathOverlay.object.id,
+              segmentIndex: pathSegmentIndex,
+              mode: selectionMode(event),
+            });
+            gestureRef.current = null;
           } else if (
             handle !== undefined &&
             selectionBounds !== null &&
@@ -365,7 +522,7 @@ export function Viewport({
             };
             setMarquee({ start: point, end: point });
           }
-          setGestureKind(gestureRef.current.kind);
+          setGestureKind(gestureRef.current?.kind ?? null);
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
@@ -510,7 +667,65 @@ export function Viewport({
               ),
             )}
           </g>
-          {scene.selection !== null && (
+          {pathOverlay !== null && (
+            <g className="path-edit-overlay" data-testid="path-edit-overlay">
+              {pathOverlay.nodes.flatMap((node) => {
+                const handles = [
+                  ["incoming", node.incoming],
+                  ["outgoing", node.outgoing],
+                ] as const;
+                return node.selected
+                  ? handles.flatMap(([kind, handlePoint]) =>
+                      handlePoint === null
+                        ? []
+                        : [
+                            <line
+                              key={`line-${String(node.index)}-${kind}`}
+                              className="curve-handle-line"
+                              x1={node.point.xCssPx}
+                              y1={node.point.yCssPx}
+                              x2={handlePoint.xCssPx}
+                              y2={handlePoint.yCssPx}
+                            />,
+                            <circle
+                              key={`handle-${String(node.index)}-${kind}`}
+                              className="curve-handle"
+                              data-path-node-index={node.index}
+                              data-path-handle={kind}
+                              cx={handlePoint.xCssPx}
+                              cy={handlePoint.yCssPx}
+                              r={4}
+                            />,
+                          ],
+                    )
+                  : [];
+              })}
+              {pathOverlay.segments.map((segment) => (
+                <rect
+                  key={`segment-${String(segment.index)}`}
+                  className={`path-segment-handle${segment.selected ? " selected" : ""}`}
+                  data-path-segment-index={segment.index}
+                  x={segment.point.xCssPx - 3}
+                  y={segment.point.yCssPx - 3}
+                  width={6}
+                  height={6}
+                  transform={`rotate(45 ${String(segment.point.xCssPx)} ${String(segment.point.yCssPx)})`}
+                />
+              ))}
+              {pathOverlay.nodes.map((node) => (
+                <circle
+                  key={`node-${String(node.index)}`}
+                  className={`path-node${node.selected ? " selected" : ""}`}
+                  data-path-node-index={node.index}
+                  data-testid="path-node"
+                  cx={node.point.xCssPx}
+                  cy={node.point.yCssPx}
+                  r={5}
+                />
+              ))}
+            </g>
+          )}
+          {scene.selection !== null && pathOverlay === null && (
             <g className="selection-overlay" data-testid="selection-overlay">
               <rect
                 className="selection-box"

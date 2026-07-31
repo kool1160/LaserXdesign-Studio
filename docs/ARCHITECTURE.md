@@ -92,6 +92,36 @@ union separate glyph compounds, so enclosed counters remain empty without
 turning overlapping script or negatively tracked glyphs into holes. ADRs
 0012–0013 record the font boundary and persistence decisions.
 
+For M05, schema v5 adds optional one-to-one cubic handle records to ordinary
+paths while leaving straight schema-v4 path geometry unchanged during
+migration. `packages/geometry` owns node/segment math, De Casteljau splitting,
+explicit-tolerance curve flattening, simplification, cleanup,
+self-intersection reporting, and a replaceable `GeometryEngine`. The sole
+engine adapter pins `clipper2-ts` for closed booleans and signed offsets and
+quantizes canonical millimeters to integer micrometers at that boundary.
+Cleanup removes duplicate or collinear anchors only when every control involved
+in the affected segments is empty; handled anchors remain authoritative unless
+a future operation can prove a replacement stays within the selected tolerance.
+
+`packages/application` prepares selected closed paths in world millimeters and
+materializes results with stable surviving IDs, fresh additional IDs, warnings,
+discarded/replaced IDs, node counts, and a UI summary. Electron runs the pure
+engine task in a dedicated worker thread. Cancellation terminates the worker;
+a document fingerprint rejects stale results; only a completed current result
+enters the authoritative session as one undoable command. React dispatches
+validated path or geometry requests and renders projections only. ADRs
+0014–0015 record the engine, worker, tolerance, and persistence decisions.
+
+Geometry preparation preserves application selection order end to end. For
+Subtract, the first selected path is the subject and every later selected path
+is a clip; the renderer states that rule and keeps its selected-path projection
+in the same order. Boolean, multi-path offset, and endpoint-join requests are
+rejected unless every operand belongs to the same editable layer, preventing a
+topology replacement from silently relocating source geometry. Joining open
+curves moves the two endpoint anchors to their midpoint and translates the
+adjacent cubic controls by the same deltas before merging their incoming and
+outgoing controls.
+
 ## State flow
 
 ```text
@@ -130,7 +160,7 @@ Prompt/image + explicit settings
 
 ## Internal geometry representation
 
-The final representation will be selected and recorded during the relevant milestone, but it must support:
+The selected M05 representation supports:
 
 - open and closed paths;
 - line and curve segments;
@@ -140,6 +170,11 @@ The final representation will be selected and recorded during the relevant miles
 - conversion to flattened polylines under explicit tolerance;
 - winding and containment analysis;
 - booleans and offsets through a replaceable engine boundary.
+
+Each path stores ordered point anchors and may store aligned nullable absolute
+local-space incoming/outgoing cubic controls. No handle array means all
+segments are straight. Engine output remains ordinary closed paths rather than
+engine-specific document records.
 
 ## Units
 

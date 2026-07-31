@@ -438,4 +438,146 @@ describe("editing ProjectSession", () => {
       limit: 10,
     });
   });
+
+  it("restores normalized path geometry byte-for-byte after topology undo", () => {
+    const pathId = "b0000000-0000-4000-8000-000000000000";
+    const session = sessionWithFixture();
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: pathId,
+          type: "path",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          closed: false,
+          points: [
+            { xMm: 0, yMm: 0 },
+            { xMm: 5, yMm: 0.02 },
+            { xMm: 10, yMm: 0 },
+          ],
+        },
+      ],
+    });
+    const before = projectJson(session);
+    session.executeEditorCommand({
+      type: "path.simplify",
+      objectId: pathId,
+      toleranceMm: 0.1,
+    });
+    expect(session.state.editor.topologySummary).toMatchObject({
+      operation: "Simplify path",
+      beforeNodeCount: 3,
+      afterNodeCount: 2,
+      replacedObjectIds: [pathId],
+    });
+    session.undo();
+    expect(projectJson(session)).toBe(before);
+    session.redo();
+    expect(
+      session.state.project.document.objects.find(
+        (object) => object.id === pathId,
+      ),
+    ).toMatchObject({
+      id: pathId,
+      type: "path",
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 10, yMm: 0 },
+      ],
+    });
+  });
+
+  it("surfaces cleanup removals and self-intersections in the topology summary", () => {
+    const pathId = "c0000000-0000-4000-8000-000000000000";
+    const session = sessionWithFixture();
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: pathId,
+          type: "path",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          closed: true,
+          points: [
+            { xMm: 0, yMm: 0 },
+            { xMm: 5, yMm: 5 },
+            { xMm: 5, yMm: 5 },
+            { xMm: 0, yMm: 5 },
+            { xMm: 5, yMm: 0 },
+          ],
+        },
+      ],
+    });
+    session.executeEditorCommand({
+      type: "path.cleanup",
+      objectId: pathId,
+      toleranceMm: 0.001,
+    });
+    expect(session.state.editor.topologySummary).toMatchObject({
+      operation: "Clean contour",
+      beforeNodeCount: 5,
+      afterNodeCount: 4,
+    });
+    expect(session.state.editor.topologySummary?.warnings.join(" ")).toMatch(
+      /Removed 1.*self-intersection/,
+    );
+  });
+
+  it("rejects cross-layer joins without deleting or relocating either path", () => {
+    const otherLayerId = "d0000000-0000-4000-8000-000000000000";
+    const firstPathId = "d0000000-0000-4000-8000-000000000001";
+    const secondPathId = "d0000000-0000-4000-8000-000000000002";
+    const session = sessionWithFixture();
+    session.executeEditorCommand({
+      type: "layer.add",
+      layer: {
+        id: otherLayerId,
+        name: "Other artwork",
+        visible: true,
+        locked: false,
+      },
+    });
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: firstPathId,
+          type: "path",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          closed: false,
+          points: [
+            { xMm: 0, yMm: 0 },
+            { xMm: 10, yMm: 0 },
+          ],
+        },
+        {
+          id: secondPathId,
+          type: "path",
+          layerId: otherLayerId,
+          transform: identityTransform(),
+          closed: false,
+          points: [
+            { xMm: 10.05, yMm: 0 },
+            { xMm: 20, yMm: 0 },
+          ],
+        },
+      ],
+    });
+    const before = projectJson(session);
+
+    expect(() =>
+      session.performEditorAction({
+        type: "paths.join-selected",
+        toleranceMm: 0.1,
+      }),
+    ).toThrow(/share one editable layer/);
+    expect(projectJson(session)).toBe(before);
+    expect(session.state.editor.selectionIds).toEqual([
+      firstPathId,
+      secondPathId,
+    ]);
+  });
 });

@@ -18,11 +18,20 @@ import {
   type DisplayUnit,
   type DocumentObject,
   type EditorCommand,
+  type LaserxDocument,
   type LaserxProject,
+  type PathObject,
   type PointMm,
   type TextObject,
   type UpdateViewportPreferences,
 } from "@laserx/domain";
+import {
+  applyAffineTransform,
+  cleanupEditablePath,
+  type EditablePathGeometry,
+} from "@laserx/geometry";
+
+import { previewSelectedPathJoin } from "./path-preview.js";
 
 export const DEFAULT_HISTORY_LIMIT = 100;
 export const DEFAULT_DUPLICATE_OFFSET_MM = 10;
@@ -36,12 +45,30 @@ export interface EditorProjection {
   selectionIds: string[];
   selectionBounds: BoundsMm | null;
   clipboardHasContent: boolean;
+  pathSelection: PathSelectionProjection | null;
+  topologySummary: TopologyChangeSummary | null;
   history: {
     undoDepth: number;
     redoDepth: number;
     limit: number;
     transactionActive: boolean;
   };
+}
+
+export interface PathSelectionProjection {
+  objectId: string;
+  nodeIndices: number[];
+  segmentIndices: number[];
+}
+
+export interface TopologyChangeSummary {
+  operation: string;
+  beforeNodeCount: number;
+  afterNodeCount: number;
+  replacedObjectIds: string[];
+  discardedObjectIds: string[];
+  warnings: string[];
+  message: string;
 }
 
 export interface ProjectSessionState {
@@ -70,10 +97,13 @@ type GeneratedEditorCommand =
   | Extract<EditorCommand, { type: "objects.duplicate" }>
   | Extract<EditorCommand, { type: "objects.insert" }>
   | Extract<EditorCommand, { type: "objects.replace" }>
+  | Extract<EditorCommand, { type: "objects.replace-topology" }>
   | Extract<EditorCommand, { type: "objects.convert-text" }>
   | Extract<EditorCommand, { type: "objects.group" }>
   | Extract<EditorCommand, { type: "layer.add" }>
-  | Extract<EditorCommand, { type: "guide.add" }>;
+  | Extract<EditorCommand, { type: "guide.add" }>
+  | Extract<EditorCommand, { type: "path.split" }>
+  | Extract<EditorCommand, { type: "paths.join" }>;
 
 export type DirectEditorCommand = Exclude<
   EditorCommand,
@@ -97,11 +127,27 @@ export type EditorActionRequest =
     }
   | { type: "selection.all" }
   | { type: "selection.clear" }
+  | {
+      type: "selection.path-node";
+      objectId: string;
+      nodeIndex: number;
+      mode: SelectionMode;
+    }
+  | {
+      type: "selection.path-segment";
+      objectId: string;
+      segmentIndex: number;
+      mode: SelectionMode;
+    }
+  | { type: "selection.path-clear" }
+  | { type: "selection.path-edit"; objectId: string }
   | { type: "clipboard.copy" }
   | { type: "clipboard.paste" }
   | { type: "objects.duplicate-selection" }
   | { type: "objects.group-selection" }
   | { type: "objects.convert-selected-text"; preserveSource: boolean }
+  | { type: "path.split-selected" }
+  | { type: "paths.join-selected"; toleranceMm: number }
   | { type: "history.undo" }
   | { type: "history.redo" }
   | { type: "history.begin-transaction"; label: string }
@@ -145,6 +191,8 @@ interface ActiveTransaction {
   pasteSequence: number;
   future: HistoryEntry[];
   lastEditorCommand: EditorCommand | null;
+  pathSelection: PathSelectionProjection | null;
+  topologySummary: TopologyChangeSummary | null;
   commands: EditorCommand[];
 }
 
@@ -199,6 +247,71 @@ function applySelectionMode(
   return [...next];
 }
 
+function copyPathSelection(
+  selection: PathSelectionProjection | null,
+): PathSelectionProjection | null {
+  return selection === null
+    ? null
+    : {
+        objectId: selection.objectId,
+        nodeIndices: [...selection.nodeIndices],
+        segmentIndices: [...selection.segmentIndices],
+      };
+}
+
+function copyTopologySummary(
+  summary: TopologyChangeSummary | null,
+): TopologyChangeSummary | null {
+  return summary === null
+    ? null
+    : {
+        ...summary,
+        replacedObjectIds: [...summary.replacedObjectIds],
+        discardedObjectIds: [...summary.discardedObjectIds],
+        warnings: [...summary.warnings],
+      };
+}
+
+function worldPathGeometry(object: PathObject): EditablePathGeometry {
+  return {
+    closed: object.closed,
+    points: object.points.map((point) =>
+      applyAffineTransform(point, object.transform),
+    ),
+    ...(object.handles === undefined
+      ? {}
+      : {
+          handles: object.handles.map((handles) => ({
+            incoming:
+              handles.incoming === null
+                ? null
+                : applyAffineTransform(handles.incoming, object.transform),
+            outgoing:
+              handles.outgoing === null
+                ? null
+                : applyAffineTransform(handles.outgoing, object.transform),
+          })),
+        }),
+  };
+}
+
+function applyIndexSelectionMode(
+  current: readonly number[],
+  incoming: number,
+  mode: SelectionMode,
+): number[] {
+  if (mode === "replace") {
+    return [incoming];
+  }
+  const next = new Set(current);
+  if (mode === "toggle" && next.has(incoming)) {
+    next.delete(incoming);
+  } else {
+    next.add(incoming);
+  }
+  return [...next].sort((first, second) => first - second);
+}
+
 export class ProjectSession implements ProjectCommandDispatcher {
   readonly #dependencies: LifecycleDependencies;
   readonly #historyLimit: number;
@@ -213,6 +326,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
   #future: HistoryEntry[] = [];
   #transaction: ActiveTransaction | null = null;
   #lastEditorCommand: EditorCommand | null = null;
+  #pathSelection: PathSelectionProjection | null = null;
+  #topologySummary: TopologyChangeSummary | null = null;
 
   public constructor(
     dependencies: LifecycleDependencies,
@@ -243,6 +358,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
           selectionBounds === null ? null : { ...selectionBounds },
         clipboardHasContent:
           this.#clipboard !== null && this.#clipboard.length > 0,
+        pathSelection: copyPathSelection(this.#pathSelection),
+        topologySummary: copyTopologySummary(this.#topologySummary),
         history: {
           undoDepth: this.#past.length,
           redoDepth: this.#future.length,
@@ -331,10 +448,45 @@ export class ProjectSession implements ProjectCommandDispatcher {
             isLayerEditable(this.#project.document, object.layerId),
           )
           .map((object) => object.id);
+        this.#pathSelection = null;
         return this.state;
       case "selection.clear":
         this.#selectionIds = [];
+        this.#pathSelection = null;
         return this.state;
+      case "selection.path-node":
+        return this.selectPathNode(
+          request.objectId,
+          request.nodeIndex,
+          request.mode,
+        );
+      case "selection.path-segment":
+        return this.selectPathSegment(
+          request.objectId,
+          request.segmentIndex,
+          request.mode,
+        );
+      case "selection.path-clear":
+        this.#pathSelection = null;
+        return this.state;
+      case "selection.path-edit": {
+        const object = this.#project.document.objects.find(
+          (candidate) => candidate.id === request.objectId,
+        );
+        if (
+          object?.type !== "path" ||
+          !isLayerEditable(this.#project.document, object.layerId)
+        ) {
+          throw new RangeError("Select one editable path to edit its nodes.");
+        }
+        this.#selectionIds = [object.id];
+        this.#pathSelection = {
+          objectId: object.id,
+          nodeIndices: [],
+          segmentIndices: [],
+        };
+        return this.state;
+      }
       case "clipboard.copy":
         return this.copySelection();
       case "clipboard.paste":
@@ -345,6 +497,10 @@ export class ProjectSession implements ProjectCommandDispatcher {
         return this.groupSelection();
       case "objects.convert-selected-text":
         return this.convertSelectedText(request.preserveSource);
+      case "path.split-selected":
+        return this.splitSelectedPath();
+      case "paths.join-selected":
+        return this.joinSelectedPaths(request.toleranceMm);
       case "history.undo":
         return this.undo();
       case "history.redo":
@@ -434,10 +590,71 @@ export class ProjectSession implements ProjectCommandDispatcher {
       case "objects.ungroup":
         this.#selectionIds = ungroupedChildIds;
         break;
+      case "objects.replace-topology":
+        this.#selectionIds = command.replacements.map((object) => object.id);
+        this.#pathSelection = null;
+        break;
+      case "path.add-node":
+        this.#selectionIds = [command.objectId];
+        this.#pathSelection = {
+          objectId: command.objectId,
+          nodeIndices: [command.segmentIndex + 1],
+          segmentIndices: [],
+        };
+        break;
+      case "path.delete-nodes":
+      case "path.simplify":
+      case "path.cleanup":
+        this.#selectionIds = [command.objectId];
+        this.#pathSelection = {
+          objectId: command.objectId,
+          nodeIndices: [],
+          segmentIndices: [],
+        };
+        break;
+      case "path.reverse": {
+        const path = nextDocument.objects.find(
+          (object) => object.id === command.objectId && object.type === "path",
+        );
+        this.#selectionIds = [command.objectId];
+        if (path?.type === "path" && this.#pathSelection?.objectId === command.objectId) {
+          this.#pathSelection = {
+            objectId: command.objectId,
+            nodeIndices: this.#pathSelection.nodeIndices.map(
+              (index) => path.points.length - 1 - index,
+            ),
+            segmentIndices: [],
+          };
+        }
+        break;
+      }
+      case "path.split":
+        this.#selectionIds = [command.objectId, command.newObjectId];
+        this.#pathSelection = null;
+        break;
+      case "paths.join":
+        this.#selectionIds = [command.firstObjectId];
+        this.#pathSelection = {
+          objectId: command.firstObjectId,
+          nodeIndices: [],
+          segmentIndices: [],
+        };
+        break;
       default:
         this.#reconcileSelection();
         break;
     }
+    this.#recordTopologySummary(command, beforeDocument, nextDocument);
+    this.#reconcilePathSelection();
+    return this.state;
+  }
+
+  public applyTopologyReplacement(
+    command: Extract<EditorCommand, { type: "objects.replace-topology" }>,
+    summary: TopologyChangeSummary,
+  ): ProjectSessionState {
+    this.executeEditorCommand(command);
+    this.#topologySummary = copyTopologySummary(summary);
     return this.state;
   }
 
@@ -456,6 +673,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
       top === undefined ? [] : [top.objectId],
       mode,
     );
+    this.#reconcilePathSelection();
     return this.state;
   }
 
@@ -468,7 +686,125 @@ export class ProjectSession implements ProjectCommandDispatcher {
       marqueeHitTest(this.#project.document, bounds),
       mode,
     );
+    this.#pathSelection = null;
     return this.state;
+  }
+
+  public selectPathNode(
+    objectId: string,
+    nodeIndex: number,
+    mode: SelectionMode,
+  ): ProjectSessionState {
+    const object = this.#project.document.objects.find(
+      (candidate) => candidate.id === objectId,
+    );
+    if (
+      object?.type !== "path" ||
+      !isLayerEditable(this.#project.document, object.layerId) ||
+      !Number.isInteger(nodeIndex) ||
+      nodeIndex < 0 ||
+      nodeIndex >= object.points.length
+    ) {
+      throw new RangeError("Selected path node is invalid or not editable.");
+    }
+    const current =
+      this.#pathSelection?.objectId === objectId
+        ? this.#pathSelection.nodeIndices
+        : [];
+    this.#selectionIds = [objectId];
+    this.#pathSelection = {
+      objectId,
+      nodeIndices: applyIndexSelectionMode(current, nodeIndex, mode),
+      segmentIndices: [],
+    };
+    return this.state;
+  }
+
+  public selectPathSegment(
+    objectId: string,
+    segmentIndex: number,
+    mode: SelectionMode,
+  ): ProjectSessionState {
+    const object = this.#project.document.objects.find(
+      (candidate) => candidate.id === objectId,
+    );
+    const segmentCount =
+      object?.type === "path"
+        ? object.closed
+          ? object.points.length
+          : object.points.length - 1
+        : 0;
+    if (
+      object?.type !== "path" ||
+      !isLayerEditable(this.#project.document, object.layerId) ||
+      !Number.isInteger(segmentIndex) ||
+      segmentIndex < 0 ||
+      segmentIndex >= segmentCount
+    ) {
+      throw new RangeError("Selected path segment is invalid or not editable.");
+    }
+    const current =
+      this.#pathSelection?.objectId === objectId
+        ? this.#pathSelection.segmentIndices
+        : [];
+    this.#selectionIds = [objectId];
+    this.#pathSelection = {
+      objectId,
+      nodeIndices: [],
+      segmentIndices: applyIndexSelectionMode(current, segmentIndex, mode),
+    };
+    return this.state;
+  }
+
+  public splitSelectedPath(): ProjectSessionState {
+    const selection = this.#pathSelection;
+    if (selection === null || selection.nodeIndices.length !== 1) {
+      throw new RangeError("Select exactly one interior node to split the path.");
+    }
+    return this.executeEditorCommand({
+      type: "path.split",
+      objectId: selection.objectId,
+      nodeIndex: selection.nodeIndices[0] as number,
+      newObjectId: this.#dependencies.createId(),
+    });
+  }
+
+  public joinSelectedPaths(toleranceMm: number): ProjectSessionState {
+    if (!Number.isFinite(toleranceMm) || toleranceMm < 0) {
+      throw new RangeError("Join tolerance must be finite and nonnegative.");
+    }
+    const paths = this.#selectionIds
+      .map((id) =>
+        this.#project.document.objects.find((object) => object.id === id),
+      )
+      .filter(
+        (object): object is PathObject =>
+          object?.type === "path" &&
+          !object.closed &&
+          isLayerEditable(this.#project.document, object.layerId),
+      );
+    if (paths.length !== 2) {
+      throw new RangeError("Select exactly two editable open paths to join.");
+    }
+    const first = paths[0] as PathObject;
+    const second = paths[1] as PathObject;
+    if (first.layerId !== second.layerId) {
+      throw new RangeError(
+        "Joining paths requires both paths to share one editable layer.",
+      );
+    }
+    const nearest = previewSelectedPathJoin(paths, toleranceMm);
+    if (nearest === null) {
+      throw new RangeError("No path endpoints are available to join.");
+    }
+    return this.executeEditorCommand({
+      type: "paths.join",
+      firstObjectId: first.id,
+      firstEnd: nearest.firstEnd,
+      secondObjectId: second.id,
+      secondEnd: nearest.secondEnd,
+      toleranceMm,
+    });
   }
 
   public copySelection(): ProjectSessionState {
@@ -664,6 +1000,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
         this.#lastEditorCommand === null
           ? null
           : copyEditorCommand(this.#lastEditorCommand),
+      pathSelection: copyPathSelection(this.#pathSelection),
+      topologySummary: copyTopologySummary(this.#topologySummary),
       commands: [],
     };
     return this.state;
@@ -700,6 +1038,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
         transaction.lastEditorCommand === null
           ? null
           : copyEditorCommand(transaction.lastEditorCommand);
+      this.#pathSelection = copyPathSelection(transaction.pathSelection);
+      this.#topologySummary = copyTopologySummary(transaction.topologySummary);
       this.#transaction = null;
     }
     return this.state;
@@ -720,6 +1060,15 @@ export class ProjectSession implements ProjectCommandDispatcher {
         ? null
         : copyEditorCommand(entry.commands.at(-1) as EditorCommand);
     this.#reconcileSelection();
+    this.#topologySummary = {
+      operation: "Undo",
+      beforeNodeCount: 0,
+      afterNodeCount: 0,
+      replacedObjectIds: [],
+      discardedObjectIds: [],
+      warnings: [],
+      message: `Undid ${entry.label}.`,
+    };
     return this.state;
   }
 
@@ -738,6 +1087,15 @@ export class ProjectSession implements ProjectCommandDispatcher {
         ? null
         : copyEditorCommand(entry.commands.at(-1) as EditorCommand);
     this.#reconcileSelection();
+    this.#topologySummary = {
+      operation: "Redo",
+      beforeNodeCount: 0,
+      afterNodeCount: 0,
+      replacedObjectIds: [],
+      discardedObjectIds: [],
+      warnings: [],
+      message: `Redid ${entry.label}.`,
+    };
     return this.state;
   }
 
@@ -835,6 +1193,113 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#future = [];
   }
 
+  #recordTopologySummary(
+    command: EditorCommand,
+    before: LaserxDocument,
+    after: LaserxDocument,
+  ): void {
+    let operation: string;
+    let beforeIds: string[];
+    let afterIds: string[];
+    let discardedObjectIds: string[] = [];
+    let warnings: string[] = [];
+    switch (command.type) {
+      case "path.move-nodes":
+        operation = "Move nodes";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.add-node":
+        operation = "Add node";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.delete-nodes":
+        operation = "Delete nodes";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.set-handle":
+        operation = "Edit curve handle";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.set-closed":
+        operation = command.closed ? "Close path" : "Open path";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.reverse":
+        operation = "Reverse path";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.simplify":
+        operation = "Simplify path";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        break;
+      case "path.cleanup":
+        operation = "Clean contour";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId];
+        {
+          const source = before.objects.find(
+            (object): object is PathObject =>
+              object.id === command.objectId && object.type === "path",
+          );
+          warnings =
+            source === undefined
+              ? []
+              : cleanupEditablePath(
+                  worldPathGeometry(source),
+                  command.toleranceMm,
+                ).warnings;
+        }
+        break;
+      case "path.split":
+        operation = "Split path";
+        beforeIds = [command.objectId];
+        afterIds = [command.objectId, command.newObjectId];
+        break;
+      case "paths.join":
+        operation = "Join paths";
+        beforeIds = [command.firstObjectId, command.secondObjectId];
+        afterIds = [command.firstObjectId];
+        discardedObjectIds = [command.secondObjectId];
+        break;
+      case "objects.replace-topology":
+        operation = "Topology operation";
+        beforeIds = [...command.sourceObjectIds];
+        afterIds = command.replacements.map((object) => object.id);
+        discardedObjectIds = command.sourceObjectIds.filter(
+          (id) => !afterIds.includes(id),
+        );
+        break;
+      default:
+        return;
+    }
+    const nodeCount = (document: LaserxDocument, ids: readonly string[]): number =>
+      document.objects.reduce(
+        (count, object) =>
+          object.type === "path" && ids.includes(object.id)
+            ? count + object.points.length
+            : count,
+        0,
+      );
+    const beforeNodeCount = nodeCount(before, beforeIds);
+    const afterNodeCount = nodeCount(after, afterIds);
+    this.#topologySummary = {
+      operation,
+      beforeNodeCount,
+      afterNodeCount,
+      replacedObjectIds: [...afterIds],
+      discardedObjectIds,
+      warnings,
+      message: `${operation}: ${String(beforeNodeCount)} → ${String(afterNodeCount)} nodes; ${String(afterIds.length)} resulting path${afterIds.length === 1 ? "" : "s"}.`,
+    };
+  }
+
   #isDirty(): boolean {
     return (
       this.#savedFingerprint === null ||
@@ -853,6 +1318,37 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#selectionIds = this.#selectionIds.filter((id) =>
       editable.has(id),
     );
+    this.#reconcilePathSelection();
+  }
+
+  #reconcilePathSelection(): void {
+    const selection = this.#pathSelection;
+    if (selection === null) {
+      return;
+    }
+    const object = this.#project.document.objects.find(
+      (candidate) => candidate.id === selection.objectId,
+    );
+    if (
+      object?.type !== "path" ||
+      !this.#selectionIds.includes(object.id) ||
+      !isLayerEditable(this.#project.document, object.layerId)
+    ) {
+      this.#pathSelection = null;
+      return;
+    }
+    const segmentCount = object.closed
+      ? object.points.length
+      : object.points.length - 1;
+    this.#pathSelection = {
+      objectId: object.id,
+      nodeIndices: selection.nodeIndices.filter(
+        (index) => index >= 0 && index < object.points.length,
+      ),
+      segmentIndices: selection.segmentIndices.filter(
+        (index) => index >= 0 && index < segmentCount,
+      ),
+    };
   }
 
   #resetEditorForReplacement(): void {
@@ -861,5 +1357,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#future = [];
     this.#transaction = null;
     this.#lastEditorCommand = null;
+    this.#pathSelection = null;
+    this.#topologySummary = null;
   }
 }

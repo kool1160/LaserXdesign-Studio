@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,6 +14,49 @@ export const executablePath = join(
   "LaserX Design Studio.exe",
 );
 const execFileAsync = promisify(execFile);
+const TRANSIENT_LAUNCH_ERROR =
+  /Lock file can not be created|WebSocket error: read ECONNRESET|Target page, context or browser has been closed/;
+
+async function waitForChildExit(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null) {
+    return;
+  }
+  await new Promise<void>((resolveExit) => {
+    const onExit = () => {
+      clearTimeout(timeoutId);
+      resolveExit();
+    };
+    const timeoutId = setTimeout(() => {
+      child.off("exit", onExit);
+      resolveExit();
+    }, 5_000);
+    child.once("exit", onExit);
+  });
+}
+
+async function launchElectron(
+  options: Parameters<typeof electron.launch>[0],
+): Promise<ElectronApplication> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await electron.launch(options);
+    } catch (error) {
+      lastError = error;
+      if (
+        attempt === 2 ||
+        !(error instanceof Error) ||
+        !TRANSIENT_LAUNCH_ERROR.test(error.message)
+      ) {
+        throw error;
+      }
+      await new Promise<void>((resolveRetry) => {
+        setTimeout(resolveRetry, 250 * (attempt + 1));
+      });
+    }
+  }
+  throw lastError;
+}
 
 export interface TestLaunch {
   electronApp: ElectronApplication;
@@ -25,6 +68,7 @@ export interface TestLaunch {
 export interface LaunchEnvironment {
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
+  geometryDelayMs?: string;
 }
 
 export async function launchPackaged(
@@ -36,7 +80,7 @@ export async function launchPackaged(
     directory ?? (await mkdtemp(join(tmpdir(), "laserx-e2e-")));
   const projectPath = join(testDirectory, "lifecycle.laserx");
   const userDataPath = join(testDirectory, "user-data");
-  const electronApp = await electron.launch({
+  const electronApp = await launchElectron({
     executablePath,
     env: {
       ...process.env,
@@ -53,6 +97,9 @@ export async function launchPackaged(
       ...(launchEnvironment.failInitialGetState === true
         ? { LASERX_TEST_GET_STATE_FAILURE: "1" }
         : {}),
+      ...(launchEnvironment.geometryDelayMs === undefined
+        ? {}
+        : { LASERX_TEST_GEOMETRY_DELAY_MS: launchEnvironment.geometryDelayMs }),
     },
   });
   return {
@@ -85,6 +132,7 @@ export async function kill(testLaunch: TestLaunch): Promise<void> {
     "/T",
     "/F",
   ]).catch(() => undefined);
+  await waitForChildExit(child);
 }
 
 export async function clickAndWaitForCommand(

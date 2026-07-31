@@ -387,6 +387,10 @@ export function pointInCompoundPolygonUnionEvenOdd(
   );
 }
 
+export * from "./path-editing.js";
+export * from "./geometry-engine.js";
+export * from "./geometry-task.js";
+
 function clampZoom(zoomCssPxPerMm: number): number {
   return Math.min(
     MAX_ZOOM_CSS_PX_PER_MM,

@@ -1,15 +1,28 @@
 import {
   IDENTITY_AFFINE_TRANSFORM,
+  addNodeToPathSegment,
+  applyAffineTransform,
   boundsCenter,
   boundsHeight,
   boundsWidth,
+  cleanupEditablePath,
   composeAffineTransforms,
+  deletePathNodes,
+  invertAffineTransform,
+  joinEditablePaths,
+  movePathNodes,
+  reverseEditablePath,
   rotationTransformAt,
   scaleTransformAt,
+  setEditablePathClosed,
+  setPathNodeHandle,
+  simplifyEditablePath,
+  splitOpenPathAtNode,
   translationTransform,
   type AffineTransformMm,
   type BoundsMm,
   type PointMm,
+  type EditablePathGeometry,
 } from "@laserx/geometry";
 
 import {
@@ -25,6 +38,7 @@ import {
   type Guide,
   type LaserxDocument,
   type Layer,
+  type PathObject,
 } from "./model.js";
 
 export type AlignmentKind =
@@ -95,6 +109,66 @@ export type EditorCommand =
       object: DocumentObject;
     }
   | {
+      type: "objects.replace-topology";
+      sourceObjectIds: string[];
+      replacements: PathObject[];
+    }
+  | {
+      type: "path.move-nodes";
+      objectId: string;
+      nodeIndices: number[];
+      deltaXmm: number;
+      deltaYmm: number;
+    }
+  | {
+      type: "path.add-node";
+      objectId: string;
+      segmentIndex: number;
+      ratio: number;
+    }
+  | {
+      type: "path.delete-nodes";
+      objectId: string;
+      nodeIndices: number[];
+    }
+  | {
+      type: "path.set-handle";
+      objectId: string;
+      nodeIndex: number;
+      handle: "incoming" | "outgoing";
+      point: PointMm | null;
+    }
+  | {
+      type: "path.set-closed";
+      objectId: string;
+      closed: boolean;
+    }
+  | { type: "path.reverse"; objectId: string }
+  | {
+      type: "path.simplify";
+      objectId: string;
+      toleranceMm: number;
+    }
+  | {
+      type: "path.cleanup";
+      objectId: string;
+      toleranceMm: number;
+    }
+  | {
+      type: "paths.join";
+      firstObjectId: string;
+      firstEnd: "start" | "end";
+      secondObjectId: string;
+      secondEnd: "start" | "end";
+      toleranceMm: number;
+    }
+  | {
+      type: "path.split";
+      objectId: string;
+      nodeIndex: number;
+      newObjectId: string;
+    }
+  | {
       type: "objects.convert-text";
       objectIds: string[];
       groupIds: Record<string, string>;
@@ -149,6 +223,101 @@ function assertNonnegative(value: number, name: string): void {
   if (!Number.isFinite(value) || value < 0) {
     throw new RangeError(`${name} must be nonnegative and finite.`);
   }
+}
+
+function editablePath(
+  document: LaserxDocument,
+  objectId: string,
+): PathObject {
+  const object = document.objects.find((candidate) => candidate.id === objectId);
+  if (
+    object?.type !== "path" ||
+    !isLayerEditable(document, object.layerId)
+  ) {
+    throw new RangeError("The requested path is missing or not editable.");
+  }
+  return object;
+}
+
+function pathGeometry(object: PathObject): EditablePathGeometry {
+  return {
+    closed: object.closed,
+    points: object.points.map((point) => ({ ...point })),
+    ...(object.handles === undefined
+      ? {}
+      : {
+          handles: object.handles.map((handle) => ({
+            incoming:
+              handle.incoming === null ? null : { ...handle.incoming },
+            outgoing:
+              handle.outgoing === null ? null : { ...handle.outgoing },
+          })),
+        }),
+  };
+}
+
+function worldPathGeometry(object: PathObject): EditablePathGeometry {
+  const geometry = pathGeometry(object);
+  return {
+    closed: geometry.closed,
+    points: geometry.points.map((point) =>
+      applyAffineTransform(point, object.transform),
+    ),
+    ...(geometry.handles === undefined
+      ? {}
+      : {
+          handles: geometry.handles.map((handle) => ({
+            incoming:
+              handle.incoming === null
+                ? null
+                : applyAffineTransform(handle.incoming, object.transform),
+            outgoing:
+              handle.outgoing === null
+                ? null
+                : applyAffineTransform(handle.outgoing, object.transform),
+          })),
+        }),
+  };
+}
+
+function withPathGeometry(
+  object: PathObject,
+  geometry: EditablePathGeometry,
+  transform = object.transform,
+): PathObject {
+  return {
+    ...object,
+    transform: { ...transform },
+    closed: geometry.closed,
+    points: geometry.points.map((point) => ({ ...point })),
+    ...(geometry.handles === undefined
+      ? { handles: undefined }
+      : {
+          handles: geometry.handles.map((handle) => ({
+            incoming:
+              handle.incoming === null ? null : { ...handle.incoming },
+            outgoing:
+              handle.outgoing === null ? null : { ...handle.outgoing },
+          })),
+        }),
+  };
+}
+
+function worldDeltaToLocal(
+  object: PathObject,
+  deltaXmm: number,
+  deltaYmm: number,
+): PointMm {
+  const inverse = invertAffineTransform(object.transform);
+  const origin = applyAffineTransform({ xMm: 0, yMm: 0 }, inverse);
+  const target = applyAffineTransform(
+    { xMm: deltaXmm, yMm: deltaYmm },
+    inverse,
+  );
+  return {
+    xMm: target.xMm - origin.xMm,
+    yMm: target.yMm - origin.yMm,
+  };
 }
 
 function editableObjectIds(
@@ -401,6 +570,33 @@ function validateInsertedIds(
       "Every descendant of an inserted group must use the group's layer.",
     );
   }
+  if (objects.some((object) => !objectPathGeometryIsValid(object))) {
+    throw new RangeError("Inserted path geometry is invalid.");
+  }
+}
+
+function pointIsFinite(point: PointMm): boolean {
+  return Number.isFinite(point.xMm) && Number.isFinite(point.yMm);
+}
+
+function objectPathGeometryIsValid(object: DocumentObject): boolean {
+  if (object.type === "group") {
+    return object.children.every((child) => objectPathGeometryIsValid(child));
+  }
+  if (object.type !== "path") {
+    return true;
+  }
+  return (
+    object.points.length >= (object.closed ? 3 : 2) &&
+    object.points.every(pointIsFinite) &&
+    (object.handles === undefined ||
+      (object.handles.length === object.points.length &&
+        object.handles.every(
+          (handles) =>
+            (handles.incoming === null || pointIsFinite(handles.incoming)) &&
+            (handles.outgoing === null || pointIsFinite(handles.outgoing)),
+        )))
+  );
 }
 
 function setLayerRecursively(
@@ -736,6 +932,7 @@ export function applyEditorCommand(
         previous === undefined ||
         !isLayerEditable(document, previous.layerId) ||
         command.object.layerId !== previous.layerId ||
+        !objectPathGeometryIsValid(command.object) ||
         collectObjectIds(command.object).some(
           (id) =>
             id !== previous.id &&
@@ -747,6 +944,193 @@ export function applyEditorCommand(
         throw new RangeError("Replacement object is invalid or not editable.");
       }
       document.objects[index] = copyDocumentObject(command.object);
+      break;
+    }
+    case "objects.replace-topology": {
+      const sourceIds = new Set(
+        editableObjectIds(document, command.sourceObjectIds),
+      );
+      if (
+        sourceIds.size !== new Set(command.sourceObjectIds).size ||
+        command.replacements.length === 0
+      ) {
+        throw new RangeError("Topology replacement sources are invalid.");
+      }
+      const insertionIndex = document.objects.findIndex((object) =>
+        sourceIds.has(object.id),
+      );
+      if (insertionIndex < 0) {
+        throw new RangeError("Topology replacement sources are missing.");
+      }
+      const retained = document.objects.filter(
+        (object) => !sourceIds.has(object.id),
+      );
+      const retainedIds = new Set(
+        retained.flatMap((object) => collectObjectIds(object)),
+      );
+      const replacementIds = command.replacements.flatMap((object) =>
+        collectObjectIds(object),
+      );
+      if (
+        new Set(replacementIds).size !== replacementIds.length ||
+        replacementIds.some((id) => retainedIds.has(id)) ||
+        command.replacements.some(
+          (object) =>
+            !isLayerEditable(document, object.layerId) ||
+            !objectPathGeometryIsValid(object),
+        )
+      ) {
+        throw new RangeError("Topology replacement paths contain invalid IDs or layers.");
+      }
+      retained.splice(
+        insertionIndex,
+        0,
+        ...command.replacements.map((object) => copyDocumentObject(object) as PathObject),
+      );
+      document.objects = retained;
+      break;
+    }
+    case "path.move-nodes": {
+      assertFinite(command.deltaXmm, "Node move X");
+      assertFinite(command.deltaYmm, "Node move Y");
+      const object = editablePath(document, command.objectId);
+      const geometry = movePathNodes(
+        pathGeometry(object),
+        command.nodeIndices,
+        worldDeltaToLocal(object, command.deltaXmm, command.deltaYmm),
+      );
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.add-node": {
+      const object = editablePath(document, command.objectId);
+      const geometry = addNodeToPathSegment(
+        pathGeometry(object),
+        command.segmentIndex,
+        command.ratio,
+      ).path;
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.delete-nodes": {
+      const object = editablePath(document, command.objectId);
+      const geometry = deletePathNodes(pathGeometry(object), command.nodeIndices);
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.set-handle": {
+      const object = editablePath(document, command.objectId);
+      const inverse = invertAffineTransform(object.transform);
+      const localPoint =
+        command.point === null
+          ? null
+          : applyAffineTransform(command.point, inverse);
+      const geometry = setPathNodeHandle(
+        pathGeometry(object),
+        command.nodeIndex,
+        command.handle,
+        localPoint,
+      );
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.set-closed": {
+      const object = editablePath(document, command.objectId);
+      const geometry = setEditablePathClosed(pathGeometry(object), command.closed);
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.reverse": {
+      const object = editablePath(document, command.objectId);
+      const geometry = reverseEditablePath(pathGeometry(object));
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id ? withPathGeometry(object, geometry) : candidate,
+      );
+      break;
+    }
+    case "path.simplify": {
+      const object = editablePath(document, command.objectId);
+      const geometry = simplifyEditablePath(
+        worldPathGeometry(object),
+        command.toleranceMm,
+      );
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id
+          ? withPathGeometry(object, geometry, IDENTITY_AFFINE_TRANSFORM)
+          : candidate,
+      );
+      break;
+    }
+    case "path.cleanup": {
+      const object = editablePath(document, command.objectId);
+      const geometry = cleanupEditablePath(
+        worldPathGeometry(object),
+        command.toleranceMm,
+      ).path;
+      document.objects = document.objects.map((candidate) =>
+        candidate.id === object.id
+          ? withPathGeometry(object, geometry, IDENTITY_AFFINE_TRANSFORM)
+          : candidate,
+      );
+      break;
+    }
+    case "paths.join": {
+      if (command.firstObjectId === command.secondObjectId) {
+        throw new RangeError("Joining requires two different open paths.");
+      }
+      const first = editablePath(document, command.firstObjectId);
+      const second = editablePath(document, command.secondObjectId);
+      if (first.layerId !== second.layerId) {
+        throw new RangeError(
+          "Joining paths requires both paths to share one editable layer.",
+        );
+      }
+      const geometry = joinEditablePaths(
+        worldPathGeometry(first),
+        command.firstEnd,
+        worldPathGeometry(second),
+        command.secondEnd,
+        command.toleranceMm,
+      );
+      document.objects = document.objects
+        .filter((candidate) => candidate.id !== second.id)
+        .map((candidate) =>
+          candidate.id === first.id
+            ? withPathGeometry(first, geometry, IDENTITY_AFFINE_TRANSFORM)
+            : candidate,
+        );
+      break;
+    }
+    case "path.split": {
+      const object = editablePath(document, command.objectId);
+      if (
+        document.objects.some((candidate) =>
+          collectObjectIds(candidate).includes(command.newObjectId),
+        )
+      ) {
+        throw new RangeError("Split path requires a unique new object ID.");
+      }
+      const [first, second] = splitOpenPathAtNode(
+        pathGeometry(object),
+        command.nodeIndex,
+      );
+      const index = document.objects.findIndex((candidate) => candidate.id === object.id);
+      document.objects.splice(
+        index,
+        1,
+        withPathGeometry(object, first),
+        withPathGeometry({ ...object, id: command.newObjectId }, second),
+      );
       break;
     }
     case "objects.convert-text": {
@@ -1010,6 +1394,20 @@ export function commandSelectionIds(
     case "objects.ungroup":
     case "objects.z-order":
       return command.objectIds;
+    case "objects.replace-topology":
+      return command.sourceObjectIds;
+    case "path.move-nodes":
+    case "path.add-node":
+    case "path.delete-nodes":
+    case "path.set-handle":
+    case "path.set-closed":
+    case "path.reverse":
+    case "path.simplify":
+    case "path.cleanup":
+    case "path.split":
+      return [command.objectId];
+    case "paths.join":
+      return [command.firstObjectId, command.secondObjectId];
     default:
       return [];
   }

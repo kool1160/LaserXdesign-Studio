@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  fingerprintGeometryDocument,
+  materializeGeometryOperation,
+  prepareGeometryOperation,
   ProjectSession,
   type EditorActionRequest,
   type ProjectFileService,
   type RecoverySnapshot,
+  type GeometryOperationRequest,
 } from "@laserx/application";
 import {
   identityTransform,
@@ -26,6 +30,10 @@ import type {
   TextUpdateRequestDto,
 } from "./ipc-contract.js";
 import { AppLogger } from "./logger.js";
+import {
+  NodeGeometryWorkerService,
+  type GeometryWorkerPort,
+} from "./geometry-worker-service.js";
 import {
   RecentProjectsStore,
   RecoveryStore,
@@ -51,6 +59,7 @@ export interface DesktopControllerOptions {
   projectStorage?: ProjectFileService;
   recoveryStore?: RecoveryStorePort;
   fontEngine?: FontEngine;
+  geometryWorker?: GeometryWorkerPort;
 }
 
 export interface AutosaveScheduler {
@@ -81,6 +90,8 @@ export class DesktopController {
   readonly #autosaveIntervalMs: number;
   readonly #autosaveScheduler: AutosaveScheduler;
   readonly #fontEngine: FontEngine;
+  readonly #geometryWorker: GeometryWorkerPort;
+  readonly #geometryAbortControllers = new Map<string, AbortController>();
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -98,6 +109,8 @@ export class DesktopController {
     this.#autosaveScheduler =
       options.autosaveScheduler ?? intervalAutosaveScheduler;
     this.#fontEngine = options.fontEngine ?? new FontEngine([]);
+    this.#geometryWorker =
+      options.geometryWorker ?? new NodeGeometryWorkerService();
   }
 
   public async initialize(): Promise<void> {
@@ -251,6 +264,62 @@ export class DesktopController {
     return this.#run(() => {
       this.#session.performEditorAction(request);
     });
+  }
+
+  public async geometryOperation(
+    request: GeometryOperationRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#geometryAbortControllers.has(request.operationId)) {
+        throw new RangeError("A geometry operation with this ID is already running.");
+      }
+      if (this.#geometryAbortControllers.size > 0) {
+        throw new RangeError("Finish or cancel the active geometry operation first.");
+      }
+      const state = this.#session.state;
+      const prepared = prepareGeometryOperation(
+        state.project.document,
+        state.editor.selectionIds,
+        request,
+      );
+      const abortController = new AbortController();
+      this.#geometryAbortControllers.set(request.operationId, abortController);
+      try {
+        const result = await this.#geometryWorker.run(
+          prepared.task,
+          abortController.signal,
+        );
+        const current = this.#session.state;
+        if (
+          fingerprintGeometryDocument(current.project.document) !==
+          prepared.documentFingerprint
+        ) {
+          throw new Error(
+            "The document changed while geometry was running; the stale result was not applied.",
+          );
+        }
+        const materialized = materializeGeometryOperation(
+          prepared,
+          result,
+          randomUUID,
+        );
+        this.#session.applyTopologyReplacement(
+          {
+            type: "objects.replace-topology",
+            sourceObjectIds: prepared.sourceObjectIds,
+            replacements: materialized.replacements,
+          },
+          materialized.summary,
+        );
+      } finally {
+        this.#geometryAbortControllers.delete(request.operationId);
+      }
+    });
+  }
+
+  public cancelGeometryOperation(operationId: string): Promise<CommandResult> {
+    this.#geometryAbortControllers.get(operationId)?.abort();
+    return Promise.resolve({ ok: true, state: this.state });
   }
 
   public fontCatalog(): FontCatalogEntry[] {

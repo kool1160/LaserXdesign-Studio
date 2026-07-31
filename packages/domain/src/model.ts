@@ -5,19 +5,22 @@ import {
   boundsFromPoints,
   composeAffineTransforms,
   copyAffineTransform,
+  flattenEditablePath,
   unionBounds,
   type AffineTransformMm,
   type BoundsMm,
   type PointMm,
+  type PathControlHandles,
 } from "@laserx/geometry";
 
 export type {
   AffineTransformMm,
   BoundsMm,
   PointMm,
+  PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 4 as const;
+export const PROJECT_SCHEMA_VERSION = 5 as const;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -97,6 +100,7 @@ export interface PathObject extends DocumentObjectBase {
   type: "path";
   closed: boolean;
   points: PointMm[];
+  handles?: PathControlHandles[] | undefined;
 }
 
 export type TextAlignment = "left" | "center" | "right";
@@ -199,14 +203,14 @@ export interface MigrationRecord {
   migratedAt: string;
 }
 
-export interface LaserxProjectV4 {
+export interface LaserxProjectV5 {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: ProjectMetadata;
   document: LaserxDocument;
   migrationHistory: MigrationRecord[];
 }
 
-export type LaserxProject = LaserxProjectV4;
+export type LaserxProject = LaserxProjectV5;
 
 export interface CreateDocumentInput {
   id: string;
@@ -589,7 +593,7 @@ function transformedPrimitiveBounds(
     }
     case "path":
       return boundsFromPoints(
-        object.points.map((point) =>
+        flattenEditablePath(object, 0.001).map((point) =>
           applyAffineTransform(point, transform),
         ),
       );
@@ -751,6 +755,16 @@ export function copyDocumentObject(object: DocumentObject): DocumentObject {
         ...object,
         transform: copyAffineTransform(object.transform),
         points: object.points.map((point) => ({ ...point })),
+        ...(object.handles === undefined
+          ? {}
+          : {
+              handles: object.handles.map((handle) => ({
+                incoming:
+                  handle.incoming === null ? null : { ...handle.incoming },
+                outgoing:
+                  handle.outgoing === null ? null : { ...handle.outgoing },
+              })),
+            }),
       };
     case "text":
       return {

@@ -107,6 +107,9 @@ importers:
       '@laserx/domain':
         specifier: workspace:*
         version: link:../domain
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../geometry
       '@laserx/project-format':
         specifier: workspace:*
         version: link:../project-format
@@ -171,7 +174,14 @@ importers:
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/geometry:
+    dependencies:
+      clipper2-ts:
+        specifier: 2.0.1-18
+        version: 2.0.1-18
     devDependencies:
+      '@types/node':
+        specifier: 26.1.2
+        version: 26.1.2
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -1014,6 +1024,10 @@ packages:
   ci-info@4.4.0:
     resolution: {integrity: sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg==}
     engines: {node: '>=8'}
+
+  clipper2-ts@2.0.1-18:
+    resolution: {integrity: sha512-WuRO1ZHzyYTVHY78r4wVWVydvQ+1lx9qZ+DeZa/8zhvrxIgCVzElJ6lwSMGtUUKFPefhvfJsHZ5C9RNkgisCOQ==}
+    engines: {node: '>=14.0.0'}
 
   cliui@8.0.1:
     resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
@@ -3141,6 +3155,8 @@ snapshots:
   ci-info@4.3.1: {}
 
   ci-info@4.4.0: {}
+
+  clipper2-ts@2.0.1-18: {}
 
   cliui@8.0.1:
     dependencies:

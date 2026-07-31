@@ -9,8 +9,11 @@ M04 merged through PR #18 in merge commit
 head `a08a7afb062954782266ec572b895b21fd556b66`. Issue #5 is closed. M05 is now
 the only active implementation milestone; Issue #6 is the active delivery gate.
 
-Start M05 from current `main` in a new working directory and branch
-`feat/m05-geometry-editing`. Do not reuse the M04 feature branch or worktree.
+Draft PR #20 is the active M05 implementation review gate on
+`feat/m05-geometry-editing`. The pull request is authoritative for the exact
+review head and current workflow results. Independent golden-fixture review is
+still pending. Keep the PR draft and do not merge, close Issue #6, or advance
+to M06.
 
 Before implementation, read:
 

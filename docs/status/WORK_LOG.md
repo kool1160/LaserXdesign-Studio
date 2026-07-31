@@ -226,3 +226,113 @@ even-odd-within/union-across fill policy.
 - Known limitations: existing documented M04 exclusions remain unchanged.
 - Next allowed work: review M04 only after final-head local verification and
 GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
+
+## 2026-07-31 — M05 node editing and boolean geometry
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #6 implementation
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Direct node and segment selection, add/delete/move, cubic handles,
+  open/close, reverse, split, tolerance-previewed endpoint joins,
+  tolerance-bounded simplification, cleanup with self-intersection reporting,
+  union/subtract/intersect/XOR, and signed offsets. Closed topology runs through
+  a replaceable, integer-micrometer Clipper2 adapter in a cancellable worker;
+  stale or canceled results cannot mutate the document. Every topology change
+  is one undoable command with before/after node counts, result/replaced IDs,
+  warnings, and schema-v5 persistence.
+- Verification: `pnpm verify`, `pnpm audit:geometry`,
+  `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+  suite contains 108 unit/integration tests and 15 packaged Windows E2E
+  scenarios. Golden fixtures cover simple, nested, touching, and one-micrometer
+  overlap geometry; packaged tests cover union, direct node/handle editing,
+  exact undo/save/reopen, and cancellation with an unchanged document.
+- Decisions: ADR 0014 pins `clipper2-ts` 2.0.1-18 behind the engine adapter and
+  records its Boost-1.0 license, quantization, worker, and replacement contract.
+  ADR 0015 records optional absolute cubic handles and the deterministic v4 to
+  v5 project migration. The recorded local baseline is 1.62 ms median for a
+  400-rectangle union and 22.32 ms median for a 4,096-node round offset.
+- Known limitations: Full trim/extend parity, constraints, fillet/chamfer, CAM
+  kerf, nesting, import/export, tracing, cutability, and later milestone work
+  remain excluded. Independent golden review and final-head Windows CI remain
+  required before merge and status advancement.
+- Next allowed work: review M05 only. Keep the implementation PR draft; do not
+  merge, close Issue #6, advance to M06, or begin later scope until the review
+  and advancement gates pass.
+
+## 2026-07-31 — M05 Windows E2E race repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 push-workflow repair
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: The packaged geometry test now waits for authoritative node
+  selection and movement before issuing the next action. The shared crash-test
+  cleanup helper now waits for the Electron process to exit after `taskkill`,
+  and packaged launches retry only Chromium's transient singleton-lock or
+  connection-close signatures up to three times.
+- Verification: The geometry and project-lifecycle packaged files pass three
+  consecutive serial repetitions (12/12 scenarios). The text/font and
+  project-lifecycle relaunch files also pass three consecutive serial
+  repetitions (15/15 scenarios), in addition to focused lint and desktop
+  typecheck. The complete `pnpm verify` gate also passes with 108
+  unit/integration tests and all 15 packaged Windows E2E scenarios.
+- Decisions: No product, geometry, schema, or architecture behavior changed;
+  this repair only makes existing packaged assertions and teardown sequencing
+  deterministic on Windows runners.
+- Known limitations: Existing M05 exclusions are unchanged.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Do not merge, close Issue #6, or advance to M06.
+
+## 2026-07-31 — M05 blocking review correctness repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 blocking review findings
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Boolean and join preparation now preserves selection order, with
+  the first selected path explicitly defined in the UI as the Subtract subject.
+  Boolean, multi-path offset, and join requests reject operands from different
+  editable layers without changing geometry or history. Cleanup collinearity
+  and self-intersection endpoint exclusion now use world-millimeter distances.
+  Endpoint joins translate and merge the adjacent cubic controls so their
+  anchor-relative vectors remain unchanged.
+- Verification: Focused geometry, domain, application, workspace typecheck,
+  changed-file lint, and freshly packaged Playwright tests pass. Regressions
+  cover opposite subtraction subjects, Intersect/XOR results, cross-layer
+  no-mutation behavior, short-segment cleanup, long-segment near-end
+  intersections, and curved joins. Three serial repetitions of the four M05
+  packaged scenarios pass (12/12), and the complete `pnpm verify` gate passes.
+  The suite contains 116 unit/integration tests and 17 packaged Windows E2E
+  scenarios.
+- Decisions: Operand order is authoritative application selection order;
+  Subtract uses first-selected subject semantics. M05 topology operations do
+  not define cross-layer result ownership and therefore fail clearly rather
+  than silently relocating sources.
+- Known limitations: Existing M05 exclusions remain unchanged. Independent
+  golden-fixture acceptance and exact-head review remain required.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
+  advance to M06.
+
+## 2026-07-31 — M05 controls-aware cleanup repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 blocking cleanup re-review finding
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Cleanup now compacts near-duplicate anchors only when both are
+  handle-free and removes a collinear anchor only when its two adjacent
+  segments are linear. Curved segments and handled curve/cusp transitions are
+  therefore retained instead of being silently reshaped beyond the selected
+  world-millimeter tolerance.
+- Verification: Focused regressions preserve sampled geometry for a
+  handle-free collinear anchor between pronounced cubic segments and for
+  handled near-duplicate anchors. The complete `pnpm verify` gate, both license
+  audits, lint, typecheck, production builds, and all packaged Windows tests
+  pass. The suite contains 118 unit/integration tests and 17 packaged Windows
+  E2E scenarios.
+- Decisions: Cleanup uses the conservative no-merge rule for controls. A
+  handled anchor remains authoritative until an operation can prove a merged
+  replacement stays within the selected world-millimeter tolerance.
+- Known limitations: Existing M05 exclusions remain unchanged. Independent
+  golden-fixture acceptance and exact-head review remain required.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
+  advance to M06.

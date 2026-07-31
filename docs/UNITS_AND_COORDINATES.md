@@ -75,6 +75,37 @@ an exact zero-distance guide, document, or object match cannot be displaced by
 a nearby grid line. Camera position and device-pixel ratio do not affect
 targets.
 
+## M05 topology tolerances
+
+Editable anchors and cubic controls remain canonical millimeter doubles. Curve
+flattening defaults to `0.01 mm` for viewport/hit projections and uses an
+operation-specific tighter value (`0.002 mm`) before booleans and offsets.
+Simplification splits its selected tolerance between curve flattening and
+Ramer-Douglas-Peucker reduction so the combined deviation cannot exceed the
+user value.
+
+The Clipper2 adapter quantizes only at its boundary to `1e-6 mm` integer units.
+This micrometer grid is the topology equality tolerance, not the existing
+`1e-9 mm` matrix/coordinate round-trip tolerance and not a manufacturing kerf
+allowance. Join and cleanup tolerances are explicit user inputs. Offset values
+are signed millimeters; positive is outward and negative is inward.
+
+Coordinates whose scaled value would exceed `Number.MAX_SAFE_INTEGER` are
+rejected before engine execution. Engine results are rotated and sorted
+deterministically, with collinear artifacts removed without changing winding.
+
+Cleanup evaluates an anchor's perpendicular point-to-segment distance directly
+in millimeters; it never compares a square-millimeter cross product with a
+millimeter tolerance. Collinear-anchor removal additionally requires both
+adjacent segments to be linear. Near-duplicate anchors are compacted only when
+both anchors have no controls, so cleanup cannot erase a curve or cusp without
+proving its world-millimeter deviation. Self-intersection endpoint exclusion
+measures the world-millimeter distance from the intersection to each segment
+endpoint rather than comparing unitless segment ratios with a length. When a
+join snaps endpoint anchors to a midpoint, the adjacent cubic controls receive
+the same world-millimeter deltas so their anchor-relative vectors remain
+unchanged.
+
 ## Renderer conversion boundary
 
 The screen uses CSS pixels with positive Y downward. `packages/geometry`

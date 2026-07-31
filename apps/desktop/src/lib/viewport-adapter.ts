@@ -22,6 +22,7 @@ import {
   composeAffineTransforms,
   domainToScreen,
   fitBoundsToView,
+  flattenEditablePath,
   gridLinesForViewport,
   resetViewport,
   rulerTicks,
@@ -371,7 +372,13 @@ function primitiveDomainPoints(
         }),
       };
     case "path":
-      return { points: object.points, closed: object.closed };
+      return {
+        points: flattenEditablePath(object, 0.01).map((point) => ({
+          xMm: point.xMm,
+          yMm: point.yMm,
+        })),
+        closed: object.closed,
+      };
   }
 }
 

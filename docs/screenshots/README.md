@@ -14,3 +14,9 @@ M03 evidence:
 
 - `m03-editing-core.png` — packaged Windows editing workspace with selection
   handles, layers, guides, rulers, and grid after schema-v3 reopen.
+
+M05 evidence:
+
+- `m05-geometry-editing.png` — packaged Windows geometry workspace after a
+  boolean union, direct node move, and cubic-handle edit, with the topology
+  summary visible.

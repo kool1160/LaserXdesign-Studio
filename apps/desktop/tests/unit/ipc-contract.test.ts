@@ -99,6 +99,8 @@ describe("typed IPC validation", () => {
         selectionIds: [],
         selectionBounds: null,
         clipboardHasContent: false,
+        pathSelection: null,
+        topologySummary: null,
         history: {
           undoDepth: 0,
           redoDepth: 0,

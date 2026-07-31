@@ -11,3 +11,7 @@ Accepted implementation decisions:
 - ADR 0009 — project schema v2 migration
 - ADR 0010 — editing commands, state ownership, and history
 - ADR 0011 — project schema v3 editing state
+- ADR 0012 — secure font materialization boundary
+- ADR 0013 — project schema v4 editable text
+- ADR 0014 — replaceable Clipper2 geometry engine
+- ADR 0015 — project schema v5 path curve handles

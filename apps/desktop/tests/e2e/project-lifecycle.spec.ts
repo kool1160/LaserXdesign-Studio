@@ -25,7 +25,7 @@ test("blank project saves, reopens, and protects dirty close", async () => {
     );
     await expect(page.getByTestId("dirty-indicator")).toBeVisible();
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 4);
+    await waitForProjectSchema(launched.projectPath, 5);
     await expect(page.getByTestId("dirty-indicator")).toBeHidden();
 
     const saved = JSON.parse(
@@ -39,7 +39,7 @@ test("blank project saves, reopens, and protects dirty close", async () => {
         settings: { displayUnit: string };
       };
     };
-    expect(saved.schemaVersion).toBe(4);
+    expect(saved.schemaVersion).toBe(5);
     expect(saved.project.id).toBe(originalId);
     expect(saved.document.id).not.toBe(originalId);
     expect(saved.document.dimensions).toEqual({

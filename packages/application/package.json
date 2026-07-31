@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@laserx/domain": "workspace:*",
+    "@laserx/geometry": "workspace:*",
     "@laserx/project-format": "workspace:*"
   },
   "devDependencies": {

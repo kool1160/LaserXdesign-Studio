@@ -5,6 +5,7 @@ import {
   boundsIntersect,
   composeAffineTransforms,
   distancePointToSegment,
+  flattenEditablePath,
   invertAffineTransform,
   pointInCompoundPolygonUnionEvenOdd,
   pointInPolygon,
@@ -92,7 +93,7 @@ function primitiveWorldPoints(
         );
       });
     case "path":
-      return object.points.map((point) =>
+      return flattenEditablePath(object, 0.01).map((point) =>
         applyAffineTransform(point, transform),
       );
     case "text":
