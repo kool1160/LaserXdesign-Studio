@@ -10,11 +10,10 @@ head `a08a7afb062954782266ec572b895b21fd556b66`. Issue #5 is closed. M05 is now
 the only active implementation milestone; Issue #6 is the active delivery gate.
 
 Draft PR #20 is the active M05 implementation review gate on
-`feat/m05-geometry-editing`. Initial implementation commit
-`2fbf088b5d00433de258a04901ffee09a9b82674` passes the complete local gate with
-108 unit/integration tests and 15 packaged Windows E2E scenarios. Required
-final-head GitHub workflows and independent golden-fixture review are still
-pending. Keep the PR draft and do not merge, close Issue #6, or advance to M06.
+`feat/m05-geometry-editing`. The pull request is authoritative for the exact
+review head and current workflow results. Independent golden-fixture review is
+still pending. Keep the PR draft and do not merge, close Issue #6, or advance
+to M06.
 
 Before implementation, read:
 
