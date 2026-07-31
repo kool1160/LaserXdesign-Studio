@@ -267,11 +267,14 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Delivered: The packaged geometry test now waits for authoritative node
   selection and movement before issuing the next action. The shared crash-test
   cleanup helper now waits for the Electron process to exit after `taskkill`,
-  preventing a recovery relaunch from racing Chromium's singleton lock.
+  and packaged launches retry only Chromium's transient singleton-lock or
+  connection-close signatures up to three times.
 - Verification: The geometry and project-lifecycle packaged files pass three
-  consecutive serial repetitions (12/12 scenarios), in addition to focused
-  lint and desktop typecheck. The complete `pnpm verify` gate also passes with
-  108 unit/integration tests and all 15 packaged Windows E2E scenarios.
+  consecutive serial repetitions (12/12 scenarios). The text/font and
+  project-lifecycle relaunch files also pass three consecutive serial
+  repetitions (15/15 scenarios), in addition to focused lint and desktop
+  typecheck. The complete `pnpm verify` gate also passes with 108
+  unit/integration tests and all 15 packaged Windows E2E scenarios.
 - Decisions: No product, geometry, schema, or architecture behavior changed;
   this repair only makes existing packaged assertions and teardown sequencing
   deterministic on Windows runners.

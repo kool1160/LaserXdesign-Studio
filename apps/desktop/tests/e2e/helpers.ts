@@ -14,6 +14,8 @@ export const executablePath = join(
   "LaserX Design Studio.exe",
 );
 const execFileAsync = promisify(execFile);
+const TRANSIENT_LAUNCH_ERROR =
+  /Lock file can not be created|WebSocket error: read ECONNRESET|Target page, context or browser has been closed/;
 
 async function waitForChildExit(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null) {
@@ -30,6 +32,30 @@ async function waitForChildExit(child: ChildProcess): Promise<void> {
     }, 5_000);
     child.once("exit", onExit);
   });
+}
+
+async function launchElectron(
+  options: Parameters<typeof electron.launch>[0],
+): Promise<ElectronApplication> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await electron.launch(options);
+    } catch (error) {
+      lastError = error;
+      if (
+        attempt === 2 ||
+        !(error instanceof Error) ||
+        !TRANSIENT_LAUNCH_ERROR.test(error.message)
+      ) {
+        throw error;
+      }
+      await new Promise<void>((resolveRetry) => {
+        setTimeout(resolveRetry, 250 * (attempt + 1));
+      });
+    }
+  }
+  throw lastError;
 }
 
 export interface TestLaunch {
@@ -54,7 +80,7 @@ export async function launchPackaged(
     directory ?? (await mkdtemp(join(tmpdir(), "laserx-e2e-")));
   const projectPath = join(testDirectory, "lifecycle.laserx");
   const userDataPath = join(testDirectory, "user-data");
-  const electronApp = await electron.launch({
+  const electronApp = await launchElectron({
     executablePath,
     env: {
       ...process.env,
