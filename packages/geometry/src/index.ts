@@ -378,6 +378,15 @@ export function pointInCompoundPolygonEvenOdd(
   );
 }
 
+export function pointInCompoundPolygonUnionEvenOdd(
+  point: PointMm,
+  compounds: readonly (readonly (readonly PointMm[])[])[],
+): boolean {
+  return compounds.some((contours) =>
+    pointInCompoundPolygonEvenOdd(point, contours),
+  );
+}
+
 function clampZoom(zoomCssPxPerMm: number): number {
   return Math.min(
     MAX_ZOOM_CSS_PX_PER_MM,

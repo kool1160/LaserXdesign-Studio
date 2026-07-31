@@ -6,7 +6,7 @@ import {
   composeAffineTransforms,
   distancePointToSegment,
   invertAffineTransform,
-  pointInCompoundPolygonEvenOdd,
+  pointInCompoundPolygonUnionEvenOdd,
   pointInPolygon,
   type AffineTransformMm,
   type BoundsMm,
@@ -16,6 +16,7 @@ import {
 import {
   getObjectBounds,
   getObjectsInRenderOrder,
+  groupTextContoursByCompound,
   isLayerEditable,
   type DocumentObject,
   type HitTestRequest,
@@ -116,6 +117,7 @@ function primitiveHitDistance(
 ): number {
   if (object.type === "text") {
     const contours = object.contours.map((contour) => ({
+      compoundIndex: contour.compoundIndex,
       closed: contour.closed,
       points: contour.points.map((candidate) =>
         applyAffineTransform(
@@ -127,11 +129,13 @@ function primitiveHitDistance(
         ),
       ),
     }));
-    const filled = pointInCompoundPolygonEvenOdd(
+    const filled = pointInCompoundPolygonUnionEvenOdd(
       point,
-      contours
-        .filter((contour) => contour.closed)
-        .map((contour) => contour.points),
+      groupTextContoursByCompound(contours).map((compound) =>
+        compound
+          .filter((contour) => contour.closed)
+          .map((contour) => contour.points),
+      ),
     );
     if (filled) {
       return 0;

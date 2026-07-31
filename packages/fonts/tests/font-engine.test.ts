@@ -47,6 +47,7 @@ describe("FontEngine", () => {
     const second = engine.layout(request(null));
     expect(second).toEqual(first);
     expect(first.contours.length).toBeGreaterThan(7);
+    expect(new Set(first.contours.map((contour) => contour.compoundIndex)).size).toBeGreaterThan(1);
     const points = first.contours.flatMap((contour) => contour.points);
     expect(first.bounds).toEqual({
       minXmm: Math.min(...points.map((point) => point.xMm)),
@@ -63,6 +64,9 @@ describe("FontEngine", () => {
       request({ radiusMm: 80, startAngleDeg: -45, clockwise: false }),
     );
     expect(straight.contours.filter((contour) => contour.closed).length).toBeGreaterThanOrEqual(3);
+    expect(
+      straight.contours.filter((contour) => contour.compoundIndex === 0),
+    ).toHaveLength(3);
     expect(arced.contours).not.toEqual(straight.contours);
     expect(arced.font.fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });

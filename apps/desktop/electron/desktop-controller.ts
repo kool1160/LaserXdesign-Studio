@@ -310,6 +310,7 @@ export class DesktopController {
         },
         arc: request.arc === null ? null : { ...request.arc },
         contours: layout.contours.map((contour) => ({
+          compoundIndex: contour.compoundIndex,
           closed: contour.closed,
           points: contour.points.map((point) => ({ ...point })),
         })),
@@ -381,6 +382,7 @@ export class DesktopController {
           },
           arc: request.arc === null ? null : { ...request.arc },
           contours: layout.contours.map((contour) => ({
+            compoundIndex: contour.compoundIndex,
             closed: contour.closed,
             points: contour.points.map((point) => ({ ...point })),
           })),

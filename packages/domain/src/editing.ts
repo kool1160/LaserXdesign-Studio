@@ -802,6 +802,7 @@ export function applyEditorCommand(
                   arc:
                     sourceText.arc === null ? null : { ...sourceText.arc },
                   contours: sourceText.contours.map((contour) => ({
+                    compoundIndex: contour.compoundIndex,
                     closed: contour.closed,
                     points: contour.points.map((point) => ({ ...point })),
                   })),

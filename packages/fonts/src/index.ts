@@ -67,6 +67,7 @@ export interface TextLayoutRequest {
 }
 
 export interface OutlineContour {
+  compoundIndex: number;
   closed: boolean;
   points: Array<{ xMm: number; yMm: number }>;
 }
@@ -127,6 +128,7 @@ function flattenCommands(
   scale: number,
   offsetX: number,
   offsetY: number,
+  compoundIndex: number,
 ): OutlineContour[] {
   const contours: OutlineContour[] = [];
   let points: Array<[number, number]> = [];
@@ -134,6 +136,7 @@ function flattenCommands(
   const emit = (closed: boolean) => {
     if (points.length >= 2) {
       contours.push({
+        compoundIndex,
         closed,
         points: points.map(([x, y]) => ({
           xMm: offsetX + x * scale,
@@ -196,6 +199,7 @@ function warpArc(
   const direction = arc.clockwise ? -1 : 1;
   const start = (arc.startAngleDeg * Math.PI) / 180;
   return {
+    compoundIndex: contour.compoundIndex,
     closed: contour.closed,
     points: contour.points.map((point) => {
       const angle = start + direction * (point.xMm / arc.radiusMm);
@@ -274,6 +278,7 @@ export class FontEngine {
     }
     const scale = request.sizeMm / font.unitsPerEm;
     const contours: OutlineContour[] = [];
+    let compoundIndex = 0;
     const missing = new Set<number>();
     const lines = request.content.split("\n");
     lines.forEach((line, lineIndex) => {
@@ -307,8 +312,10 @@ export class FontEngine {
             scale,
             penX + (position?.xOffset ?? 0) * scale,
             baselineY + (position?.yOffset ?? 0) * scale,
+            compoundIndex,
           ),
         );
+        compoundIndex += 1;
         const isSpace = glyph.codePoints.includes(32);
         penX +=
           (position?.xAdvance ?? glyph.advanceWidth) * scale +

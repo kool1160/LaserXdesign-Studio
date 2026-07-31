@@ -13,13 +13,14 @@ with editable text objects containing:
 - font ID, family, style, SHA-256 fingerprint, and millimeter size;
 - tracking, word spacing, line spacing, and alignment;
 - optional circular arc parameters;
-- materialized closed/open millimeter contours;
+- materialized closed/open millimeter contours with deterministic glyph-
+  compound indices;
 - a missing-font status flag.
 
 Groups may optionally retain an editable text source record after conversion to
 ordinary path children. Unknown fields, empty content, invalid font
-fingerprints, invalid spacing/arc values, empty contours, and existing
-ID/layer/matrix violations are rejected.
+fingerprints, invalid spacing/arc values, empty contours, invalid compound
+indices, and existing ID/layer/matrix violations are rejected.
 
 Schema v3 migrates deterministically by changing only the schema version and
 appending a v3-to-v4 migration record using the source `updatedAt`. Existing

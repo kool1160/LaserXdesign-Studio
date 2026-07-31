@@ -120,8 +120,26 @@ export interface TextStyle {
 }
 
 export interface TextContour {
+  compoundIndex: number;
   closed: boolean;
   points: PointMm[];
+}
+
+export function groupTextContoursByCompound(
+  contours: readonly TextContour[],
+): TextContour[][] {
+  const groups = new Map<number, TextContour[]>();
+  for (const contour of contours) {
+    const group = groups.get(contour.compoundIndex);
+    if (group === undefined) {
+      groups.set(contour.compoundIndex, [contour]);
+    } else {
+      group.push(contour);
+    }
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, group]) => group);
 }
 
 export interface TextObject extends DocumentObjectBase {
@@ -742,6 +760,7 @@ export function copyDocumentObject(object: DocumentObject): DocumentObject {
         style: { ...object.style },
         arc: object.arc === null ? null : { ...object.arc },
         contours: object.contours.map((contour) => ({
+          compoundIndex: contour.compoundIndex,
           closed: contour.closed,
           points: contour.points.map((point) => ({ ...point })),
         })),
@@ -763,6 +782,7 @@ export function copyDocumentObject(object: DocumentObject): DocumentObject {
                     ? null
                     : { ...object.sourceText.arc },
                 contours: object.sourceText.contours.map((contour) => ({
+                  compoundIndex: contour.compoundIndex,
                   closed: contour.closed,
                   points: contour.points.map((point) => ({ ...point })),
                 })),

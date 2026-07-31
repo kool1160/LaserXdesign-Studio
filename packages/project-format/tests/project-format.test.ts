@@ -229,6 +229,7 @@ describe("schema version 4", () => {
       arc: { radiusMm: 80, startAngleDeg: -45, clockwise: false },
       contours: [
         {
+          compoundIndex: 0,
           closed: true,
           points: [
             { xMm: 0, yMm: 0 },

@@ -90,7 +90,7 @@ describe("renderer viewport adapter", () => {
     ).toBe(true);
   });
 
-  it("projects text counters as one even-odd compound path", () => {
+  it("projects even-odd glyph compounds separately so overlap stays filled", () => {
     const blank = createDocument({
       id: "123e4567-e89b-42d3-a456-426614174000",
       width: 100,
@@ -122,6 +122,7 @@ describe("renderer viewport adapter", () => {
           arc: null,
           contours: [
             {
+              compoundIndex: 0,
               closed: true,
               points: [
                 { xMm: 0, yMm: 0 },
@@ -131,6 +132,7 @@ describe("renderer viewport adapter", () => {
               ],
             },
             {
+              compoundIndex: 0,
               closed: true,
               points: [
                 { xMm: 3, yMm: 4 },
@@ -139,23 +141,49 @@ describe("renderer viewport adapter", () => {
                 { xMm: 3, yMm: 14 },
               ],
             },
+            {
+              compoundIndex: 1,
+              closed: true,
+              points: [
+                { xMm: 8, yMm: 0 },
+                { xMm: 18, yMm: 0 },
+                { xMm: 18, yMm: 18 },
+                { xMm: 8, yMm: 18 },
+              ],
+            },
           ],
           missingFont: false,
         },
       ] satisfies DocumentObject[],
     };
     const viewport = fitDocumentToView(document, size);
-    const [primitive] = createViewportScene(document, viewport, size).objects;
+    const [primitive, overlappingPrimitive] = createViewportScene(
+      document,
+      viewport,
+      size,
+    ).objects;
     expect(primitive).toMatchObject({
       kind: "compound",
       objectId,
       sourceId: objectId,
+      compoundIndex: 0,
       fillRule: "evenodd",
     });
     if (primitive?.kind !== "compound") {
       throw new Error("Expected a compound text primitive.");
     }
     expect(primitive.contours).toHaveLength(2);
+    expect(overlappingPrimitive).toMatchObject({
+      kind: "compound",
+      objectId,
+      sourceId: objectId,
+      compoundIndex: 1,
+      fillRule: "evenodd",
+    });
+    if (overlappingPrimitive?.kind !== "compound") {
+      throw new Error("Expected a second glyph compound.");
+    }
+    expect(overlappingPrimitive.contours).toHaveLength(1);
   });
 
   it("formats and converts display values at the adapter boundary", () => {

@@ -60,6 +60,42 @@ function selectedText(state: DesktopState): TextObject | null {
   return selected?.type === "text" ? selected : null;
 }
 
+function formFromText(text: TextObject): TextLayoutRequestDto {
+  return {
+    fontId: text.style.fontId,
+    content: text.content,
+    sizeMm: text.style.sizeMm,
+    trackingMm: text.style.trackingMm,
+    wordSpacingMm: text.style.wordSpacingMm,
+    lineSpacing: text.style.lineSpacing,
+    alignment: text.style.alignment,
+    arc: text.arc === null ? null : { ...text.arc },
+  };
+}
+
+function formMatchesText(
+  form: TextLayoutRequestDto,
+  text: TextObject,
+): boolean {
+  const arcMatches =
+    form.arc === null
+      ? text.arc === null
+      : text.arc !== null &&
+        form.arc.radiusMm === text.arc.radiusMm &&
+        form.arc.startAngleDeg === text.arc.startAngleDeg &&
+        form.arc.clockwise === text.arc.clockwise;
+  return (
+    form.fontId === text.style.fontId &&
+    form.content === text.content &&
+    form.sizeMm === text.style.sizeMm &&
+    form.trackingMm === text.style.trackingMm &&
+    form.wordSpacingMm === text.style.wordSpacingMm &&
+    form.lineSpacing === text.style.lineSpacing &&
+    form.alignment === text.style.alignment &&
+    arcMatches
+  );
+}
+
 export function TextPanel({ state, busy, run }: TextPanelProps) {
   const [fonts, setFonts] = useState<FontCatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -74,7 +110,6 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
   );
   const [preserveSource, setPreserveSource] = useState(true);
   const selected = selectedText(state);
-  const selectedId = selected?.id;
 
   useEffect(() => {
     let active = true;
@@ -107,17 +142,8 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
     if (selected === null) {
       return;
     }
-    setForm({
-      fontId: selected.style.fontId,
-      content: selected.content,
-      sizeMm: selected.style.sizeMm,
-      trackingMm: selected.style.trackingMm,
-      wordSpacingMm: selected.style.wordSpacingMm,
-      lineSpacing: selected.style.lineSpacing,
-      alignment: selected.style.alignment,
-      arc: selected.arc === null ? null : { ...selected.arc },
-    });
-  }, [selected?.id]);
+    setForm(formFromText(selected));
+  }, [selected]);
 
   const availableSelectedFont = fonts.find(
     (font) =>
@@ -136,8 +162,9 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
 
   useEffect(() => {
     if (
-      selectedId === undefined ||
+      selected === null ||
       availableSelectedFont === undefined ||
+      formMatchesText(form, selected) ||
       form.content.length === 0 ||
       form.sizeMm <= 0 ||
       form.lineSpacing <= 0 ||
@@ -151,7 +178,7 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
       );
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [availableSelectedFont, form, run, selectedId]);
+  }, [availableSelectedFont, form, run, selected]);
 
   const rememberFont = (fontId: string) => {
     const next = [fontId, ...recent.filter((id) => id !== fontId)].slice(0, 8);

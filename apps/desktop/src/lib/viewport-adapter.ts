@@ -5,6 +5,7 @@ import {
   getDocumentBounds,
   getObjectsInRenderOrder,
   getSelectionBounds,
+  groupTextContoursByCompound,
   nonnegativeLengthToMillimeters,
   toMillimeters,
   type AffineTransformMm,
@@ -55,6 +56,7 @@ export interface PointObjectPrimitive extends ObjectPrimitiveBase {
 
 export interface CompoundObjectPrimitive extends ObjectPrimitiveBase {
   kind: "compound";
+  compoundIndex: number;
   fillRule: "evenodd";
   contours: Array<{
     closed: boolean;
@@ -389,14 +391,16 @@ function objectPrimitives(
     );
   }
   if (object.type === "text") {
-    return [
-      {
+    return groupTextContoursByCompound(object.contours).map((compound) => {
+      const compoundIndex = compound[0]?.compoundIndex ?? 0;
+      return {
         kind: "compound",
-        key: `${selectionId}:${object.id}:text`,
+        key: `${selectionId}:${object.id}:text:${String(compoundIndex)}`,
         objectId: selectionId,
         sourceId: object.id,
+        compoundIndex,
         fillRule: "evenodd",
-        contours: object.contours.map((contour) => ({
+        contours: compound.map((contour) => ({
           closed: contour.closed,
           points: contour.points.map((point) =>
             domainToScreen(
@@ -411,8 +415,8 @@ function objectPrimitives(
             ),
           ),
         })),
-      },
-    ];
+      };
+    });
   }
   const primitive = primitiveDomainPoints(object);
   return [

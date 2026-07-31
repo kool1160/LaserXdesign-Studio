@@ -14,6 +14,7 @@ const TEXT_ID = "20000000-0000-4000-8000-000000000000";
 const GROUP_ID = "30000000-0000-4000-8000-000000000000";
 const CONTOUR_ID = "40000000-0000-4000-8000-000000000000";
 const COUNTER_ID = "41000000-0000-4000-8000-000000000000";
+const OVERLAP_ID = "42000000-0000-4000-8000-000000000000";
 
 function textObject(): TextObject {
   return {
@@ -21,7 +22,7 @@ function textObject(): TextObject {
     type: "text",
     layerId: LAYER_ID,
     transform: identityTransform(),
-    content: "O",
+    content: "OO",
     origin: { xMm: 10, yMm: 20 },
     style: {
       fontId: "bundled:noto-sans",
@@ -37,6 +38,7 @@ function textObject(): TextObject {
     arc: null,
     contours: [
       {
+        compoundIndex: 0,
         closed: true,
         points: [
           { xMm: 0, yMm: 0 },
@@ -46,12 +48,23 @@ function textObject(): TextObject {
         ],
       },
       {
+        compoundIndex: 0,
         closed: true,
         points: [
           { xMm: 3, yMm: 4 },
           { xMm: 9, yMm: 4 },
           { xMm: 9, yMm: 14 },
           { xMm: 3, yMm: 14 },
+        ],
+      },
+      {
+        compoundIndex: 1,
+        closed: true,
+        points: [
+          { xMm: 8, yMm: 0 },
+          { xMm: 18, yMm: 0 },
+          { xMm: 18, yMm: 18 },
+          { xMm: 8, yMm: 18 },
         ],
       },
     ],
@@ -64,7 +77,7 @@ describe("editable text", () => {
     expect(getObjectBounds(textObject())).toEqual({
       minXmm: 10,
       minYmm: 20,
-      maxXmm: 22,
+      maxXmm: 28,
       maxYmm: 38,
     });
   });
@@ -85,7 +98,7 @@ describe("editable text", () => {
       type: "objects.convert-text",
       objectIds: [TEXT_ID],
       groupIds: { [TEXT_ID]: GROUP_ID },
-      contourIds: { [TEXT_ID]: [CONTOUR_ID, COUNTER_ID] },
+      contourIds: { [TEXT_ID]: [CONTOUR_ID, COUNTER_ID, OVERLAP_ID] },
       preserveSource: true,
     });
     const group = converted.objects[0];
@@ -95,7 +108,7 @@ describe("editable text", () => {
     expect(group).toMatchObject({
       id: GROUP_ID,
       type: "group",
-      sourceText: { content: "O" },
+      sourceText: { content: "OO" },
     });
     if (group.type !== "group") {
       throw new Error("Expected a group.");
@@ -116,11 +129,15 @@ describe("editable text", () => {
       id: COUNTER_ID,
       type: "path",
     });
-    expect(group.children).toHaveLength(2);
+    expect(group.children[2]).toMatchObject({
+      id: OVERLAP_ID,
+      type: "path",
+    });
+    expect(group.children).toHaveLength(3);
     expect(getObjectBounds(group)).toEqual(getObjectBounds(textObject()));
   });
 
-  it("uses even-odd compound fill so an enclosed counter is not hit", () => {
+  it("keeps counters empty while unioning overlapping glyph compounds", () => {
     const document = createDocument({
       id: "50000000-0000-4000-8000-000000000000",
       width: 100,
@@ -146,5 +163,12 @@ describe("editable text", () => {
         toleranceMm: 0,
       }),
     ).toEqual([]);
+    expect(
+      hitTestDocument({
+        document,
+        point: { xMm: 20, yMm: 29 },
+        toleranceMm: 0,
+      }),
+    ).toMatchObject([{ objectId: TEXT_ID, distanceMm: 0 }]);
   });
 });

@@ -8,6 +8,7 @@ import {
   invertAffineTransform,
   pointInPolygon,
   pointInCompoundPolygonEvenOdd,
+  pointInCompoundPolygonUnionEvenOdd,
   rotationTransformAt,
   scaleTransformAt,
   transformBounds,
@@ -118,5 +119,33 @@ describe("affine transforms", () => {
     expect(
       pointInCompoundPolygonEvenOdd({ xMm: 5, yMm: 5 }, [outer, counter]),
     ).toBe(false);
+  });
+
+  it("unions glyph compounds without XORing their overlap", () => {
+    const outer = [
+      { xMm: 0, yMm: 0 },
+      { xMm: 10, yMm: 0 },
+      { xMm: 10, yMm: 10 },
+      { xMm: 0, yMm: 10 },
+    ];
+    const counter = [
+      { xMm: 3, yMm: 3 },
+      { xMm: 7, yMm: 3 },
+      { xMm: 7, yMm: 7 },
+      { xMm: 3, yMm: 7 },
+    ];
+    const overlappingGlyph = [
+      { xMm: 8, yMm: 0 },
+      { xMm: 14, yMm: 0 },
+      { xMm: 14, yMm: 10 },
+      { xMm: 8, yMm: 10 },
+    ];
+    const compounds = [[outer, counter], [overlappingGlyph]];
+    expect(
+      pointInCompoundPolygonUnionEvenOdd({ xMm: 5, yMm: 5 }, compounds),
+    ).toBe(false);
+    expect(
+      pointInCompoundPolygonUnionEvenOdd({ xMm: 9, yMm: 5 }, compounds),
+    ).toBe(true);
   });
 });

@@ -39,11 +39,13 @@ main-process service enforce this rule. A mismatch pauses live materialization;
 choosing a current font and pressing Update is the explicit, undoable
 substitution boundary.
 
-Text contours use the even-odd compound-fill rule in both viewport projection
-and domain hit testing. All contours for an editable text object project to one
-compound SVG path, so enclosed counters remain empty regardless of contour
-winding. Outline conversion still emits every contour as an individual path
-child for later geometric containment analysis.
+Each materialized text contour records the deterministic index of the shaped
+glyph compound that produced it. Viewport projection renders one even-odd SVG
+path per glyph compound, and domain hit testing applies even-odd within each
+compound before unioning the compound results. Enclosed counters therefore
+remain empty regardless of contour winding, while overlaps between separate
+glyphs remain filled. Outline conversion still emits every contour as an
+individual path child for later geometric containment analysis.
 
 ## Rationale
 

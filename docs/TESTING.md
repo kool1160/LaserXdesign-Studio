@@ -116,8 +116,8 @@ assertions normalize only below that documented boundary.
 ## M04 executable layers
 
 - font-engine tests use a pinned OFL fixture to prove deterministic shaping,
-  exact contour bounds, enclosed-letter contours, arc warping, fingerprinting,
-  and path-free catalog projections;
+  glyph-compound indexing, exact contour bounds, enclosed-letter contours, arc
+  warping, fingerprinting, and path-free catalog projections;
 - domain and application tests cover text bounds, replacement, conversion to
   path groups, optional source preservation, selection, and undo/redo;
 - project-format tests cover schema-v4 text/contour persistence and the
@@ -126,13 +126,16 @@ assertions normalize only below that documented boundary.
 - `pnpm audit:fonts` validates pinned package versions, OFL license text,
   provenance fields, unique IDs, and coverage of stencil, script, serif, slab,
   western, industrial, and display categories;
-- twelve packaged Playwright scenarios retain the earlier security/editing
+- thirteen packaged Playwright scenarios retain the earlier security/editing
   coverage and add text create/edit, spacing/arc materialization,
   text-to-outline conversion, undo, save, and exact-contour reopen. A changed
   fingerprint regression proves selection/reopen preserves contours,
   fingerprint, dirty state, and history until explicit undoable substitution.
-  Compound-path assertions plus domain hit tests prove enclosed counters are
-  even-odd holes while their surrounding strokes remain selectable.
+  Per-glyph compound-path assertions plus geometry/domain hit tests prove
+  enclosed counters are even-odd holes while overlap between separate glyphs
+  remains filled/selectable. Undo coverage proves authoritative same-ID text
+  changes synchronize the panel without adding history or reapplying stale
+  content/font intent on the next edit.
 
 Run all milestone checks from the repository root:
 

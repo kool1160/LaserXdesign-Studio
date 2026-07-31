@@ -34,12 +34,18 @@ test("packaged text stays editable, arcs, converts, undoes, and reopens", async 
         ),
       )
       .toBe("text");
-    const compoundPath = page.getByTestId("compound-text-path");
-    await expect(compoundPath).toHaveAttribute("fill-rule", "evenodd");
+    const compoundPaths = page.getByTestId("compound-text-path");
+    await expect(compoundPaths.first()).toHaveAttribute("fill-rule", "evenodd");
+    await expect.poll(() => compoundPaths.count()).toBeGreaterThanOrEqual(2);
     await expect
       .poll(async () => {
-        const path = (await compoundPath.getAttribute("d")) ?? "";
-        return path.match(/\bM\b/gu)?.length ?? 0;
+        const paths = await compoundPaths.evaluateAll((elements) =>
+          elements.map((element) => element.getAttribute("d") ?? ""),
+        );
+        return paths.reduce(
+          (count, path) => count + (path.match(/\bM\b/gu)?.length ?? 0),
+          0,
+        );
       })
       .toBeGreaterThanOrEqual(3);
 
@@ -288,5 +294,78 @@ test("changed font fingerprint preserves geometry until explicit substitution", 
       });
   } finally {
     await killAndRemove(reopened);
+  }
+});
+
+test("undo synchronizes the selected text form before the next edit", async () => {
+  const launched = await launchPackaged();
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await expect
+      .poll(() => page.getByTestId("font-family").locator("option").count())
+      .toBeGreaterThanOrEqual(6);
+    const fontSelect = page.getByTestId("font-family");
+    const originalFontId = await fontSelect.inputValue();
+
+    await page.getByTestId("text-content").fill("Original text");
+    await page.getByTestId("create-text").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const object = (await window.laserx.getState()).project.document.objects.at(-1);
+          return object?.type === "text" ? object.content : object?.type;
+        }),
+      )
+      .toBe("Original text");
+
+    await page.getByTestId("text-content").fill("Replacement text");
+    await fontSelect.selectOption("bundled:noto-serif");
+    await page.getByTestId("update-text").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const object = (await window.laserx.getState()).project.document.objects.at(-1);
+          return object?.type === "text"
+            ? `${object.content}:${object.style.fontId}`
+            : object?.type;
+        }),
+      )
+      .toBe("Replacement text:bundled:noto-serif");
+
+    await page.getByTestId("undo").click();
+    await expect(page.getByTestId("text-content")).toHaveValue("Original text");
+    await expect(fontSelect).toHaveValue(originalFontId);
+    const restoredHistory = await page.evaluate(async () =>
+      (await window.laserx.getState()).editor.history,
+    );
+    await page.waitForTimeout(500);
+    expect(
+      await page.evaluate(async () =>
+        (await window.laserx.getState()).editor.history,
+      ),
+    ).toEqual(restoredHistory);
+
+    await page.getByLabel("Tracking (mm)").fill("1.25");
+    await page.getByTestId("update-text").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const object = (await window.laserx.getState()).project.document.objects.at(-1);
+          return object?.type === "text"
+            ? {
+                content: object.content,
+                fontId: object.style.fontId,
+                trackingMm: object.style.trackingMm,
+              }
+            : null;
+        }),
+      )
+      .toEqual({
+        content: "Original text",
+        fontId: originalFontId,
+        trackingMm: 1.25,
+      });
+  } finally {
+    await killAndRemove(launched);
   }
 });

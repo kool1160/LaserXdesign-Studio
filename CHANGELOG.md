@@ -8,9 +8,12 @@ All notable project changes will be documented here.
 
 - Selecting text with a missing or changed font fingerprint no longer triggers
   live rematerialization; explicit substitution remains undoable.
-- Editable text now renders and hit-tests as one even-odd compound shape, so
-  enclosed counters remain empty while outline conversion preserves every
-  contour.
+- Editable text now renders and hit-tests even-odd within each glyph and unions
+  separate glyph compounds, so counters remain empty, overlapping glyphs stay
+  filled, and outline conversion preserves every contour.
+- Undo and redo now synchronize authoritative same-ID text content, font, and
+  layout values back into the text panel without creating a redundant live
+  update or allowing the next edit to reapply stale intent.
 - Alt-drag and middle-button pan gestures now take precedence over artwork and
   transform-handle hit testing, so viewport navigation cannot accidentally
   mutate geometry or history.

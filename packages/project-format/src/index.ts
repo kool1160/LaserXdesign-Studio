@@ -132,6 +132,7 @@ const textArcSchema = z.strictObject({
   clockwise: z.boolean(),
 });
 const textContourSchema = z.strictObject({
+  compoundIndex: z.number().int().nonnegative(),
   closed: z.boolean(),
   points: z.array(pointSchema).min(2),
 });

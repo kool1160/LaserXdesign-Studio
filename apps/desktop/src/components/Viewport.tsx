@@ -477,6 +477,7 @@ export function Viewport({
                   }
                   data-object-id={object.objectId}
                   data-source-id={object.sourceId}
+                  data-compound-index={object.compoundIndex}
                   data-testid="compound-text-path"
                   d={compoundPathData(object.contours)}
                   fillRule={object.fillRule}

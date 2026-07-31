@@ -86,10 +86,11 @@ directories or font bytes. The renderer receives catalog records without
 paths and submits only validated font IDs, content, and layout settings.
 Authoritative editable text and materialized millimeter contours live in the
 domain document and schema v4. Missing fonts never trigger implicit
-re-materialization. Text projection and hit testing share the even-odd
-compound-fill rule so enclosed counters remain empty without relying on
-font-specific winding. ADRs 0012–0013 record the font boundary and persistence
-decisions.
+re-materialization. Materialization persists a glyph-compound index with each
+contour. Text projection and hit testing apply even-odd within each glyph and
+union separate glyph compounds, so enclosed counters remain empty without
+turning overlapping script or negatively tracked glyphs into holes. ADRs
+0012–0013 record the font boundary and persistence decisions.
 
 ## State flow
 

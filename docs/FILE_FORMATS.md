@@ -10,8 +10,11 @@ millimeter dimensions; the fixed Cartesian origin; display, viewport, and
 snapping preferences; ordered layers and guides; recursive groups; and ordered
 objects with stable IDs, layer references, and affine transforms. Editable text
 adds font identity/fingerprint, millimeter typography settings, optional arc
-intent, and materialized contours. Converted outline groups may preserve
-editable source metadata. The reviewed current fixture is
+intent, and materialized contours carrying deterministic nonnegative glyph-
+compound indices. The indices preserve counter-versus-overlap fill semantics
+without changing outline conversion, which still emits every contour.
+Converted outline groups may preserve editable source metadata. The reviewed
+current fixture is
 `fixtures/projects/editing-v4.laserx`.
 
 Object array order is z-order within layer order. Layer visibility, locking,

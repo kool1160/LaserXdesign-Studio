@@ -203,3 +203,26 @@ shared even-odd compound-fill policy.
 - Known limitations: existing documented M04 exclusions remain unchanged.
 - Next allowed work: review M04 only after final-head local verification and
 GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
+
+## 2026-07-31 — M04 re-review correctness repairs
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #18 blocking re-review findings
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Font materialization and schema-v4 contours now preserve a
+deterministic glyph-compound index. Viewport projection and hit testing apply
+even-odd inside each glyph and union separate glyphs, keeping counters empty
+without XOR holes in overlapping script or negatively tracked lettering. The
+text form now follows authoritative content/style/arc changes for the same
+selected object ID after undo/redo, while an equality guard prevents form
+synchronization from creating a redundant live command.
+- Verification: focused font, geometry, domain, project-format, viewport, and
+packaged regressions cover compound grouping, counter holes, inter-glyph
+overlap, lossless outline conversion, same-ID form restoration, stable history,
+and a subsequent edit that preserves the undone content/font intent. The full
+suite contains 86 unit/integration tests and 13 packaged Windows E2E scenarios.
+- Decisions: ADRs 0012–0013 now record per-glyph compound indexing and the
+even-odd-within/union-across fill policy.
+- Known limitations: existing documented M04 exclusions remain unchanged.
+- Next allowed work: review M04 only after final-head local verification and
+GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
