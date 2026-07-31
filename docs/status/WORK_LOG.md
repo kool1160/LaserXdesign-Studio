@@ -120,7 +120,9 @@ behavior remains unchanged.
 `pnpm test:e2e`, `pnpm verify`, `pnpm audit --prod`,
 `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
 suite contains 73 unit/integration tests and 9 packaged Playwright tests.
-Final-head CI results will be recorded after publication.
+Focused code commit `6341b01be7ffddd9a5dbe062dc34fef5755857cd`
+passed Repository Guard run `30593136008`, Windows push run `30593133817`,
+and Windows pull-request run `30593136023`.
 - Decisions: no architecture or schema change. The existing validated
 `objects.set-bounds` and `objects.scale` commands remain authoritative; the
 renderer adapter now supplies unambiguous locked-resize intent.
