@@ -690,4 +690,94 @@ describe("editing domain", () => {
     expect(object.transform.a).toBeCloseTo(expected.a, 9);
     expect(boundsWidth(getObjectBounds(object))).toBeCloseTo(20, 9);
   });
+
+  it("preserves path identity and closure across node and curve edits", () => {
+    const pathId = "90000000-0000-4000-8000-000000000000";
+    let document = editingDocument();
+    document.objects.push({
+      id: pathId,
+      type: "path",
+      layerId: LAYER_ONE,
+      transform: identityTransform(),
+      closed: true,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 20, yMm: 0 },
+        { xMm: 20, yMm: 20 },
+        { xMm: 0, yMm: 20 },
+      ],
+    });
+    document = applyEditorCommand(document, {
+      type: "path.add-node",
+      objectId: pathId,
+      segmentIndex: 0,
+      ratio: 0.5,
+    });
+    document = applyEditorCommand(document, {
+      type: "path.move-nodes",
+      objectId: pathId,
+      nodeIndices: [1],
+      deltaXmm: 0,
+      deltaYmm: 2,
+    });
+    document = applyEditorCommand(document, {
+      type: "path.set-handle",
+      objectId: pathId,
+      nodeIndex: 1,
+      handle: "outgoing",
+      point: { xMm: 14, yMm: 6 },
+    });
+    const path = document.objects.find((object) => object.id === pathId);
+    expect(path).toMatchObject({
+      id: pathId,
+      type: "path",
+      closed: true,
+    });
+    expect(path?.type === "path" ? path.points : []).toHaveLength(5);
+    expect(path?.type === "path" ? path.handles?.[1]?.outgoing : null).toEqual({
+      xMm: 14,
+      yMm: 6,
+    });
+  });
+
+  it("rejects invalid path topology at generated-command boundaries", () => {
+    const document = editingDocument();
+    expect(() =>
+      applyEditorCommand(document, {
+        type: "objects.insert",
+        objects: [
+          {
+            id: "91000000-0000-4000-8000-000000000000",
+            type: "path",
+            layerId: LAYER_ONE,
+            transform: identityTransform(),
+            closed: true,
+            points: [
+              { xMm: 0, yMm: 0 },
+              { xMm: 10, yMm: 0 },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/path geometry is invalid/);
+    expect(() =>
+      applyEditorCommand(document, {
+        type: "objects.insert",
+        objects: [
+          {
+            id: "92000000-0000-4000-8000-000000000000",
+            type: "path",
+            layerId: LAYER_ONE,
+            transform: identityTransform(),
+            closed: false,
+            points: [
+              { xMm: 0, yMm: 0 },
+              { xMm: 10, yMm: 0 },
+            ],
+            handles: [{ incoming: null, outgoing: null }],
+          },
+        ],
+      }),
+    ).toThrow(/path geometry is invalid/);
+  });
 });

@@ -4,9 +4,11 @@ import type { EditorActionRequest } from "@laserx/application";
 
 import {
   commandResultSchema,
+  cancelGeometryOperationRequestSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
+  geometryOperationRequestSchema,
   IPC_CHANNELS,
   fontCatalogSchema,
   openRecentRequestSchema,
@@ -16,7 +18,9 @@ import {
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   type CreateDocumentRequest,
+  type CancelGeometryOperationRequest,
   type DesktopState,
+  type GeometryOperationRequestDto,
   type LaserxDesktopApi,
   type OpenRecentRequest,
   type ResolveRecoveryRequest,
@@ -87,6 +91,21 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = editorActionRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.editorAction, validated),
+    );
+  },
+  async geometryOperation(request: GeometryOperationRequestDto) {
+    const validated = geometryOperationRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.geometryOperation, validated),
+    );
+  },
+  async cancelGeometryOperation(request: CancelGeometryOperationRequest) {
+    const validated = cancelGeometryOperationRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(
+        IPC_CHANNELS.cancelGeometryOperation,
+        validated,
+      ),
     );
   },
   async getFontCatalog() {

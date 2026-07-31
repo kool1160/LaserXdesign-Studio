@@ -1,4 +1,7 @@
-import type { EditorActionRequest } from "@laserx/application";
+import type {
+  EditorActionRequest,
+  GeometryOperationRequest,
+} from "@laserx/application";
 import {
   isInvertibleTransform,
   type AffineTransformMm,
@@ -18,6 +21,8 @@ export const IPC_CHANNELS = {
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   editorAction: "laserx:editor:action",
+  geometryOperation: "laserx:geometry:operate",
+  cancelGeometryOperation: "laserx:geometry:cancel",
   getFontCatalog: "laserx:fonts:catalog",
   createText: "laserx:text:create",
   updateSelectedText: "laserx:text:update-selected",
@@ -33,6 +38,10 @@ const objectIdsSchema = z.array(z.uuid()).min(1);
 const pointSchema = z.strictObject({
   xMm: finiteNumber,
   yMm: finiteNumber,
+});
+const pathControlHandlesSchema = z.strictObject({
+  incoming: pointSchema.nullable(),
+  outgoing: pointSchema.nullable(),
 });
 const boundsSchema = z.strictObject({
   minXmm: finiteNumber,
@@ -111,6 +120,7 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
       type: z.literal("path"),
       closed: z.boolean(),
       points: z.array(pointSchema).min(2),
+      handles: z.array(pathControlHandlesSchema).optional(),
     }),
     z.strictObject({
       ...objectBaseShape,
@@ -261,6 +271,23 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
     }),
     z.strictObject({ type: z.literal("selection.all") }),
     z.strictObject({ type: z.literal("selection.clear") }),
+    z.strictObject({
+      type: z.literal("selection.path-node"),
+      objectId: z.uuid(),
+      nodeIndex: z.number().int().nonnegative(),
+      mode: selectionModeSchema,
+    }),
+    z.strictObject({
+      type: z.literal("selection.path-segment"),
+      objectId: z.uuid(),
+      segmentIndex: z.number().int().nonnegative(),
+      mode: selectionModeSchema,
+    }),
+    z.strictObject({ type: z.literal("selection.path-clear") }),
+    z.strictObject({
+      type: z.literal("selection.path-edit"),
+      objectId: z.uuid(),
+    }),
     z.strictObject({ type: z.literal("clipboard.copy") }),
     z.strictObject({ type: z.literal("clipboard.paste") }),
     z.strictObject({ type: z.literal("objects.duplicate-selection") }),
@@ -268,6 +295,11 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
     z.strictObject({
       type: z.literal("objects.convert-selected-text"),
       preserveSource: z.boolean(),
+    }),
+    z.strictObject({ type: z.literal("path.split-selected") }),
+    z.strictObject({
+      type: z.literal("paths.join-selected"),
+      toleranceMm: nonnegativeNumber,
     }),
     z.strictObject({ type: z.literal("history.undo") }),
     z.strictObject({ type: z.literal("history.redo") }),
@@ -319,6 +351,50 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
     z.strictObject({
       type: z.literal("objects.delete"),
       objectIds: objectIdsSchema,
+    }),
+    z.strictObject({
+      type: z.literal("path.move-nodes"),
+      objectId: z.uuid(),
+      nodeIndices: z.array(z.number().int().nonnegative()).min(1),
+      deltaXmm: finiteNumber,
+      deltaYmm: finiteNumber,
+    }),
+    z.strictObject({
+      type: z.literal("path.add-node"),
+      objectId: z.uuid(),
+      segmentIndex: z.number().int().nonnegative(),
+      ratio: finiteNumber.gt(0).lt(1),
+    }),
+    z.strictObject({
+      type: z.literal("path.delete-nodes"),
+      objectId: z.uuid(),
+      nodeIndices: z.array(z.number().int().nonnegative()).min(1),
+    }),
+    z.strictObject({
+      type: z.literal("path.set-handle"),
+      objectId: z.uuid(),
+      nodeIndex: z.number().int().nonnegative(),
+      handle: z.enum(["incoming", "outgoing"]),
+      point: pointSchema.nullable(),
+    }),
+    z.strictObject({
+      type: z.literal("path.set-closed"),
+      objectId: z.uuid(),
+      closed: z.boolean(),
+    }),
+    z.strictObject({
+      type: z.literal("path.reverse"),
+      objectId: z.uuid(),
+    }),
+    z.strictObject({
+      type: z.literal("path.simplify"),
+      objectId: z.uuid(),
+      toleranceMm: positiveNumber,
+    }),
+    z.strictObject({
+      type: z.literal("path.cleanup"),
+      objectId: z.uuid(),
+      toleranceMm: positiveNumber,
     }),
     z.strictObject({
       type: z.literal("objects.align"),
@@ -400,6 +476,25 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
     }),
   ]);
 
+export const geometryOperationRequestSchema: z.ZodType<GeometryOperationRequest> =
+  z.discriminatedUnion("kind", [
+    z.strictObject({
+      operationId: z.uuid(),
+      kind: z.literal("boolean"),
+      operation: z.enum(["union", "subtract", "intersect", "xor"]),
+    }),
+    z.strictObject({
+      operationId: z.uuid(),
+      kind: z.literal("offset"),
+      distanceMm: finiteNumber.refine((value) => value !== 0),
+      join: z.enum(["miter", "round", "square"]),
+    }),
+  ]);
+
+export const cancelGeometryOperationRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
 export const resolveRecoveryRequestSchema = z.strictObject({
   action: z.enum(["recover", "discard"]),
 });
@@ -419,6 +514,24 @@ export const desktopStateSchema = z.strictObject({
     selectionIds: z.array(z.uuid()),
     selectionBounds: boundsSchema.nullable(),
     clipboardHasContent: z.boolean(),
+    pathSelection: z
+      .strictObject({
+        objectId: z.uuid(),
+        nodeIndices: z.array(z.number().int().nonnegative()),
+        segmentIndices: z.array(z.number().int().nonnegative()),
+      })
+      .nullable(),
+    topologySummary: z
+      .strictObject({
+        operation: z.string(),
+        beforeNodeCount: z.number().int().nonnegative(),
+        afterNodeCount: z.number().int().nonnegative(),
+        replacedObjectIds: z.array(z.uuid()),
+        discardedObjectIds: z.array(z.uuid()),
+        warnings: z.array(z.string()),
+        message: z.string(),
+      })
+      .nullable(),
     history: z.strictObject({
       undoDepth: z.number().int().nonnegative(),
       redoDepth: z.number().int().nonnegative(),
@@ -468,6 +581,12 @@ export type ResolveRecoveryRequest = z.infer<
 >;
 export type TextLayoutRequestDto = z.infer<typeof textLayoutRequestSchema>;
 export type TextUpdateRequestDto = z.infer<typeof textUpdateRequestSchema>;
+export type GeometryOperationRequestDto = z.infer<
+  typeof geometryOperationRequestSchema
+>;
+export type CancelGeometryOperationRequest = z.infer<
+  typeof cancelGeometryOperationRequestSchema
+>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -486,6 +605,12 @@ export interface LaserxDesktopApi {
     request: SetViewportPreferencesRequest,
   ): Promise<CommandResult>;
   editorAction(request: EditorActionRequest): Promise<CommandResult>;
+  geometryOperation(
+    request: GeometryOperationRequestDto,
+  ): Promise<CommandResult>;
+  cancelGeometryOperation(
+    request: CancelGeometryOperationRequest,
+  ): Promise<CommandResult>;
   getFontCatalog(): Promise<FontCatalogEntry[]>;
   createText(request: TextLayoutRequestDto): Promise<CommandResult>;
   updateSelectedText(

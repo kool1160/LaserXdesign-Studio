@@ -25,6 +25,7 @@ export interface TestLaunch {
 export interface LaunchEnvironment {
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
+  geometryDelayMs?: string;
 }
 
 export async function launchPackaged(
@@ -53,6 +54,9 @@ export async function launchPackaged(
       ...(launchEnvironment.failInitialGetState === true
         ? { LASERX_TEST_GET_STATE_FAILURE: "1" }
         : {}),
+      ...(launchEnvironment.geometryDelayMs === undefined
+        ? {}
+        : { LASERX_TEST_GEOMETRY_DELAY_MS: launchEnvironment.geometryDelayMs }),
     },
   });
   return {

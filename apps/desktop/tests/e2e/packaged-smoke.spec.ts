@@ -31,9 +31,11 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasNodeProcess).toBe(false);
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
+      "cancelGeometryOperation",
       "createDocument",
       "createText",
       "editorAction",
+      "geometryOperation",
       "getFontCatalog",
       "getState",
       "newProject",

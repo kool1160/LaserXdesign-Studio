@@ -1,4 +1,7 @@
-import type { EditorActionRequest } from "@laserx/application";
+import {
+  previewSelectedPathJoin,
+  type EditorActionRequest,
+} from "@laserx/application";
 import {
   useCallback,
   useEffect,
@@ -10,6 +13,7 @@ import type {
   CommandResult,
   DesktopState,
 } from "../../electron/ipc-contract.js";
+import type { PathObject } from "@laserx/domain";
 import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
 import {
@@ -26,6 +30,16 @@ import {
 } from "../lib/viewport-adapter.js";
 
 type Command = () => Promise<CommandResult>;
+type GeometryUiRequest =
+  | {
+      kind: "boolean";
+      operation: "union" | "subtract" | "intersect" | "xor";
+    }
+  | {
+      kind: "offset";
+      distanceMm: number;
+      join: "miter" | "round" | "square";
+    };
 
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
@@ -42,12 +56,21 @@ export function App() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [activeGeometryOperationId, setActiveGeometryOperationId] =
+    useState<string | null>(null);
   const [width, setWidth] = useState("24");
   const [height, setHeight] = useState("12");
   const [inputUnit, setInputUnit] = useState<
     "millimeters" | "inches"
   >("inches");
   const [gridSpacing, setGridSpacing] = useState("10");
+  const [simplifyTolerance, setSimplifyTolerance] = useState("0.1");
+  const [cleanupTolerance, setCleanupTolerance] = useState("0.01");
+  const [joinTolerance, setJoinTolerance] = useState("0.1");
+  const [offsetDistance, setOffsetDistance] = useState("1");
+  const [offsetJoin, setOffsetJoin] = useState<"miter" | "round" | "square">(
+    "round",
+  );
   const [aspectLocked, setAspectLocked] = useState(true);
   const [lockedDimension, setLockedDimension] = useState<
     "width" | "height"
@@ -134,6 +157,28 @@ export function App() {
     [run],
   );
 
+  const runGeometry = useCallback(async (request: GeometryUiRequest) => {
+    const operationId = window.crypto.randomUUID();
+    setActiveGeometryOperationId(operationId);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.laserx.geometryOperation({
+        operationId,
+        ...request,
+      });
+      setState(result.state);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } catch {
+      setError("The geometry worker returned an invalid response.");
+    } finally {
+      setActiveGeometryOperationId(null);
+      setBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (state === null) {
       return;
@@ -144,6 +189,7 @@ export function App() {
       }
       const primary = event.ctrlKey || event.metaKey;
       const selectionIds = state.editor.selectionIds;
+      const pathSelection = state.editor.pathSelection;
       let request: EditorActionRequest | null = null;
       if (primary && event.key.toLowerCase() === "z") {
         request = event.shiftKey
@@ -163,6 +209,41 @@ export function App() {
           : { type: "objects.group-selection" };
       } else if (primary && event.key.toLowerCase() === "a") {
         request = { type: "selection.all" };
+      } else if (
+        (event.key === "Delete" || event.key === "Backspace") &&
+        pathSelection !== null &&
+        pathSelection.nodeIndices.length > 0
+      ) {
+        request = {
+          type: "path.delete-nodes",
+          objectId: pathSelection.objectId,
+          nodeIndices: pathSelection.nodeIndices,
+        };
+      } else if (
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+          event.key,
+        ) &&
+        pathSelection !== null &&
+        pathSelection.nodeIndices.length > 0
+      ) {
+        const stepMm = event.shiftKey ? 10 : 1;
+        request = {
+          type: "path.move-nodes",
+          objectId: pathSelection.objectId,
+          nodeIndices: pathSelection.nodeIndices,
+          deltaXmm:
+            event.key === "ArrowLeft"
+              ? -stepMm
+              : event.key === "ArrowRight"
+                ? stepMm
+                : 0,
+          deltaYmm:
+            event.key === "ArrowDown"
+              ? -stepMm
+              : event.key === "ArrowUp"
+                ? stepMm
+                : 0,
+        };
       } else if (
         (event.key === "Delete" || event.key === "Backspace") &&
         selectionIds.length > 0
@@ -224,6 +305,17 @@ export function App() {
   const viewportPreferences = document.settings.viewport;
   const selectionIds = state.editor.selectionIds;
   const selectionBounds = state.editor.selectionBounds;
+  const pathSelection = state.editor.pathSelection;
+  const selectedPaths = document.objects.filter(
+    (object): object is PathObject =>
+      object.type === "path" && selectionIds.includes(object.id),
+  );
+  const selectedPath =
+    selectedPaths.length === 1 ? selectedPaths[0] : undefined;
+  const joinPreview = previewSelectedPathJoin(
+    selectedPaths,
+    Number(joinTolerance),
+  );
   const unit = document.settings.displayUnit;
   const unitLabel = unit === "inches" ? "in" : "mm";
 
@@ -264,6 +356,47 @@ export function App() {
     if (request !== null) {
       dispatchEditorAction(request);
     }
+  };
+
+  const setSelectedNodeHandle = (
+    handle: "incoming" | "outgoing",
+    remove: boolean,
+  ) => {
+    const nodeIndex = pathSelection?.nodeIndices[0];
+    if (
+      selectedPath === undefined ||
+      pathSelection === null ||
+      pathSelection.nodeIndices.length !== 1 ||
+      nodeIndex === undefined
+    ) {
+      return;
+    }
+    const anchor = selectedPath.points[nodeIndex];
+    if (anchor === undefined) {
+      return;
+    }
+    const worldAnchor = {
+      xMm:
+        selectedPath.transform.a * anchor.xMm +
+        selectedPath.transform.c * anchor.yMm +
+        selectedPath.transform.eMm,
+      yMm:
+        selectedPath.transform.b * anchor.xMm +
+        selectedPath.transform.d * anchor.yMm +
+        selectedPath.transform.fMm,
+    };
+    dispatchEditorAction({
+      type: "path.set-handle",
+      objectId: selectedPath.id,
+      nodeIndex,
+      handle,
+      point: remove
+        ? null
+        : {
+            xMm: worldAnchor.xMm + (handle === "incoming" ? -5 : 5),
+            yMm: worldAnchor.yMm,
+          },
+    });
   };
 
   return (
@@ -352,7 +485,7 @@ export function App() {
         >
           Paste
         </button>
-        <span className="shell-badge">M04 text & fonts</span>
+        <span className="shell-badge">M05 node & geometry</span>
       </nav>
 
       {state.recovery !== null && (
@@ -408,7 +541,7 @@ export function App() {
             <dl className="project-facts">
               <div>
                 <dt>Format</dt>
-                <dd>.laserx v4</dd>
+                <dd>.laserx v5</dd>
               </div>
               <div>
                 <dt>Stock</dt>
@@ -637,6 +770,7 @@ export function App() {
             document={document}
             selectionIds={selectionIds}
             selectionBounds={selectionBounds}
+            pathSelection={pathSelection}
             onEditorAction={dispatchEditorAction}
           />
         </main>
@@ -697,6 +831,364 @@ export function App() {
                 Ungroup
               </button>
             </div>
+          </section>
+
+          <section data-testid="geometry-panel">
+            <span className="section-label">Node & geometry editing</span>
+            <div className="button-grid compact">
+              {pathSelection === null ? (
+                <button
+                  type="button"
+                  data-testid="edit-path-nodes"
+                  disabled={busy || selectedPath === undefined}
+                  onClick={() => {
+                    if (selectedPath !== undefined) {
+                      dispatchEditorAction({
+                        type: "selection.path-edit",
+                        objectId: selectedPath.id,
+                      });
+                    }
+                  }}
+                >
+                  Edit nodes
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    dispatchEditorAction({ type: "selection.path-clear" })
+                  }
+                >
+                  Done editing
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="add-path-node"
+                disabled={
+                  busy ||
+                  pathSelection === null ||
+                  pathSelection.segmentIndices.length !== 1
+                }
+                onClick={() => {
+                  const segmentIndex = pathSelection?.segmentIndices[0];
+                  if (pathSelection !== null && segmentIndex !== undefined) {
+                    dispatchEditorAction({
+                      type: "path.add-node",
+                      objectId: pathSelection.objectId,
+                      segmentIndex,
+                      ratio: 0.5,
+                    });
+                  }
+                }}
+              >
+                Add node
+              </button>
+              <button
+                type="button"
+                data-testid="delete-path-nodes"
+                disabled={
+                  busy ||
+                  pathSelection === null ||
+                  pathSelection.nodeIndices.length === 0
+                }
+                onClick={() => {
+                  if (pathSelection !== null) {
+                    dispatchEditorAction({
+                      type: "path.delete-nodes",
+                      objectId: pathSelection.objectId,
+                      nodeIndices: pathSelection.nodeIndices,
+                    });
+                  }
+                }}
+              >
+                Delete nodes
+              </button>
+              <button
+                type="button"
+                disabled={busy || selectedPath === undefined}
+                onClick={() => {
+                  if (selectedPath !== undefined) {
+                    dispatchEditorAction({
+                      type: "path.set-closed",
+                      objectId: selectedPath.id,
+                      closed: !selectedPath.closed,
+                    });
+                  }
+                }}
+              >
+                {selectedPath?.closed === true ? "Open path" : "Close path"}
+              </button>
+              <button
+                type="button"
+                disabled={busy || selectedPath === undefined}
+                onClick={() => {
+                  if (selectedPath !== undefined) {
+                    dispatchEditorAction({
+                      type: "path.reverse",
+                      objectId: selectedPath.id,
+                    });
+                  }
+                }}
+              >
+                Reverse
+              </button>
+              <button
+                type="button"
+                data-testid="split-path"
+                disabled={
+                  busy ||
+                  selectedPath?.closed !== false ||
+                  pathSelection?.nodeIndices.length !== 1
+                }
+                onClick={() =>
+                  dispatchEditorAction({ type: "path.split-selected" })
+                }
+              >
+                Split path
+              </button>
+            </div>
+
+            <p className="selection-summary">
+              {pathSelection === null
+                ? "Select one path, then edit its nodes."
+                : `${String(pathSelection.nodeIndices.length)} node${pathSelection.nodeIndices.length === 1 ? "" : "s"} · ${String(pathSelection.segmentIndices.length)} segment${pathSelection.segmentIndices.length === 1 ? "" : "s"}`}
+            </p>
+
+            <div className="button-grid compact">
+              <button
+                type="button"
+                disabled={busy || pathSelection?.nodeIndices.length !== 1}
+                onClick={() => setSelectedNodeHandle("incoming", false)}
+              >
+                + In handle
+              </button>
+              <button
+                type="button"
+                disabled={busy || pathSelection?.nodeIndices.length !== 1}
+                onClick={() => setSelectedNodeHandle("outgoing", false)}
+              >
+                + Out handle
+              </button>
+              <button
+                type="button"
+                disabled={busy || pathSelection?.nodeIndices.length !== 1}
+                onClick={() => setSelectedNodeHandle("incoming", true)}
+              >
+                − In handle
+              </button>
+              <button
+                type="button"
+                disabled={busy || pathSelection?.nodeIndices.length !== 1}
+                onClick={() => setSelectedNodeHandle("outgoing", true)}
+              >
+                − Out handle
+              </button>
+            </div>
+
+            <div className="geometry-setting-row">
+              <label>
+                Simplify tolerance (mm)
+                <input
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  value={simplifyTolerance}
+                  onChange={(event) => setSimplifyTolerance(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                data-testid="simplify-path"
+                disabled={busy || selectedPath === undefined}
+                onClick={() => {
+                  const toleranceMm = Number(simplifyTolerance);
+                  if (selectedPath !== undefined && toleranceMm > 0) {
+                    dispatchEditorAction({
+                      type: "path.simplify",
+                      objectId: selectedPath.id,
+                      toleranceMm,
+                    });
+                  }
+                }}
+              >
+                Simplify
+              </button>
+            </div>
+
+            <div className="geometry-setting-row">
+              <label>
+                Cleanup tolerance (mm)
+                <input
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  value={cleanupTolerance}
+                  onChange={(event) => setCleanupTolerance(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                data-testid="cleanup-path"
+                disabled={busy || selectedPath === undefined}
+                onClick={() => {
+                  const toleranceMm = Number(cleanupTolerance);
+                  if (selectedPath !== undefined && toleranceMm > 0) {
+                    dispatchEditorAction({
+                      type: "path.cleanup",
+                      objectId: selectedPath.id,
+                      toleranceMm,
+                    });
+                  }
+                }}
+              >
+                Clean
+              </button>
+            </div>
+
+            <div className="geometry-setting-row">
+              <label>
+                Join tolerance (mm)
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={joinTolerance}
+                  onChange={(event) => setJoinTolerance(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                data-testid="join-paths"
+                disabled={
+                  busy ||
+                  selectedPaths.length !== 2 ||
+                  selectedPaths.some((path) => path.closed)
+                }
+                onClick={() =>
+                  dispatchEditorAction({
+                    type: "paths.join-selected",
+                    toleranceMm: Number(joinTolerance),
+                  })
+                }
+              >
+                Join nearest
+              </button>
+            </div>
+            {joinPreview !== null && (
+              <p className="selection-summary" data-testid="join-preview">
+                Nearest endpoint gap: {joinPreview.distanceMm.toFixed(3)} mm —{" "}
+                {joinPreview.withinTolerance
+                  ? "inside tolerance"
+                  : "outside tolerance"}
+              </p>
+            )}
+
+            <div className="button-grid compact">
+              {(
+                [
+                  ["union", "Union"],
+                  ["subtract", "Subtract"],
+                  ["intersect", "Intersect"],
+                  ["xor", "Exclude / XOR"],
+                ] as const
+              ).map(([operation, label]) => (
+                <button
+                  type="button"
+                  key={operation}
+                  data-testid={`boolean-${operation}`}
+                  disabled={
+                    busy ||
+                    selectedPaths.length < 2 ||
+                    selectedPaths.some((path) => !path.closed)
+                  }
+                  onClick={() => void runGeometry({ kind: "boolean", operation })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="geometry-setting-row">
+              <label>
+                Signed offset (mm)
+                <input
+                  type="number"
+                  step="any"
+                  value={offsetDistance}
+                  onChange={(event) => setOffsetDistance(event.target.value)}
+                />
+              </label>
+              <select
+                aria-label="Offset join"
+                value={offsetJoin}
+                onChange={(event) =>
+                  setOffsetJoin(
+                    event.target.value as "miter" | "round" | "square",
+                  )
+                }
+              >
+                <option value="round">Round</option>
+                <option value="miter">Miter</option>
+                <option value="square">Square</option>
+              </select>
+              <button
+                type="button"
+                data-testid="offset-paths"
+                disabled={
+                  busy ||
+                  selectedPaths.length === 0 ||
+                  selectedPaths.some((path) => !path.closed) ||
+                  Number(offsetDistance) === 0
+                }
+                onClick={() =>
+                  void runGeometry({
+                    kind: "offset",
+                    distanceMm: Number(offsetDistance),
+                    join: offsetJoin,
+                  })
+                }
+              >
+                Offset
+              </button>
+            </div>
+
+            {activeGeometryOperationId !== null && (
+              <button
+                type="button"
+                className="danger"
+                data-testid="cancel-geometry"
+                onClick={() =>
+                  void window.laserx.cancelGeometryOperation({
+                    operationId: activeGeometryOperationId,
+                  })
+                }
+              >
+                Cancel geometry operation
+              </button>
+            )}
+
+            {state.editor.topologySummary !== null && (
+              <div className="topology-summary" data-testid="topology-summary">
+                <strong>{state.editor.topologySummary.operation}</strong>
+                <span>{state.editor.topologySummary.message}</span>
+                {state.editor.topologySummary.replacedObjectIds.length > 0 && (
+                  <small>
+                    Result IDs:{" "}
+                    {state.editor.topologySummary.replacedObjectIds.join(", ")}
+                  </small>
+                )}
+                {state.editor.topologySummary.discardedObjectIds.length > 0 && (
+                  <small>
+                    Replaced source IDs:{" "}
+                    {state.editor.topologySummary.discardedObjectIds.join(", ")}
+                  </small>
+                )}
+                {state.editor.topologySummary.warnings.map((warning) => (
+                  <small key={warning}>{warning}</small>
+                ))}
+              </div>
+            )}
           </section>
 
           <section>
@@ -1030,7 +1522,7 @@ export function App() {
           {selectionIds.length} selected · undo {state.editor.history.undoDepth} ·
           redo {state.editor.history.redoDepth}
         </span>
-        <span>Cartesian · +X right · +Y up · schema v3</span>
+        <span>Cartesian · +X right · +Y up · schema v5</span>
       </footer>
     </div>
   );

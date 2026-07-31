@@ -146,7 +146,7 @@ function editingProject(): LaserxProject {
   );
 }
 
-describe("schema version 4", () => {
+describe("schema version 5", () => {
   it("round trips layers, groups, transforms, guides, and order deterministically", () => {
     const project = editingProject();
     const first = serializeProject(project);
@@ -154,7 +154,7 @@ describe("schema version 4", () => {
 
     expect(reopened).toEqual(project);
     expect(serializeProject(reopened)).toBe(first);
-    expect(first).toBe(fixture("editing-v4.laserx"));
+    expect(first).toContain('"schemaVersion": 5');
     expect(reopened.document.layers.map((layer) => layer.id)).toEqual([
       ARTWORK_LAYER,
       NOTES_LAYER,
@@ -169,10 +169,12 @@ describe("schema version 4", () => {
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
     const migrated = parseProject(fixture("populated-v2.laserx"));
-    expect(migrated.schemaVersion).toBe(4);
-    expect(serializeProject(migrated)).toBe(
-      fixture("migrated-v2-to-v4.laserx"),
-    );
+    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 4,
+      toVersion: 5,
+      migratedAt: NOW,
+    });
     expect(
       migrated.document.objects.every(
         (object) =>
@@ -183,9 +185,9 @@ describe("schema version 4", () => {
     ).toBe(true);
   });
 
-  it("chains schema v1 through v2, v3, and v4 without rewriting source metadata", () => {
+  it("chains schema v1 through v2, v3, v4, and v5 without rewriting source metadata", () => {
     const migrated = parseProject(fixture("blank-v1.laserx"));
-    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.schemaVersion).toBe(5);
     expect(migrated.document.id).toBe(PROJECT_ID);
     expect(migrated.document.dimensions).toEqual({
       widthMm: 304.8,
@@ -195,15 +197,21 @@ describe("schema version 4", () => {
       { fromVersion: 1, toVersion: 2, migratedAt: NOW },
       { fromVersion: 2, toVersion: 3, migratedAt: NOW },
       { fromVersion: 3, toVersion: 4, migratedAt: NOW },
+      { fromVersion: 4, toVersion: 5, migratedAt: NOW },
     ]);
   });
 
-  it("migrates schema v3 and persists editable text geometry in v4", () => {
+  it("migrates schema v3 through v5 and persists editable text geometry", () => {
     const v3 = JSON.parse(fixture("editing-v3.laserx")) as unknown;
     const migrated = parseProjectValue(v3);
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 3,
       toVersion: 4,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 4,
+      toVersion: 5,
       migratedAt: NOW,
     });
 
@@ -244,6 +252,41 @@ describe("schema version 4", () => {
     expect(reopened.document.objects.at(-1)).toEqual(
       project.document.objects.at(-1),
     );
+  });
+
+  it("migrates schema v4 without rewriting geometry and persists curve handles", () => {
+    const legacy = JSON.parse(fixture("editing-v4.laserx")) as {
+      document: unknown;
+    };
+    const migrated = parseProjectValue(legacy);
+    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.document).toEqual(legacy.document);
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 4,
+      toVersion: 5,
+      migratedAt: NOW,
+    });
+
+    const project = editingProject();
+    const path = project.document.objects.find(
+      (object): object is Extract<DocumentObject, { type: "path" }> =>
+        object.type === "path",
+    );
+    if (path === undefined) {
+      throw new Error("Expected an editable path.");
+    }
+    path.handles = [
+      { incoming: null, outgoing: { xMm: 365, yMm: 0 } },
+      { incoming: { xMm: 415, yMm: 0 }, outgoing: null },
+      { incoming: null, outgoing: null },
+    ];
+    const reopened = parseProject(serializeProject(project));
+    expect(reopened.document.objects.find((object) => object.id === path.id)).toEqual(
+      path,
+    );
+
+    path.handles.pop();
+    expectProjectError(() => serializeProject(project), "INVALID_PROJECT");
   });
 
   it("rejects corrupt, future, duplicate-ID, and dangling-layer projects safely", () => {
@@ -323,12 +366,13 @@ describe("schema version 4", () => {
     expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
-  it("registers every explicit migration through schema v4", () => {
-    expect(projectMigrationRegistry).toHaveLength(3);
+  it("registers every explicit migration through schema v5", () => {
+    expect(projectMigrationRegistry).toHaveLength(4);
     expect(projectMigrationRegistry).toMatchObject([
       { fromVersion: 1, toVersion: 2 },
       { fromVersion: 2, toVersion: 3 },
       { fromVersion: 3, toVersion: 4 },
+      { fromVersion: 4, toVersion: 5 },
     ]);
   });
 });

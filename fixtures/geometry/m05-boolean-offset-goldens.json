@@ -1,0 +1,69 @@
+{
+  "cases": [
+    {
+      "name": "overlapping rectangles union",
+      "request": { "kind": "boolean", "operation": "union" },
+      "contours": [
+        [[0, 0], [10, 0], [10, 10], [0, 10]],
+        [[5, 0], [15, 0], [15, 10], [5, 10]]
+      ],
+      "expected": [
+        [[0, 0], [15, 0], [15, 10], [0, 10]]
+      ]
+    },
+    {
+      "name": "nested rectangle subtraction retains reported hole",
+      "request": { "kind": "boolean", "operation": "subtract" },
+      "contours": [
+        [[0, 0], [20, 0], [20, 20], [0, 20]],
+        [[5, 5], [15, 5], [15, 15], [5, 15]]
+      ],
+      "expected": [
+        [[0, 0], [20, 0], [20, 20], [0, 20]],
+        [[5, 5], [5, 15], [15, 15], [15, 5]]
+      ]
+    },
+    {
+      "name": "touching rectangles union",
+      "request": { "kind": "boolean", "operation": "union" },
+      "contours": [
+        [[0, 0], [10, 0], [10, 10], [0, 10]],
+        [[10, 0], [20, 0], [20, 10], [10, 10]]
+      ],
+      "expected": [
+        [[0, 0], [20, 0], [20, 10], [0, 10]]
+      ]
+    },
+    {
+      "name": "one-micrometer overlap quantizes deterministically",
+      "request": { "kind": "boolean", "operation": "union" },
+      "contours": [
+        [[0, 0], [10, 0], [10, 10], [0, 10]],
+        [[9.999999, 0], [20, 0], [20, 10], [9.999999, 10]]
+      ],
+      "expected": [
+        [[0, 0], [20, 0], [20, 10], [0, 10]]
+      ]
+    },
+    {
+      "name": "outward miter offset",
+      "request": { "kind": "offset", "distanceMm": 1, "join": "miter" },
+      "contours": [
+        [[0, 0], [10, 0], [10, 10], [0, 10]]
+      ],
+      "expected": [
+        [[-1, -1], [11, -1], [11, 11], [-1, 11]]
+      ]
+    },
+    {
+      "name": "inward miter offset",
+      "request": { "kind": "offset", "distanceMm": -1, "join": "miter" },
+      "contours": [
+        [[0, 0], [10, 0], [10, 10], [0, 10]]
+      ],
+      "expected": [
+        [[1, 1], [9, 1], [9, 9], [1, 9]]
+      ]
+    }
+  ]
+}

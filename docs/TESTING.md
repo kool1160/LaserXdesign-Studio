@@ -137,6 +137,31 @@ assertions normalize only below that documented boundary.
   changes synchronize the panel without adding history or reapplying stale
   content/font intent on the next edit.
 
+## M05 executable layers
+
+- geometry tests cover cubic evaluation/subdivision, handle motion and
+  reversal, endpoint joins, path splitting, bounded simplification, cleanup,
+  and explicit self-intersection reporting;
+- the reviewed `fixtures/geometry/m05-boolean-offset-goldens.json` cases cover
+  overlapping, nested, touching, and one-micrometer topology plus inward and
+  outward offsets through the replaceable adapter;
+- domain/application tests cover stable path IDs and closure, authoritative
+  node/segment selection, topology summaries, and byte-identical normalized
+  geometry after undo;
+- project-format tests cover strict optional handles and the complete
+  v1-to-v5 migration registry, including non-rewriting v4 migration;
+- desktop integration tests inject the worker port to prove cancellation and
+  stale work cannot mutate or add history, while successful work commits once
+  and undoes exactly;
+- IPC and packaged Playwright coverage validate path requests, worker-only
+  heavy execution, UI summaries, cancellation, save, and reopen;
+- `pnpm audit:geometry` verifies the exact adapter dependency version and
+  reviewed Boost-1.0 license text.
+
+Topology golden comparisons are exact on the `1e-6 mm` engine grid. Curve and
+simplification assertions state their millimeter tolerance and do not broaden
+it to hide defects.
+
 Run all milestone checks from the repository root:
 
 ```bash

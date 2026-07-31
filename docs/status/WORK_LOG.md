@@ -226,3 +226,35 @@ even-odd-within/union-across fill policy.
 - Known limitations: existing documented M04 exclusions remain unchanged.
 - Next allowed work: review M04 only after final-head local verification and
 GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
+
+## 2026-07-31 — M05 node editing and boolean geometry
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #6 implementation
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Direct node and segment selection, add/delete/move, cubic handles,
+  open/close, reverse, split, tolerance-previewed endpoint joins,
+  tolerance-bounded simplification, cleanup with self-intersection reporting,
+  union/subtract/intersect/XOR, and signed offsets. Closed topology runs through
+  a replaceable, integer-micrometer Clipper2 adapter in a cancellable worker;
+  stale or canceled results cannot mutate the document. Every topology change
+  is one undoable command with before/after node counts, result/replaced IDs,
+  warnings, and schema-v5 persistence.
+- Verification: `pnpm verify`, `pnpm audit:geometry`,
+  `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+  suite contains 108 unit/integration tests and 15 packaged Windows E2E
+  scenarios. Golden fixtures cover simple, nested, touching, and one-micrometer
+  overlap geometry; packaged tests cover union, direct node/handle editing,
+  exact undo/save/reopen, and cancellation with an unchanged document.
+- Decisions: ADR 0014 pins `clipper2-ts` 2.0.1-18 behind the engine adapter and
+  records its Boost-1.0 license, quantization, worker, and replacement contract.
+  ADR 0015 records optional absolute cubic handles and the deterministic v4 to
+  v5 project migration. The recorded local baseline is 1.62 ms median for a
+  400-rectangle union and 22.32 ms median for a 4,096-node round offset.
+- Known limitations: Full trim/extend parity, constraints, fillet/chamfer, CAM
+  kerf, nesting, import/export, tracing, cutability, and later milestone work
+  remain excluded. Independent golden review and final-head Windows CI remain
+  required before merge and status advancement.
+- Next allowed work: review M05 only. Keep the implementation PR draft; do not
+  merge, close Issue #6, advance to M06, or begin later scope until the review
+  and advancement gates pass.

@@ -21,7 +21,9 @@ import {
 } from "./desktop-controller.js";
 import {
   createDocumentRequestSchema,
+  cancelGeometryOperationRequestSchema,
   editorActionRequestSchema,
+  geometryOperationRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   resolveRecoveryRequestSchema,
@@ -167,6 +169,17 @@ function registerIpc(): void {
     const validated = editorActionRequestSchema.parse(request);
     return requireController().editorAction(validated);
   });
+  ipcMain.handle(IPC_CHANNELS.geometryOperation, (_event, request: unknown) => {
+    const validated = geometryOperationRequestSchema.parse(request);
+    return requireController().geometryOperation(validated);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.cancelGeometryOperation,
+    (_event, request: unknown) => {
+      const validated = cancelGeometryOperationRequestSchema.parse(request);
+      return requireController().cancelGeometryOperation(validated.operationId);
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.getFontCatalog, () =>
     requireController().fontCatalog(),
   );

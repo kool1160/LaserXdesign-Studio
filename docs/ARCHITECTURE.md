@@ -92,6 +92,23 @@ union separate glyph compounds, so enclosed counters remain empty without
 turning overlapping script or negatively tracked glyphs into holes. ADRs
 0012–0013 record the font boundary and persistence decisions.
 
+For M05, schema v5 adds optional one-to-one cubic handle records to ordinary
+paths while leaving straight schema-v4 path geometry unchanged during
+migration. `packages/geometry` owns node/segment math, De Casteljau splitting,
+explicit-tolerance curve flattening, simplification, cleanup,
+self-intersection reporting, and a replaceable `GeometryEngine`. The sole
+engine adapter pins `clipper2-ts` for closed booleans and signed offsets and
+quantizes canonical millimeters to integer micrometers at that boundary.
+
+`packages/application` prepares selected closed paths in world millimeters and
+materializes results with stable surviving IDs, fresh additional IDs, warnings,
+discarded/replaced IDs, node counts, and a UI summary. Electron runs the pure
+engine task in a dedicated worker thread. Cancellation terminates the worker;
+a document fingerprint rejects stale results; only a completed current result
+enters the authoritative session as one undoable command. React dispatches
+validated path or geometry requests and renders projections only. ADRs
+0014–0015 record the engine, worker, tolerance, and persistence decisions.
+
 ## State flow
 
 ```text
@@ -130,7 +147,7 @@ Prompt/image + explicit settings
 
 ## Internal geometry representation
 
-The final representation will be selected and recorded during the relevant milestone, but it must support:
+The selected M05 representation supports:
 
 - open and closed paths;
 - line and curve segments;
@@ -140,6 +157,11 @@ The final representation will be selected and recorded during the relevant miles
 - conversion to flattened polylines under explicit tolerance;
 - winding and containment analysis;
 - booleans and offsets through a replaceable engine boundary.
+
+Each path stores ordered point anchors and may store aligned nullable absolute
+local-space incoming/outgoing cubic controls. No handle array means all
+segments are straight. Engine output remains ordinary closed paths rather than
+engine-specific document records.
 
 ## Units
 

@@ -37,8 +37,8 @@ Full CAD trim/extend command parity, parametric constraints, fillet/chamfer unle
 
 ## Exit checklist
 
-- [ ] Geometry-engine ADR accepted.
-- [ ] License review complete.
+- [x] Geometry-engine ADR accepted.
+- [x] License review complete.
 - [ ] Golden fixtures independently reviewed.
-- [ ] Performance baseline recorded.
+- [x] Performance baseline recorded.
 - [ ] Status advances to M06.
