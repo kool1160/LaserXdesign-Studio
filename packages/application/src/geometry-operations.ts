@@ -72,12 +72,13 @@ export function prepareGeometryOperation(
   selectionIds: readonly string[],
   request: GeometryOperationRequest,
 ): PreparedGeometryOperation {
-  const selected = document.objects.filter(
-    (object): object is PathObject =>
-      object.type === "path" &&
-      selectionIds.includes(object.id) &&
-      isLayerEditable(document, object.layerId),
-  );
+  const selected = selectionIds
+    .map((id) => document.objects.find((object) => object.id === id))
+    .filter(
+      (object): object is PathObject =>
+        object?.type === "path" &&
+        isLayerEditable(document, object.layerId),
+    );
   const minimum = request.kind === "boolean" ? 2 : 1;
   if (selected.length !== selectionIds.length || selected.length < minimum) {
     throw new RangeError(
@@ -88,6 +89,11 @@ export function prepareGeometryOperation(
   }
   if (selected.some((object) => !object.closed)) {
     throw new RangeError("Boolean and offset operations require closed paths.");
+  }
+  if (new Set(selected.map((object) => object.layerId)).size !== 1) {
+    throw new RangeError(
+      "Geometry operations require all selected paths to share one editable layer.",
+    );
   }
   const contours = selected.map(engineContour);
   const task: GeometryEngineTaskRequest =

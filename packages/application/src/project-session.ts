@@ -773,18 +773,26 @@ export class ProjectSession implements ProjectCommandDispatcher {
     if (!Number.isFinite(toleranceMm) || toleranceMm < 0) {
       throw new RangeError("Join tolerance must be finite and nonnegative.");
     }
-    const paths = this.#project.document.objects.filter(
-      (object): object is PathObject =>
-        object.type === "path" &&
-        !object.closed &&
-        this.#selectionIds.includes(object.id) &&
-        isLayerEditable(this.#project.document, object.layerId),
-    );
+    const paths = this.#selectionIds
+      .map((id) =>
+        this.#project.document.objects.find((object) => object.id === id),
+      )
+      .filter(
+        (object): object is PathObject =>
+          object?.type === "path" &&
+          !object.closed &&
+          isLayerEditable(this.#project.document, object.layerId),
+      );
     if (paths.length !== 2) {
       throw new RangeError("Select exactly two editable open paths to join.");
     }
     const first = paths[0] as PathObject;
     const second = paths[1] as PathObject;
+    if (first.layerId !== second.layerId) {
+      throw new RangeError(
+        "Joining paths requires both paths to share one editable layer.",
+      );
+    }
     const nearest = previewSelectedPathJoin(paths, toleranceMm);
     if (nearest === null) {
       throw new RangeError("No path endpoints are available to join.");

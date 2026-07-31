@@ -109,6 +109,16 @@ enters the authoritative session as one undoable command. React dispatches
 validated path or geometry requests and renders projections only. ADRs
 0014–0015 record the engine, worker, tolerance, and persistence decisions.
 
+Geometry preparation preserves application selection order end to end. For
+Subtract, the first selected path is the subject and every later selected path
+is a clip; the renderer states that rule and keeps its selected-path projection
+in the same order. Boolean, multi-path offset, and endpoint-join requests are
+rejected unless every operand belongs to the same editable layer, preventing a
+topology replacement from silently relocating source geometry. Joining open
+curves moves the two endpoint anchors to their midpoint and translates the
+adjacent cubic controls by the same deltas before merging their incoming and
+outgoing controls.
+
 ## State flow
 
 ```text

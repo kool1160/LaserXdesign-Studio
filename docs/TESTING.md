@@ -140,21 +140,25 @@ assertions normalize only below that documented boundary.
 ## M05 executable layers
 
 - geometry tests cover cubic evaluation/subdivision, handle motion and
-  reversal, endpoint joins, path splitting, bounded simplification, cleanup,
-  and explicit self-intersection reporting;
+  reversal, endpoint joins with invariant adjacent control vectors, path
+  splitting, bounded simplification, millimeter-distance cleanup, and explicit
+  self-intersection reporting with world-distance endpoint exclusion;
 - the reviewed `fixtures/geometry/m05-boolean-offset-goldens.json` cases cover
   overlapping, nested, touching, and one-micrometer topology plus inward and
   outward offsets through the replaceable adapter;
 - domain/application tests cover stable path IDs and closure, authoritative
-  node/segment selection, topology summaries, and byte-identical normalized
-  geometry after undo;
+  node/segment selection, topology summaries, byte-identical normalized
+  geometry after undo, first-selected subtraction subjects, and no-mutation
+  rejection of cross-layer boolean, offset, and join requests;
 - project-format tests cover strict optional handles and the complete
   v1-to-v5 migration registry, including non-rewriting v4 migration;
 - desktop integration tests inject the worker port to prove cancellation and
   stale work cannot mutate or add history, while successful work commits once
   and undoes exactly;
 - IPC and packaged Playwright coverage validate path requests, worker-only
-  heavy execution, UI summaries, cancellation, save, and reopen;
+  heavy execution, UI summaries, cancellation, save, reopen, opposite
+  subtraction subject order, concrete Intersect/XOR results, and cross-layer
+  topology rejection without source or history changes;
 - `pnpm audit:geometry` verifies the exact adapter dependency version and
   reviewed Boost-1.0 license text.
 

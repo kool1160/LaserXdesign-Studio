@@ -1090,6 +1090,11 @@ export function applyEditorCommand(
       }
       const first = editablePath(document, command.firstObjectId);
       const second = editablePath(document, command.secondObjectId);
+      if (first.layerId !== second.layerId) {
+        throw new RangeError(
+          "Joining paths requires both paths to share one editable layer.",
+        );
+      }
       const geometry = joinEditablePaths(
         worldPathGeometry(first),
         command.firstEnd,

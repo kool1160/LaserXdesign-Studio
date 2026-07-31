@@ -117,6 +117,40 @@ describe("editable path geometry", () => {
     ).toThrow(/outside/);
   });
 
+  it("translates adjacent cubic controls with joined endpoint anchors", () => {
+    const first = {
+      closed: false,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 10, yMm: 0 },
+      ],
+      handles: [
+        { incoming: null, outgoing: { xMm: 2, yMm: 4 } },
+        { incoming: { xMm: 8, yMm: 3 }, outgoing: null },
+      ],
+    } satisfies EditablePathGeometry;
+    const second = {
+      closed: false,
+      points: [
+        { xMm: 10.1, yMm: 0 },
+        { xMm: 20, yMm: 0 },
+      ],
+      handles: [
+        { incoming: null, outgoing: { xMm: 12.1, yMm: -3 } },
+        { incoming: { xMm: 18, yMm: -3 }, outgoing: null },
+      ],
+    } satisfies EditablePathGeometry;
+
+    const joined = joinEditablePaths(first, "end", second, "start", 0.2);
+    const anchor = joined.points[1] as PointMm;
+    const handles = joined.handles?.[1];
+    expect(anchor).toEqual({ xMm: 10.05, yMm: 0 });
+    expect((handles?.incoming?.xMm ?? 0) - anchor.xMm).toBeCloseTo(-2, 12);
+    expect((handles?.incoming?.yMm ?? 0) - anchor.yMm).toBeCloseTo(3, 12);
+    expect((handles?.outgoing?.xMm ?? 0) - anchor.xMm).toBeCloseTo(2, 12);
+    expect((handles?.outgoing?.yMm ?? 0) - anchor.yMm).toBeCloseTo(-3, 12);
+  });
+
   it("splits an open path while preserving the original split point", () => {
     const [first, second] = splitOpenPathAtNode(
       {
@@ -168,5 +202,44 @@ describe("editable path geometry", () => {
     expect(result.intersections).toHaveLength(1);
     expect(result.warnings.join(" ")).toMatch(/self-intersection/);
     expect(findPathSelfIntersections(result.path)).toEqual(result.intersections);
+  });
+
+  it("keeps a short-segment node beyond the cleanup distance in millimeters", () => {
+    const result = cleanupEditablePath(
+      {
+        closed: false,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 0.05, yMm: 0.02 },
+          { xMm: 0.1, yMm: 0 },
+        ],
+      },
+      0.01,
+    );
+    expect(result.removedNodeCount).toBe(0);
+    expect(result.path.points).toHaveLength(3);
+  });
+
+  it("reports a long-segment intersection outside the endpoint distance", () => {
+    const intersections = findPathSelfIntersections(
+      {
+        closed: false,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 100, yMm: 0 },
+          { xMm: 100, yMm: 10 },
+          { xMm: 0.5, yMm: 10 },
+          { xMm: 0.5, yMm: -10 },
+        ],
+      },
+      0.01,
+    );
+    expect(intersections).toEqual([
+      {
+        firstSegmentIndex: 0,
+        secondSegmentIndex: 3,
+        point: { xMm: 0.5, yMm: 0 },
+      },
+    ]);
   });
 });

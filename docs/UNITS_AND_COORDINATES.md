@@ -94,6 +94,14 @@ Coordinates whose scaled value would exceed `Number.MAX_SAFE_INTEGER` are
 rejected before engine execution. Engine results are rotated and sorted
 deterministically, with collinear artifacts removed without changing winding.
 
+Cleanup evaluates an anchor's perpendicular point-to-segment distance directly
+in millimeters; it never compares a square-millimeter cross product with a
+millimeter tolerance. Self-intersection endpoint exclusion measures the world-
+millimeter distance from the intersection to each segment endpoint rather than
+comparing unitless segment ratios with a length. When a join snaps endpoint
+anchors to a midpoint, the adjacent cubic controls receive the same world-
+millimeter deltas so their anchor-relative vectors remain unchanged.
+
 ## Renderer conversion boundary
 
 The screen uses CSS pixels with positive Y downward. `packages/geometry`

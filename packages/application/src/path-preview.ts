@@ -18,6 +18,7 @@ export function previewSelectedPathJoin(
     paths.length !== 2 ||
     first === undefined ||
     second === undefined ||
+    first.layerId !== second.layerId ||
     first.closed ||
     second.closed ||
     !Number.isFinite(toleranceMm) ||

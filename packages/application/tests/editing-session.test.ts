@@ -524,4 +524,60 @@ describe("editing ProjectSession", () => {
       /Removed 1.*self-intersection/,
     );
   });
+
+  it("rejects cross-layer joins without deleting or relocating either path", () => {
+    const otherLayerId = "d0000000-0000-4000-8000-000000000000";
+    const firstPathId = "d0000000-0000-4000-8000-000000000001";
+    const secondPathId = "d0000000-0000-4000-8000-000000000002";
+    const session = sessionWithFixture();
+    session.executeEditorCommand({
+      type: "layer.add",
+      layer: {
+        id: otherLayerId,
+        name: "Other artwork",
+        visible: true,
+        locked: false,
+      },
+    });
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: firstPathId,
+          type: "path",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          closed: false,
+          points: [
+            { xMm: 0, yMm: 0 },
+            { xMm: 10, yMm: 0 },
+          ],
+        },
+        {
+          id: secondPathId,
+          type: "path",
+          layerId: otherLayerId,
+          transform: identityTransform(),
+          closed: false,
+          points: [
+            { xMm: 10.05, yMm: 0 },
+            { xMm: 20, yMm: 0 },
+          ],
+        },
+      ],
+    });
+    const before = projectJson(session);
+
+    expect(() =>
+      session.performEditorAction({
+        type: "paths.join-selected",
+        toleranceMm: 0.1,
+      }),
+    ).toThrow(/share one editable layer/);
+    expect(projectJson(session)).toBe(before);
+    expect(session.state.editor.selectionIds).toEqual([
+      firstPathId,
+      secondPathId,
+    ]);
+  });
 });

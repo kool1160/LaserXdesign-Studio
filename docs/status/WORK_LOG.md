@@ -281,3 +281,33 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Known limitations: Existing M05 exclusions are unchanged.
 - Next allowed work: review M05 only after the repaired exact head is locally
   and remotely green. Do not merge, close Issue #6, or advance to M06.
+
+## 2026-07-31 — M05 blocking review correctness repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 blocking review findings
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Boolean and join preparation now preserves selection order, with
+  the first selected path explicitly defined in the UI as the Subtract subject.
+  Boolean, multi-path offset, and join requests reject operands from different
+  editable layers without changing geometry or history. Cleanup collinearity
+  and self-intersection endpoint exclusion now use world-millimeter distances.
+  Endpoint joins translate and merge the adjacent cubic controls so their
+  anchor-relative vectors remain unchanged.
+- Verification: Focused geometry, domain, application, workspace typecheck,
+  changed-file lint, and freshly packaged Playwright tests pass. Regressions
+  cover opposite subtraction subjects, Intersect/XOR results, cross-layer
+  no-mutation behavior, short-segment cleanup, long-segment near-end
+  intersections, and curved joins. Three serial repetitions of the four M05
+  packaged scenarios pass (12/12), and the complete `pnpm verify` gate passes.
+  The suite contains 116 unit/integration tests and 17 packaged Windows E2E
+  scenarios.
+- Decisions: Operand order is authoritative application selection order;
+  Subtract uses first-selected subject semantics. M05 topology operations do
+  not define cross-layer result ownership and therefore fail clearly rather
+  than silently relocating sources.
+- Known limitations: Existing M05 exclusions remain unchanged. Independent
+  golden-fixture acceptance and exact-head review remain required.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
+  advance to M06.

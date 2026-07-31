@@ -529,13 +529,6 @@ export function simplifyEditablePath(
   return { closed: source.closed, points };
 }
 
-function cross(first: PointMm, second: PointMm, third: PointMm): number {
-  return (
-    (second.xMm - first.xMm) * (third.yMm - first.yMm) -
-    (second.yMm - first.yMm) * (third.xMm - first.xMm)
-  );
-}
-
 function segmentIntersection(
   firstStart: PointMm,
   firstEnd: PointMm,
@@ -566,17 +559,27 @@ function segmentIntersection(
     (difference.xMm * firstDelta.yMm - difference.yMm * firstDelta.xMm) /
     denominator;
   if (
-    firstRatio <= toleranceMm ||
-    firstRatio >= 1 - toleranceMm ||
-    secondRatio <= toleranceMm ||
-    secondRatio >= 1 - toleranceMm
+    firstRatio < 0 ||
+    firstRatio > 1 ||
+    secondRatio < 0 ||
+    secondRatio > 1
   ) {
     return null;
   }
-  return {
+  const point = {
     xMm: firstStart.xMm + firstRatio * firstDelta.xMm,
     yMm: firstStart.yMm + firstRatio * firstDelta.yMm,
   };
+  if (
+    [firstStart, firstEnd, secondStart, secondEnd].some(
+      (endpoint) =>
+        Math.hypot(point.xMm - endpoint.xMm, point.yMm - endpoint.yMm) <=
+        toleranceMm,
+    )
+  ) {
+    return null;
+  }
+  return point;
 }
 
 export function findPathSelfIntersections(
@@ -683,12 +686,10 @@ export function cleanupEditablePath(
       if (
         handle.incoming === null &&
         handle.outgoing === null &&
-        Math.abs(
-          cross(
-            retainedPoints[previousIndex] as PointMm,
-            retainedPoints[index] as PointMm,
-            retainedPoints[nextIndex] as PointMm,
-          ),
+        distancePointToSegment(
+          retainedPoints[index] as PointMm,
+          retainedPoints[previousIndex] as PointMm,
+          retainedPoints[nextIndex] as PointMm,
         ) <= toleranceMm
       ) {
         retainedPoints.splice(index, 1);
@@ -776,6 +777,28 @@ export function joinEditablePaths(
   const firstHandles = copyHandles(first.handles, first.points.length);
   const secondHandles = copyHandles(second.handles, second.points.length);
   const firstLast = first.points.length - 1;
+  const firstAnchor = first.points[firstLast] as PointMm;
+  const secondAnchor = second.points[0] as PointMm;
+  const translateControl = (
+    control: PointMm | null,
+    anchor: PointMm,
+  ): PointMm | null =>
+    control === null
+      ? null
+      : {
+          xMm: control.xMm + preview.midpoint.xMm - anchor.xMm,
+          yMm: control.yMm + preview.midpoint.yMm - anchor.yMm,
+        };
+  firstHandles[firstLast] = {
+    incoming: translateControl(
+      (firstHandles[firstLast] as PathControlHandles).incoming,
+      firstAnchor,
+    ),
+    outgoing: translateControl(
+      (secondHandles[0] as PathControlHandles).outgoing,
+      secondAnchor,
+    ),
+  };
   first.points[firstLast] = copyPoint(preview.midpoint);
   second.points[0] = copyPoint(preview.midpoint);
   const joinedHandles = [...firstHandles, ...secondHandles.slice(1)];

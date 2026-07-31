@@ -740,6 +740,56 @@ describe("editing domain", () => {
     });
   });
 
+  it("rejects a generated join command across editable layers", () => {
+    const firstPathId = "90000000-0000-4000-8000-000000000001";
+    const secondPathId = "90000000-0000-4000-8000-000000000002";
+    const otherLayerId = "90000000-0000-4000-8000-000000000003";
+    const document = editingDocument();
+    document.layers.push({
+      id: otherLayerId,
+      name: "Other artwork",
+      visible: true,
+      locked: false,
+    });
+    document.objects.push(
+      {
+        id: firstPathId,
+        type: "path",
+        layerId: LAYER_ONE,
+        transform: identityTransform(),
+        closed: false,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 10, yMm: 0 },
+        ],
+      },
+      {
+        id: secondPathId,
+        type: "path",
+        layerId: otherLayerId,
+        transform: identityTransform(),
+        closed: false,
+        points: [
+          { xMm: 10.05, yMm: 0 },
+          { xMm: 20, yMm: 0 },
+        ],
+      },
+    );
+    const before = JSON.stringify(document);
+
+    expect(() =>
+      applyEditorCommand(document, {
+        type: "paths.join",
+        firstObjectId: firstPathId,
+        firstEnd: "end",
+        secondObjectId: secondPathId,
+        secondEnd: "start",
+        toleranceMm: 0.1,
+      }),
+    ).toThrow(/share one editable layer/);
+    expect(JSON.stringify(document)).toBe(before);
+  });
+
   it("rejects invalid path topology at generated-command boundaries", () => {
     const document = editingDocument();
     expect(() =>

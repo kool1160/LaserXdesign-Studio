@@ -21,6 +21,12 @@ dedicated Electron `worker_threads` entry point. The main-process coordinator
 captures a document fingerprint, terminates the worker on cancellation, and
 commits one undoable replacement only if the source document is unchanged.
 
+Application preparation passes contours to the adapter in selection order.
+Subtract treats the first selected contour as its subject and every later
+contour as a clip. Boolean and multi-path offset operands must share one
+editable layer; invalid cross-layer requests fail before worker execution and
+leave every source object and history entry unchanged.
+
 The dependency is pinned and audited by `pnpm audit:geometry`. The reviewed
 Boost Software License 1.0 text is retained under
 `packages/geometry/licenses`. The upstream source package also contains

@@ -306,10 +306,11 @@ export function App() {
   const selectionIds = state.editor.selectionIds;
   const selectionBounds = state.editor.selectionBounds;
   const pathSelection = state.editor.pathSelection;
-  const selectedPaths = document.objects.filter(
-    (object): object is PathObject =>
-      object.type === "path" && selectionIds.includes(object.id),
-  );
+  const selectedPaths = selectionIds
+    .map((id) => document.objects.find((object) => object.id === id))
+    .filter(
+      (object): object is PathObject => object?.type === "path",
+    );
   const selectedPath =
     selectedPaths.length === 1 ? selectedPaths[0] : undefined;
   const joinPreview = previewSelectedPathJoin(
@@ -1083,6 +1084,12 @@ export function App() {
                   : "outside tolerance"}
               </p>
             )}
+
+            <p className="selection-summary" data-testid="boolean-order">
+              Subtract uses the first selected path as its subject; later
+              selections are clips. Clear and reselect to change the subject.
+              Boolean, offset, and join operands must share one editable layer.
+            </p>
 
             <div className="button-grid compact">
               {(
