@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,6 +14,23 @@ export const executablePath = join(
   "LaserX Design Studio.exe",
 );
 const execFileAsync = promisify(execFile);
+
+async function waitForChildExit(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null) {
+    return;
+  }
+  await new Promise<void>((resolveExit) => {
+    const onExit = () => {
+      clearTimeout(timeoutId);
+      resolveExit();
+    };
+    const timeoutId = setTimeout(() => {
+      child.off("exit", onExit);
+      resolveExit();
+    }, 5_000);
+    child.once("exit", onExit);
+  });
+}
 
 export interface TestLaunch {
   electronApp: ElectronApplication;
@@ -89,6 +106,7 @@ export async function kill(testLaunch: TestLaunch): Promise<void> {
     "/T",
     "/F",
   ]).catch(() => undefined);
+  await waitForChildExit(child);
 }
 
 export async function clickAndWaitForCommand(

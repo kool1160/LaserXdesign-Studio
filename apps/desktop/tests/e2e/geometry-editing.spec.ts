@@ -118,12 +118,33 @@ test("packaged geometry workflow unions, edits, undoes, and persists paths", asy
     await page.getByTestId("edit-path-nodes").click();
     await expect(page.getByTestId("path-edit-overlay")).toBeVisible();
     await page.getByTestId("path-node").first().click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const selection = (await window.laserx.getState()).editor.pathSelection;
+          return selection === null
+            ? null
+            : {
+                objectId: selection.objectId,
+                nodeIndices: selection.nodeIndices,
+              };
+        }),
+      )
+      .toEqual({ objectId: FIRST_PATH_ID, nodeIndices: [0] });
     const beforeNodeMove = await page.evaluate(async () => {
       const state = await window.laserx.getState();
       const path = state.project.document.objects[0];
       return path?.type === "path" ? path.points[0] : null;
     });
     await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const path = (await window.laserx.getState()).project.document.objects[0];
+          return path?.type === "path" ? path.points[0] : null;
+        }),
+      )
+      .not.toEqual(beforeNodeMove);
     await page.getByRole("button", { name: "+ Out handle" }).click();
     const editedDocument = await page.evaluate(async () => {
       const state = await window.laserx.getState();

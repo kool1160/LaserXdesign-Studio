@@ -258,3 +258,23 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Next allowed work: review M05 only. Keep the implementation PR draft; do not
   merge, close Issue #6, advance to M06, or begin later scope until the review
   and advancement gates pass.
+
+## 2026-07-31 — M05 Windows E2E race repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 push-workflow repair
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: The packaged geometry test now waits for authoritative node
+  selection and movement before issuing the next action. The shared crash-test
+  cleanup helper now waits for the Electron process to exit after `taskkill`,
+  preventing a recovery relaunch from racing Chromium's singleton lock.
+- Verification: The geometry and project-lifecycle packaged files pass three
+  consecutive serial repetitions (12/12 scenarios), in addition to focused
+  lint and desktop typecheck. The complete `pnpm verify` gate also passes with
+  108 unit/integration tests and all 15 packaged Windows E2E scenarios.
+- Decisions: No product, geometry, schema, or architecture behavior changed;
+  this repair only makes existing packaged assertions and teardown sequencing
+  deterministic on Windows runners.
+- Known limitations: Existing M05 exclusions are unchanged.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Do not merge, close Issue #6, or advance to M06.
