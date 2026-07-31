@@ -20,6 +20,7 @@
   "dependencies": {
     "@laserx/application": "workspace:*",
     "@laserx/domain": "workspace:*",
+    "@laserx/fonts": "workspace:*",
     "@laserx/geometry": "workspace:*",
     "@laserx/project-format": "workspace:*",
     "react": "19.2.8",

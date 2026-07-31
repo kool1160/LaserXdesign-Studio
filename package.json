@@ -15,7 +15,8 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "test:e2e": "pnpm --filter @laserx/desktop test:e2e",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+    "audit:fonts": "node scripts/font-license-audit.mjs",
+    "verify": "pnpm audit:fonts && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -113,6 +113,23 @@ dimensions are exact.
 The M03 numerical transform tolerance remains `1e-9 mm`; packaged exact-bounds
 assertions normalize only below that documented boundary.
 
+## M04 executable layers
+
+- font-engine tests use a pinned OFL fixture to prove deterministic shaping,
+  exact contour bounds, enclosed-letter contours, arc warping, fingerprinting,
+  and path-free catalog projections;
+- domain and application tests cover text bounds, replacement, conversion to
+  path groups, optional source preservation, selection, and undo/redo;
+- project-format tests cover schema-v4 text/contour persistence and the
+  deterministic v1/v2/v3 migration chain;
+- IPC tests reject renderer-supplied font paths and generated geometry;
+- `pnpm audit:fonts` validates pinned package versions, OFL license text,
+  provenance fields, unique IDs, and coverage of stencil, script, serif, slab,
+  western, industrial, and display categories;
+- eleven packaged Playwright scenarios retain the earlier security/editing
+  coverage and add text create/edit, spacing/arc materialization,
+  text-to-outline conversion, undo, save, and exact-contour reopen.
+
 Run all milestone checks from the repository root:
 
 ```bash

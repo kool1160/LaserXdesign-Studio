@@ -24,6 +24,13 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Editable schema-v4 text with installed fonts and six audited redistributable
+  bundled font
+  catalogs, search/categories/favorites/recents, exact typography spacing,
+  simple arc text, secure main-process shaping, missing-font preservation, and
+  undoable text-to-outline conversion with optional source metadata.
+- Font license/provenance CI audit plus deterministic shaping, migration,
+  boundary, persistence, and packaged Windows save/reopen coverage.
 - Repository operating contract and product requirements.
 - M00–M12 gated delivery plan.
 - Monorepo package, desktop, fixture, tool, and documentation scaffold.

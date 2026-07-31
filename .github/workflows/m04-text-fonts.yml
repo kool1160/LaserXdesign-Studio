@@ -1,10 +1,10 @@
-name: M03 Editing Core
+name: M04 Text and Fonts
 
 on:
   push:
     branches:
       - main
-      - "feat/m03-editing-core"
+      - "feat/m04-text-fonts"
   pull_request:
 
 permissions:
@@ -41,14 +41,17 @@ jobs:
       - name: Verify clean patch formatting
         run: git diff --check
 
-      - name: Verify M03
+      - name: Audit bundled font licenses
+        run: pnpm audit:fonts
+
+      - name: Verify M04
         run: pnpm verify
 
       - name: Upload packaged editing smoke application
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: laserx-m03-windows-unpacked
+          name: laserx-m04-windows-unpacked
           path: apps/desktop/dist-packaged/win-unpacked
           if-no-files-found: error
           retention-days: 7

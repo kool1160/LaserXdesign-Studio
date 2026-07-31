@@ -154,3 +154,31 @@ renderer-local, while snap selection remains deterministic domain behavior.
 - Next allowed work: M04 remains blocked until PR #16 is reviewed, Repository
 Guard and both Windows M03 runs pass on the final repair head, and the draft PR
 is merged.
+
+## 2026-07-30 — M04 text, fonts, and outline conversion
+
+- Date: 2026-07-30
+- Agent/task: Codex / Issue #5 implementation
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Secure main-process installed-font discovery; six pinned,
+redistributable
+bundled families covering stencil, script, serif, slab, western, industrial,
+and display categories; path-free catalog IPC; search, categories, favorites,
+and recents; editable live text with alignment and letter/word/line spacing;
+deterministic Fontkit contour materialization; simple arc text; missing-font
+fingerprint warnings with geometry preservation; undoable outline conversion
+with optional source metadata; strict schema-v4 persistence and deterministic
+v1/v2/v3 migrations; license/provenance CI audit.
+- Verification: `pnpm verify`, `pnpm audit:fonts`,
+`py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+suite contains 82 unit/integration tests and 11 packaged Windows E2E scenarios.
+The packaged text workflow creates, edits, arcs, converts, undoes, saves, and
+reopens exact materialized contours.
+- Decisions: ADR 0012 keeps discovery, bytes, shaping, and contour generation
+out of the sandboxed renderer. ADR 0013 records schema v4 and saved
+font-fingerprint/materialized-contour semantics.
+- Known limitations: Arc text uses a simple deterministic circular warp;
+advanced OpenType feature controls, arbitrary path text, embedded font files,
+automatic bridging, and node editing remain excluded.
+- Next allowed work: review M04 only. Do not merge, close Issue #5, advance to
+M05, or begin M05 implementation until final-head Windows CI and review pass.

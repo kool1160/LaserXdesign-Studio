@@ -7,6 +7,9 @@ const shared = {
   external: ["electron"],
   sourcemap: true,
   logLevel: "info",
+  loader: {
+    ".woff2": "binary",
+  },
 };
 
 await Promise.all([

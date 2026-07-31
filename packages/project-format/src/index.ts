@@ -79,7 +79,7 @@ const objectBaseShape = {
   transform: transformSchema,
 };
 
-const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
+const documentObjectV3Schema: z.ZodType<DocumentObject> = z.lazy(() =>
   z.discriminatedUnion("type", [
     z.strictObject({
       ...objectBaseShape,
@@ -110,7 +110,81 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
     z.strictObject({
       ...objectBaseShape,
       type: z.literal("group"),
+      children: z.array(documentObjectV3Schema).min(1),
+    }),
+  ]),
+);
+
+const textStyleSchema = z.strictObject({
+  fontId: z.string().trim().min(1).max(200),
+  fontFamily: z.string().trim().min(1).max(200),
+  fontStyle: z.string().trim().min(1).max(100),
+  fontFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  sizeMm: positiveNumber,
+  trackingMm: finiteNumber,
+  wordSpacingMm: finiteNumber,
+  lineSpacing: positiveNumber,
+  alignment: z.enum(["left", "center", "right"]),
+});
+const textArcSchema = z.strictObject({
+  radiusMm: positiveNumber,
+  startAngleDeg: finiteNumber,
+  clockwise: z.boolean(),
+});
+const textContourSchema = z.strictObject({
+  closed: z.boolean(),
+  points: z.array(pointSchema).min(2),
+});
+const editableTextSourceSchema = z.strictObject({
+  content: z.string().min(1).max(10_000),
+  origin: pointSchema,
+  style: textStyleSchema,
+  arc: textArcSchema.nullable(),
+  contours: z.array(textContourSchema).min(1),
+});
+const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("line"),
+      start: pointSchema,
+      end: pointSchema,
+    }),
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("rectangle"),
+      origin: pointSchema,
+      widthMm: positiveNumber,
+      heightMm: positiveNumber,
+    }),
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("ellipse"),
+      center: pointSchema,
+      radiusXmm: positiveNumber,
+      radiusYmm: positiveNumber,
+    }),
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("path"),
+      closed: z.boolean(),
+      points: z.array(pointSchema).min(2),
+    }),
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("text"),
+      content: z.string().min(1).max(10_000),
+      origin: pointSchema,
+      style: textStyleSchema,
+      arc: textArcSchema.nullable(),
+      contours: z.array(textContourSchema).min(1),
+      missingFont: z.boolean(),
+    }),
+    z.strictObject({
+      ...objectBaseShape,
+      type: z.literal("group"),
       children: z.array(documentObjectSchema).min(1),
+      sourceText: editableTextSourceSchema.optional(),
     }),
   ]),
 );
@@ -172,6 +246,43 @@ export const laserxProjectV2Schema = z.strictObject({
   migrationHistory: z.array(migrationRecordSchema),
 });
 
+export const laserxProjectV3Schema = z.strictObject({
+  schemaVersion: z.literal(3),
+  project: metadataSchema,
+  document: z.strictObject({
+    kind: z.literal("document"),
+    id: z.uuid(),
+    dimensions: z.strictObject({
+      widthMm: positiveNumber,
+      heightMm: positiveNumber,
+    }),
+    origin: z.strictObject({
+      xMm: z.literal(0),
+      yMm: z.literal(0),
+    }),
+    settings: z.strictObject({
+      displayUnit: z.enum(["millimeters", "inches"]),
+      viewport: z.strictObject({
+        rulersVisible: z.boolean(),
+        gridVisible: z.boolean(),
+        gridSpacingMm: positiveNumber,
+        snapping: z.strictObject({
+          enabled: z.boolean(),
+          snapToGrid: z.boolean(),
+          snapToGuides: z.boolean(),
+          snapToObjects: z.boolean(),
+          snapToDocument: z.boolean(),
+        }),
+      }),
+    }),
+    layers: z.array(layerSchema).min(1),
+    activeLayerId: z.uuid(),
+    guides: z.array(guideSchema),
+    objects: z.array(documentObjectV3Schema),
+  }),
+  migrationHistory: z.array(migrationRecordSchema),
+});
+
 export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   project: metadataSchema,
@@ -210,6 +321,7 @@ export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
 });
 
 type LaserxProjectV2 = z.infer<typeof laserxProjectV2Schema>;
+type LaserxProjectV3Format = z.infer<typeof laserxProjectV3Schema>;
 type DocumentObjectV2 = z.infer<typeof documentObjectV2Schema>;
 
 export type ProjectFormatErrorCode =
@@ -325,7 +437,7 @@ function migrateObjectV2(
   }
 }
 
-export function migrateProjectV2ToV3(value: unknown): LaserxProject {
+export function migrateProjectV2ToV3(value: unknown): LaserxProjectV3Format {
   const legacy = laserxProjectV2Schema.safeParse(value);
   if (!legacy.success) {
     throw new ProjectFormatError(
@@ -336,7 +448,7 @@ export function migrateProjectV2ToV3(value: unknown): LaserxProject {
   const project = legacy.data;
   const layerId = deriveStableId(project.document.id, "default-layer");
   return {
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: 3,
     project: { ...project.project },
     document: {
       kind: "document",
@@ -382,15 +494,39 @@ export function migrateProjectV2ToV3(value: unknown): LaserxProject {
       ...project.migrationHistory.map((record) => ({ ...record })),
       {
         fromVersion: 2,
-        toVersion: PROJECT_SCHEMA_VERSION,
+        toVersion: 3,
         migratedAt: project.project.updatedAt,
       },
     ],
   };
 }
 
+export function migrateProjectV3ToV4(value: unknown): LaserxProject {
+  const legacy = laserxProjectV3Schema.safeParse(value);
+  if (!legacy.success) {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This schema-v3 project is damaged and cannot be migrated.",
+    );
+  }
+  return {
+    ...legacy.data,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    migrationHistory: [
+      ...legacy.data.migrationHistory.map((record) => ({ ...record })),
+      {
+        fromVersion: 3,
+        toVersion: PROJECT_SCHEMA_VERSION,
+        migratedAt: legacy.data.project.updatedAt,
+      },
+    ],
+  };
+}
+
 export function migrateProjectV1(value: unknown): LaserxProject {
-  return migrateProjectV2ToV3(migrateProjectV1ToV2(value));
+  return migrateProjectV3ToV4(
+    migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
+  );
 }
 
 export const projectMigrationRegistry: readonly ProjectMigration[] = [
@@ -401,8 +537,13 @@ export const projectMigrationRegistry: readonly ProjectMigration[] = [
   },
   {
     fromVersion: 2,
-    toVersion: PROJECT_SCHEMA_VERSION,
+    toVersion: 3,
     migrate: migrateProjectV2ToV3,
+  },
+  {
+    fromVersion: 3,
+    toVersion: PROJECT_SCHEMA_VERSION,
+    migrate: migrateProjectV3ToV4,
   },
 ];
 

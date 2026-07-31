@@ -316,7 +316,7 @@ export function resetDocumentView(
 }
 
 function primitiveDomainPoints(
-  object: Exclude<DocumentObject, { type: "group" }>,
+  object: Exclude<DocumentObject, { type: "group" | "text" }>,
 ): { points: PointMm[]; closed: boolean } {
   switch (object.type) {
     case "line":
@@ -370,6 +370,26 @@ function objectPrimitives(
     return object.children.flatMap((child) =>
       objectPrimitives(child, viewport, worldTransform, selectionId),
     );
+  }
+  if (object.type === "text") {
+    return object.contours.map((contour, index) => ({
+      key: `${selectionId}:${object.id}:text:${String(index)}`,
+      objectId: selectionId,
+      sourceId: object.id,
+      closed: contour.closed,
+      points: contour.points.map((point) =>
+        domainToScreen(
+          applyAffineTransform(
+            {
+              xMm: point.xMm + object.origin.xMm,
+              yMm: point.yMm + object.origin.yMm,
+            },
+            worldTransform,
+          ),
+          viewport,
+        ),
+      ),
+    }));
   }
   const primitive = primitiveDomainPoints(object);
   return [

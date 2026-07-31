@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   app,
@@ -8,6 +8,11 @@ import {
   Menu,
   type MenuItemConstructorOptions,
 } from "electron";
+import {
+  bundledFontSources,
+  discoverWindowsFontSources,
+  FontEngine,
+} from "@laserx/fonts";
 
 import {
   DesktopController,
@@ -22,6 +27,7 @@ import {
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
+  textLayoutRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 
@@ -160,6 +166,20 @@ function registerIpc(): void {
     const validated = editorActionRequestSchema.parse(request);
     return requireController().editorAction(validated);
   });
+  ipcMain.handle(IPC_CHANNELS.getFontCatalog, () =>
+    requireController().fontCatalog(),
+  );
+  ipcMain.handle(IPC_CHANNELS.createText, (_event, request: unknown) => {
+    const validated = textLayoutRequestSchema.parse(request);
+    return requireController().createText(validated);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.updateSelectedText,
+    (_event, request: unknown) => {
+      const validated = textLayoutRequestSchema.parse(request);
+      return requireController().updateSelectedText(validated);
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.resolveRecovery, (_event, request: unknown) => {
     const validated = resolveRecoveryRequestSchema.parse(request);
     return requireController().resolveRecovery(validated);
@@ -306,6 +326,15 @@ async function createWindow(): Promise<void> {
     autosaveIntervalMs: Number(
       process.env.LASERX_AUTOSAVE_INTERVAL_MS ?? 30_000,
     ),
+    fontEngine: new FontEngine([
+      ...bundledFontSources(),
+      ...discoverWindowsFontSources([
+        join(process.env.WINDIR ?? "C:\\Windows", "Fonts"),
+        ...(process.env.LOCALAPPDATA === undefined
+          ? []
+          : [join(process.env.LOCALAPPDATA, "Microsoft", "Windows", "Fonts")]),
+      ]),
+    ]),
   });
   await controller.initialize();
 

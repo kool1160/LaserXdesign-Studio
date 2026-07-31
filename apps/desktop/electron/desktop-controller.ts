@@ -6,7 +6,16 @@ import {
   type ProjectFileService,
   type RecoverySnapshot,
 } from "@laserx/application";
-import type { UpdateViewportPreferences } from "@laserx/domain";
+import {
+  identityTransform,
+  type TextObject,
+  type UpdateViewportPreferences,
+} from "@laserx/domain";
+import {
+  type FontCatalogEntry,
+  FontEngine,
+  type TextLayoutRequest,
+} from "@laserx/fonts";
 
 import type {
   CommandResult,
@@ -40,6 +49,7 @@ export interface DesktopControllerOptions {
   autosaveScheduler?: AutosaveScheduler;
   projectStorage?: ProjectFileService;
   recoveryStore?: RecoveryStorePort;
+  fontEngine?: FontEngine;
 }
 
 export interface AutosaveScheduler {
@@ -69,6 +79,7 @@ export class DesktopController {
   readonly #onStateChanged: (state: DesktopState) => void;
   readonly #autosaveIntervalMs: number;
   readonly #autosaveScheduler: AutosaveScheduler;
+  readonly #fontEngine: FontEngine;
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -85,6 +96,7 @@ export class DesktopController {
     this.#autosaveIntervalMs = options.autosaveIntervalMs ?? 30_000;
     this.#autosaveScheduler =
       options.autosaveScheduler ?? intervalAutosaveScheduler;
+    this.#fontEngine = options.fontEngine ?? new FontEngine([]);
   }
 
   public async initialize(): Promise<void> {
@@ -237,6 +249,130 @@ export class DesktopController {
   ): Promise<CommandResult> {
     return this.#run(() => {
       this.#session.performEditorAction(request);
+    });
+  }
+
+  public fontCatalog(): FontCatalogEntry[] {
+    return this.#fontEngine.catalog();
+  }
+
+  public async createText(
+    request: TextLayoutRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const layout = this.#fontEngine.layout(request);
+      if (layout.missingCodePoints.length > 0) {
+        throw new RangeError(
+          `The selected font is missing ${layout.missingCodePoints
+            .map((codePoint) => `U+${codePoint.toString(16).toUpperCase()}`)
+            .join(", ")}.`,
+        );
+      }
+      if (layout.contours.length === 0) {
+        throw new RangeError("Text must contain at least one visible glyph.");
+      }
+      const document = this.#session.state.project.document;
+      const layer =
+        document.layers.find(
+          (candidate) =>
+            candidate.id === document.activeLayerId &&
+            candidate.visible &&
+            !candidate.locked,
+        ) ?? document.layers.find((candidate) => candidate.visible && !candidate.locked);
+      if (layer === undefined) {
+        throw new RangeError("No editable layer is available.");
+      }
+      const object: TextObject = {
+        id: randomUUID(),
+        type: "text",
+        layerId: layer.id,
+        transform: identityTransform(),
+        content: request.content,
+        origin: {
+          xMm:
+            document.dimensions.widthMm / 2 -
+            (layout.bounds.minXmm + layout.bounds.maxXmm) / 2,
+          yMm:
+            document.dimensions.heightMm / 2 -
+            (layout.bounds.minYmm + layout.bounds.maxYmm) / 2,
+        },
+        style: {
+          fontId: layout.font.id,
+          fontFamily: layout.font.family,
+          fontStyle: layout.font.style,
+          fontFingerprint: layout.font.fingerprint,
+          sizeMm: request.sizeMm,
+          trackingMm: request.trackingMm,
+          wordSpacingMm: request.wordSpacingMm,
+          lineSpacing: request.lineSpacing,
+          alignment: request.alignment,
+        },
+        arc: request.arc === null ? null : { ...request.arc },
+        contours: layout.contours.map((contour) => ({
+          closed: contour.closed,
+          points: contour.points.map((point) => ({ ...point })),
+        })),
+        missingFont: false,
+      };
+      this.#session.executeEditorCommand({
+        type: "objects.insert",
+        objects: [object],
+      });
+    });
+  }
+
+  public async updateSelectedText(
+    request: TextLayoutRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const state = this.#session.state;
+      const selected = state.project.document.objects.filter(
+        (object): object is TextObject =>
+          object.type === "text" &&
+          state.editor.selectionIds.includes(object.id),
+      );
+      if (selected.length !== 1) {
+        throw new RangeError("Select exactly one editable text object.");
+      }
+      const previous = selected[0];
+      if (previous === undefined) {
+        return;
+      }
+      const layout = this.#fontEngine.layout(request);
+      if (layout.missingCodePoints.length > 0) {
+        throw new RangeError(
+          `The selected font is missing ${layout.missingCodePoints
+            .map((codePoint) => `U+${codePoint.toString(16).toUpperCase()}`)
+            .join(", ")}.`,
+        );
+      }
+      if (layout.contours.length === 0) {
+        throw new RangeError("Text must contain at least one visible glyph.");
+      }
+      this.#session.executeEditorCommand({
+        type: "objects.replace",
+        object: {
+          ...previous,
+          content: request.content,
+          style: {
+            fontId: layout.font.id,
+            fontFamily: layout.font.family,
+            fontStyle: layout.font.style,
+            fontFingerprint: layout.font.fingerprint,
+            sizeMm: request.sizeMm,
+            trackingMm: request.trackingMm,
+            wordSpacingMm: request.wordSpacingMm,
+            lineSpacing: request.lineSpacing,
+            alignment: request.alignment,
+          },
+          arc: request.arc === null ? null : { ...request.arc },
+          contours: layout.contours.map((contour) => ({
+            closed: contour.closed,
+            points: contour.points.map((point) => ({ ...point })),
+          })),
+          missingFont: false,
+        },
+      });
     });
   }
 

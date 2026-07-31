@@ -93,6 +93,18 @@ function primitiveWorldPoints(
       return object.points.map((point) =>
         applyAffineTransform(point, transform),
       );
+    case "text":
+      return object.contours.flatMap((contour) =>
+        contour.points.map((point) =>
+          applyAffineTransform(
+            {
+              xMm: point.xMm + object.origin.xMm,
+              yMm: point.yMm + object.origin.yMm,
+            },
+            transform,
+          ),
+        ),
+      );
   }
 }
 
@@ -101,6 +113,25 @@ function primitiveHitDistance(
   point: PointMm,
   transform: AffineTransformMm,
 ): number {
+  if (object.type === "text") {
+    return object.contours.reduce((minimum, contour) => {
+      const points = contour.points.map((candidate) =>
+        applyAffineTransform(
+          {
+            xMm: candidate.xMm + object.origin.xMm,
+            yMm: candidate.yMm + object.origin.yMm,
+          },
+          transform,
+        ),
+      );
+      return Math.min(
+        minimum,
+        contour.closed && pointInPolygon(point, points)
+          ? 0
+          : distanceToPolyline(point, points, contour.closed),
+      );
+    }, Number.POSITIVE_INFINITY);
+  }
   if (object.type === "ellipse") {
     const local = applyAffineTransform(
       point,

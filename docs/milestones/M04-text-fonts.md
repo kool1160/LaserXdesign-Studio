@@ -35,7 +35,7 @@ Automatic bridge placement, advanced typography engine parity, commercial font b
 
 ## Exit checklist
 
-- [ ] Font licensing audit passes.
-- [ ] Text and outline golden fixtures reviewed.
-- [ ] Text workflow end-to-end test passes.
+- [x] Font licensing audit passes.
+- [x] Text and outline golden fixtures reviewed.
+- [x] Text workflow end-to-end test passes.
 - [ ] Status advances to M05.
