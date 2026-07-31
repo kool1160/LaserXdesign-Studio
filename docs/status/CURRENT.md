@@ -2,78 +2,90 @@
 
 ## Active gate
 
-**M03 — Selection, transforms, layers, and history**
+**M04 — Text, Fonts, and Outline Conversion**
 
-M03 is the only active implementation milestone. Its complete local
-implementation is on `feat/m03-editing-core`; it is not yet merged. M04 remains
-blocked until the M03 draft pull request is reviewed, all required Windows CI
-checks pass, and the pull request is merged.
+M03 merged through PR #16 in merge commit
+`e35881d57a7067c075e0f256663e1608c6e4631e` after final review of exact feature
+head `1e40fc3ad1e865ab79df89c76a50fe6848352115`. Issue #4 is closed. M04 is now
+the only active implementation milestone; Issue #5 is the active delivery gate.
+
+Start M04 from current `main` in a new working directory and branch
+`feat/m04-text-fonts`. Do not reuse the M03 feature branch or worktree.
+
+Before implementation, read:
+
+1. `AGENTS.md`
+2. `docs/OPERATOR_PROTOCOL.md`
+3. `docs/status/CURRENT.md`
+4. `docs/milestones/M04-text-fonts.md`
+5. `docs/ARCHITECTURE.md`
+6. `docs/UNITS_AND_COORDINATES.md`
+7. `docs/FILE_FORMATS.md`
+8. `docs/TESTING.md`
+9. ADRs 0010–0011
+
+## M03 completion record
+
+- [x] PR #16 reviewed and merged.
+- [x] Issue #4 closed as completed.
+- [x] Final reviewed head: `1e40fc3ad1e865ab79df89c76a50fe6848352115`.
+- [x] Merge commit: `e35881d57a7067c075e0f256663e1608c6e4631e`.
+- [x] Repository Guard run `30595804659` passed on the final head.
+- [x] Windows pull-request M03 Editing Core run `30595804581` passed on the
+  final head.
+- [x] The final suite records 74 unit/integration tests and 10 packaged Electron
+  E2E tests.
+- [x] Selection, transforms, grouping, layers, guides, snapping, clipboard,
+  bounded transactional undo/redo, schema-v3 persistence, deterministic v1/v2
+  migration, signed/zero exact bounds, aspect locking, pan precedence, and snap
+  candidate precedence are complete and reviewed.
+- [x] No M04+ production text/font functionality was included in M03.
 
 ## Prior milestones
 
 M02 was merged through PR #15 in commit
-`735c3ce658313a5c8ca35be3c95f0d70021d8c11`. Repository Guard and the Windows
-M02 workflow passed. The final reviewed feature head was
-`1b9bd6623a0e2fdcd38523b4d9e91418d5beb39e`.
+`735c3ce658313a5c8ca35be3c95f0d70021d8c11`. The final reviewed feature head
+was `1b9bd6623a0e2fdcd38523b4d9e91418d5beb39e`.
 
 M01 was merged through PR #14 in commit
 `7a534e9a5424a8dfd17107f398dcd15332720f3f`. M00 remains complete in commit
 `683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
 
-## M03 local completion record
+## M04 user-visible outcome
 
-- [x] Single, modifier-key multi, and marquee selection use domain hit testing.
-- [x] Pointer, keyboard, toolbar, menu, and inspector actions share one
-  validated application command boundary.
-- [x] Move, exact position/size, scale, rotate, mirror, duplicate, delete,
-  transform handles, and aspect locking are implemented.
-- [x] Align/distribute, group/ungroup, object z-order, guides, and basic grid,
-  guide, document, bounds, and center snapping are implemented.
-- [x] Ordered layers persist visibility, locking, names, active state, and
-  reorder behavior; hidden/locked objects cannot be selected or edited.
-- [x] In-application copy/paste and duplicate allocate fresh UUIDs according to
-  ADR 0010.
-- [x] Undo/redo is deterministic, transaction-aware, and bounded to 100 entries
-  by default; representative 100-step replay is directly tested.
-- [x] Schema v3 deterministically preserves layers, guides, recursive groups,
-  affine transforms, object/layer order, locks, visibility, IDs, and viewport
-  preferences.
-- [x] Schema-v1 and schema-v2 projects migrate through explicit reviewed
-  fixtures; corrupt and unsupported data are rejected safely.
-- [x] Full editing state saves and reopens in integration and packaged Windows
-  tests.
-- [x] React arbitrary-mutation regression and pointer/keyboard command
-  equivalence are directly tested.
-- [x] Exact inspector coordinates accept signed finite values, and horizontal
-  or vertical lines support exact movement and one-axis resizing without
-  zero-division or non-finite geometry.
-- [x] Schema parsing, serialization, and internal insertion enforce one
-  recursive `layerId` for every group.
-- [x] Canceling a transaction restores selection/session metadata and preserves
-  the pre-existing redo branch.
-- [x] Locked exact sizing follows the last edited dimension, and Shift-dragging
-  any edge handle preserves aspect ratio through a uniform scale.
-- [x] Alt-drag and middle-button gestures pan from artwork or handles without
-  changing geometry, selection, or history.
-- [x] Exact guide/document/object snap candidates take precedence over a
-  nearby nonzero grid adjustment.
-- [x] 74 unit/integration tests and 10 packaged Electron E2E tests pass locally.
-- [x] ADRs 0010–0011 and architecture, units, format, testing, risk, fixture,
-  screenshot, changelog, and work-log documentation are updated.
-- [ ] Draft pull request reviewed.
-- [x] Repository Guard and both Windows M03 Editing Core runs green on the
-  published pan/snap repair head.
-- [ ] Pull request merged and Issue #4 closed.
+Users can create professional sign lettering, browse fonts, adjust layout, and
+convert text into editable cut geometry without losing exact scale.
 
-## M03 scope restraint
+## Allowed M04 work
 
-No production text/fonts, node editing, booleans, offsets, SVG/DXF,
-raster tracing, cutability, bridges, sign generators, AI, layered production
-export, CAM, G-code, or DWG support was added.
+- text objects with content, font family/style, size, alignment, line spacing,
+  and tracking;
+- installed-system-font discovery through a secure boundary;
+- bundled-font catalog with license metadata and attribution;
+- favorites, recent fonts, search, and sign-style categories based on metadata
+  rather than unlicensed copying;
+- live text editing;
+- letter, word, and line spacing;
+- text on a simple arc or path;
+- text-to-outline conversion;
+- optional preservation of original editable text as hidden/source data;
+- missing-font handling and substitution preview;
+- font-license audit tooling and CI enforcement;
+- representative redistributable stencil, script, serif, slab, western,
+  industrial, and display fixtures;
+- persistence, migration, undo/redo, invariant, integration, and packaged
+  Windows E2E coverage required by the milestone.
 
-## Next allowed work
+## Explicitly excluded
 
-The exact next milestone is M04 — Text, fonts, and outline conversion, but it
-must not start yet. M04 becomes allowed only after the M03 pull request is
-reviewed, required CI is green, the pull request is merged, and this status file
-is updated with the verified merge commit.
+Do not implement automatic bridge placement, advanced typography-engine parity,
+commercial font bundling, logo libraries, AI generation, node editing,
+booleans, offsets, SVG/DXF import/export, raster tracing, cutability decisions,
+layered production export, CAM, G-code, or DWG.
+
+## M04 exit rule
+
+Do not advance to M05 until every acceptance test and exit item in
+`docs/milestones/M04-text-fonts.md` passes, the M04 pull request is reviewed,
+required Windows CI is green, the pull request is merged, Issue #5 is closed,
+and this file records the verified merge commit.
