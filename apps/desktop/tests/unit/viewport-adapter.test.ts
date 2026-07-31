@@ -13,6 +13,7 @@ import {
   gridSpacingToMillimeters,
   keyboardMoveCommand,
   pointerMoveCommand,
+  scaleCommandForHandle,
 } from "../../src/lib/viewport-adapter.js";
 
 const size = {
@@ -152,6 +153,83 @@ describe("renderer viewport adapter", () => {
         false,
       ),
     ).toBeNull();
+  });
+
+  it("uses the edited dimension to drive locked exact sizing", () => {
+    const objectId = "123e4567-e89b-42d3-a456-426614174001";
+    const values = { x: "10", y: "20", width: "80", height: "100" };
+    expect(
+      exactBoundsCommand(
+        [objectId],
+        values,
+        "millimeters",
+        true,
+        "height",
+      ),
+    ).toEqual({
+      type: "objects.set-bounds",
+      objectIds: [objectId],
+      xMm: 10,
+      yMm: 20,
+      heightMm: 100,
+      lockAspectRatio: true,
+    });
+    expect(
+      exactBoundsCommand(
+        [objectId],
+        values,
+        "millimeters",
+        true,
+        "width",
+      ),
+    ).toEqual({
+      type: "objects.set-bounds",
+      objectIds: [objectId],
+      xMm: 10,
+      yMm: 20,
+      widthMm: 80,
+      lockAspectRatio: true,
+    });
+  });
+
+  it("applies uniform aspect locking to edge transform handles", () => {
+    const objectIds = ["123e4567-e89b-42d3-a456-426614174001"];
+    const bounds = {
+      minXmm: 10,
+      minYmm: 20,
+      maxXmm: 90,
+      maxYmm: 70,
+    };
+    expect(
+      scaleCommandForHandle(
+        objectIds,
+        bounds,
+        "east",
+        { xMm: 130, yMm: 45 },
+        true,
+      ),
+    ).toEqual({
+      type: "objects.scale",
+      objectIds,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      pivot: { xMm: 10, yMm: 45 },
+    });
+    expect(
+      scaleCommandForHandle(
+        objectIds,
+        bounds,
+        "north",
+        { xMm: 50, yMm: 95 },
+        true,
+      ),
+    ).toEqual({
+      type: "objects.scale",
+      objectIds,
+      scaleX: 1.5,
+      scaleY: 1.5,
+      pivot: { xMm: 50, yMm: 20 },
+    });
   });
 
   it("projects the complete transform-handle set for a selection", () => {

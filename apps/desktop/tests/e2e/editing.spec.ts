@@ -371,3 +371,108 @@ test("packaged exact inspector preserves signed horizontal-line geometry", async
     await killAndRemove(launched);
   }
 });
+
+test("packaged aspect lock honors height input and edge handles", async () => {
+  const launched = await launchPackaged();
+  try {
+    const page = await launched.electronApp.firstWindow();
+
+    await page.getByTestId("add-rectangle").click();
+    await expect(page.getByTestId("selection-count")).toHaveText(
+      "1 object selected",
+    );
+    await page.getByLabel("Selection height").fill("100");
+    await page.getByRole("button", { name: "Apply exact bounds" }).click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const bounds = (await window.laserx.getState()).editor
+            .selectionBounds;
+          return bounds === null
+            ? null
+            : [
+                Number((bounds.maxXmm - bounds.minXmm).toFixed(9)),
+                Number((bounds.maxYmm - bounds.minYmm).toFixed(9)),
+              ];
+        }),
+      )
+      .toEqual([160, 100]);
+
+    const eastHandle = await page.getByTestId("handle-east").boundingBox();
+    if (eastHandle === null) {
+      throw new Error("The east transform handle has no screen bounds.");
+    }
+    const startX = eastHandle.x + eastHandle.width / 2;
+    const startY = eastHandle.y + eastHandle.height / 2;
+    await page.keyboard.down("Shift");
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 40, startY);
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const bounds = (await window.laserx.getState()).editor
+            .selectionBounds;
+          if (bounds === null) {
+            return null;
+          }
+          const width = bounds.maxXmm - bounds.minXmm;
+          const height = bounds.maxYmm - bounds.minYmm;
+          return {
+            width: Number(width.toFixed(9)),
+            height: Number(height.toFixed(9)),
+            aspect: Number((width / height).toFixed(9)),
+          };
+        }),
+      )
+      .toMatchObject({ aspect: 1.6 });
+    const lockedBounds = await page.evaluate(async () => {
+      const bounds = (await window.laserx.getState()).editor.selectionBounds;
+      if (bounds === null) {
+        throw new Error("Expected locked transform bounds.");
+      }
+      return {
+        width: bounds.maxXmm - bounds.minXmm,
+        height: bounds.maxYmm - bounds.minYmm,
+      };
+    });
+    expect(lockedBounds.width).toBeGreaterThan(160);
+    expect(lockedBounds.height).toBeGreaterThan(100);
+
+    await page.getByTestId("undo").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const bounds = (await window.laserx.getState()).editor
+            .selectionBounds;
+          return bounds === null
+            ? null
+            : [
+                Number((bounds.maxXmm - bounds.minXmm).toFixed(9)),
+                Number((bounds.maxYmm - bounds.minYmm).toFixed(9)),
+              ];
+        }),
+      )
+      .toEqual([160, 100]);
+    await page.getByTestId("redo").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const bounds = (await window.laserx.getState()).editor
+            .selectionBounds;
+          if (bounds === null) {
+            return null;
+          }
+          const width = bounds.maxXmm - bounds.minXmm;
+          const height = bounds.maxYmm - bounds.minYmm;
+          return Number((width / height).toFixed(9));
+        }),
+      )
+      .toBe(1.6);
+  } finally {
+    await killAndRemove(launched);
+  }
+});

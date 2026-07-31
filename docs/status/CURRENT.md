@@ -51,12 +51,14 @@ M01 was merged through PR #14 in commit
   recursive `layerId` for every group.
 - [x] Canceling a transaction restores selection/session metadata and preserves
   the pre-existing redo branch.
-- [x] 70 unit/integration tests and 8 packaged Electron E2E tests pass locally.
+- [x] Locked exact sizing follows the last edited dimension, and Shift-dragging
+  any edge handle preserves aspect ratio through a uniform scale.
+- [x] 73 unit/integration tests and 9 packaged Electron E2E tests pass locally.
 - [x] ADRs 0010–0011 and architecture, units, format, testing, risk, fixture,
   screenshot, changelog, and work-log documentation are updated.
 - [ ] Draft pull request reviewed.
-- [x] Repository Guard and both Windows M03 Editing Core runs green on the
-  published review-fix head.
+- [ ] Repository Guard and both Windows M03 Editing Core runs green on the
+  published aspect-lock repair head.
 - [ ] Pull request merged and Issue #4 closed.
 
 ## M03 scope restraint

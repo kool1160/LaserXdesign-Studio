@@ -175,6 +175,7 @@ export function exactBoundsCommand(
   },
   unit: DisplayUnit,
   lockAspectRatio: boolean,
+  lockedDimension: "width" | "height" = "width",
 ): EditorActionRequest | null {
   const parsed = Object.fromEntries(
     Object.entries(values).map(([name, value]) => [
@@ -207,7 +208,16 @@ export function exactBoundsCommand(
   return {
     type: "objects.set-bounds",
     objectIds: [...objectIds],
-    ...converted,
+    xMm: converted.xMm,
+    yMm: converted.yMm,
+    ...(lockAspectRatio
+      ? lockedDimension === "width"
+        ? { widthMm: converted.widthMm }
+        : { heightMm: converted.heightMm }
+      : {
+          widthMm: converted.widthMm,
+          heightMm: converted.heightMm,
+        }),
     lockAspectRatio,
   };
 }
@@ -645,12 +655,14 @@ export function scaleCommandForHandle(
   let scaleX = originalX === 0 ? 1 : (pointer.xMm - pivot.xMm) / originalX;
   let scaleY = originalY === 0 ? 1 : (pointer.yMm - pivot.yMm) / originalY;
   if (lockAspectRatio) {
-    const dominant =
-      Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
-    if (originalX !== 0) {
+    if (originalX === 0 && originalY !== 0) {
+      scaleX = scaleY;
+    } else if (originalY === 0 && originalX !== 0) {
+      scaleY = scaleX;
+    } else {
+      const dominant =
+        Math.abs(scaleX - 1) >= Math.abs(scaleY - 1) ? scaleX : scaleY;
       scaleX = dominant;
-    }
-    if (originalY !== 0) {
       scaleY = dominant;
     }
   }

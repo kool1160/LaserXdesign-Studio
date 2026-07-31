@@ -6,6 +6,9 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Aspect-locked exact sizing now follows the last edited Width or Height field,
+  and Shift-dragging any edge transform handle applies one uniform scale factor
+  without changing the selection's aspect ratio.
 - Exact inspector X/Y conversion now accepts signed finite coordinates,
   including zero, while horizontal and vertical lines can move and resize
   along their nonzero axis without division by zero.

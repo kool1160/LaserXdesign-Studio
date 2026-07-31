@@ -83,7 +83,8 @@ dimensions are exact.
   bounds, and repeated-transform tolerance;
 - domain tests cover every edit operation, locked/hidden hit-test exclusion,
   marquee selection, snapping, layers, grouping/ungrouping, z-order, align,
-  distribute, and stable child geometry;
+  distribute, stable child geometry, and width- or height-driven locked exact
+  sizing;
 - application tests cover explicit selection/clipboard/history ownership,
   fresh duplicate/paste IDs, transaction grouping, a bounded history, exact
   undo/redo, canceled-transaction redo preservation, and deterministic
@@ -93,15 +94,18 @@ dimensions are exact.
   data rejection, including mixed-layer nested groups;
 - desktop unit/integration tests cover strict renderer actions, pointer and
   keyboard command equivalence, transform-handle projection, absence of React
-  mutation, signed/zero exact-bounds conversion, and full editing-state
+  mutation, signed/zero exact-bounds conversion, last-edited locked-dimension
+  routing, uniform locked edge-handle scaling, and full editing-state
   save/reopen;
-- eight Playwright scenarios launch the packaged Windows executable. The M03
+- nine Playwright scenarios launch the packaged Windows executable. The M03
   workflow covers exact inspector edits, keyboard movement, duplicate,
   copy/paste, group/ungroup, rotation, undo/redo, layers, guides, schema-v3
   persistence, and reopen. A direct default-horizontal-line regression covers
   X = 0, negative Y, exact width, canonical geometry, undo/redo, and
-  save/reopen while retaining M01/M02 security, lifecycle, migration,
-  viewport, recovery, and high-DPI regressions.
+  save/reopen. A locked-resize regression covers height-driven exact sizing,
+  Shift edge-handle scaling, aspect preservation, and undo/redo while retaining
+  M01/M02 security, lifecycle, migration, viewport, recovery, and high-DPI
+  regressions.
 
 The M03 numerical transform tolerance remains `1e-9 mm`; packaged exact-bounds
 assertions normalize only below that documented boundary.

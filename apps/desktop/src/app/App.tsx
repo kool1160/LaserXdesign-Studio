@@ -48,6 +48,9 @@ export function App() {
   >("inches");
   const [gridSpacing, setGridSpacing] = useState("10");
   const [aspectLocked, setAspectLocked] = useState(true);
+  const [lockedDimension, setLockedDimension] = useState<
+    "width" | "height"
+  >("width");
   const [inspector, setInspector] = useState({
     x: "",
     y: "",
@@ -244,6 +247,7 @@ export function App() {
       inspector,
       unit,
       aspectLocked,
+      lockedDimension,
     );
     if (request !== null) {
       dispatchEditorAction(request);
@@ -705,12 +709,15 @@ export function App() {
                       step="any"
                       disabled={selectionBounds === null}
                       value={inspector[field]}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        if (field === "width" || field === "height") {
+                          setLockedDimension(field);
+                        }
                         setInspector((current) => ({
                           ...current,
                           [field]: event.target.value,
-                        }))
-                      }
+                        }));
+                      }}
                     />
                     <span>{unitLabel}</span>
                   </span>

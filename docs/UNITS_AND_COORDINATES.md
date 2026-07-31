@@ -61,6 +61,13 @@ while its other axis can be resized and its X/Y position can be changed. A
 request to expand an intrinsically zero bounds axis is rejected explicitly
 instead of dividing by zero or producing a non-invertible transform.
 
+With aspect locking enabled, the last edited Width or Height field is the
+authoritative dimension and the other nonzero axis is derived from the current
+selection ratio. Shift-dragging an edge handle uses that edge's scale factor
+uniformly on both axes: east/west handles pivot at the opposite edge and
+vertical center, while north/south handles pivot at the opposite edge and
+horizontal center. Corner handles retain their opposite-corner pivot.
+
 Move snapping is evaluated in domain millimeters. Enabled targets are grid
 lines, explicit guides, document bounds/center, and visible editable object
 bounds/centers. Camera position and device-pixel ratio do not affect targets.

@@ -163,6 +163,34 @@ describe("editing domain", () => {
     );
   });
 
+  it("preserves aspect ratio from either exact dimension", () => {
+    let document = editingDocument();
+    document = applyEditorCommand(document, {
+      type: "objects.set-bounds",
+      objectIds: [RECT_ONE],
+      heightMm: 30,
+      lockAspectRatio: true,
+    });
+    expect(getObjectBounds(document.objects[0] as DocumentObject)).toEqual({
+      minXmm: 10,
+      minYmm: 10,
+      maxXmm: 70,
+      maxYmm: 40,
+    });
+
+    document = applyEditorCommand(document, {
+      type: "objects.set-bounds",
+      objectIds: [RECT_ONE],
+      widthMm: 40,
+      lockAspectRatio: true,
+    });
+    const resized = getObjectBounds(document.objects[0] as DocumentObject);
+    expect(resized.minXmm).toBeCloseTo(10, 9);
+    expect(resized.minYmm).toBeCloseTo(10, 9);
+    expect(resized.maxXmm).toBeCloseTo(50, 9);
+    expect(resized.maxYmm).toBeCloseTo(30, 9);
+  });
+
   it("moves and resizes each nonzero axis of horizontal and vertical lines", () => {
     let document = createDocument({
       id: DOCUMENT_ID,

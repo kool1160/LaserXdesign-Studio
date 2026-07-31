@@ -105,3 +105,26 @@ child-layer semantics inside groups. Existing M03 limitations remain.
 - Next allowed work: M04 only after PR #16 is reviewed, both Windows M03 runs
 and Repository Guard pass on the review-fix head, and the draft PR is merged.
 Until then M04 remains blocked.
+
+## 2026-07-30 — M03 aspect-lock review repair
+
+- Date: 2026-07-30
+- Agent/task: Codex / PR #16 follow-up review findings
+- Milestone: M03 — Selection, transforms, layers, and history
+- Delivered: Aspect-locked inspector sizing now uses the last edited Width or
+Height field as its driver. Shift-dragging an east/west or north/south handle
+applies one uniform scale factor with the documented opposite-edge and
+orthogonal-center pivot. Existing signed/zero inspector and degenerate-line
+behavior remains unchanged.
+- Verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
+`pnpm test:e2e`, `pnpm verify`, `pnpm audit --prod`,
+`py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+suite contains 73 unit/integration tests and 9 packaged Playwright tests.
+Final-head CI results will be recorded after publication.
+- Decisions: no architecture or schema change. The existing validated
+`objects.set-bounds` and `objects.scale` commands remain authoritative; the
+renderer adapter now supplies unambiguous locked-resize intent.
+- Known limitations: existing M03 limitations remain unchanged.
+- Next allowed work: M04 remains blocked until PR #16 is reviewed, Repository
+Guard and both Windows M03 runs pass on the final repair head, and the draft PR
+is merged.
