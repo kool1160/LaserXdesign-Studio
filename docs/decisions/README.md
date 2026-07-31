@@ -4,7 +4,6 @@ ADRs capture decisions that are expensive to reverse or affect multiple packages
 
 Accepted implementation decisions:
 
-- ADR 0016 - secure SVG/DXF interchange boundary
 - ADR 0005 — M01 toolchain and renderer state
 - ADR 0006 — secure Electron boundary
 - ADR 0007 — project schema v1, atomic saves, and recovery
@@ -16,3 +15,6 @@ Accepted implementation decisions:
 - ADR 0013 — project schema v4 editable text
 - ADR 0014 — replaceable Clipper2 geometry engine
 - ADR 0015 — project schema v5 path curve handles
+- ADR 0016 — secure SVG/DXF interchange boundary
+- ADR 0017 — user-owned AI provider credentials
+- ADR 0018 — future machine and controller extensibility
