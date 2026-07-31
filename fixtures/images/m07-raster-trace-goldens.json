@@ -1,102 +1,119 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "engine": {
     "id": "laserx-grid-trace",
     "version": "1.0.0"
   },
+  "jpegEvidence": {
+    "file": "m07/clean-logo.jpg",
+    "widthPx": 192,
+    "heightPx": 128,
+    "sha256": "654b73ad23765141d3aa8bc9cd7bedba73a8cd6cbfba0666e9d764ce41c0daae"
+  },
   "cases": [
     {
       "id": "clean-logo",
-      "kind": "rows",
-      "rows": [
-        "........",
-        "........",
-        "..####..",
-        "..####..",
-        "..####..",
-        "..####..",
-        "........",
-        "........"
-      ],
-      "outputWidthMm": 80,
-      "speckleAreaPx": 1,
+      "file": "m07/clean-logo.png",
+      "widthPx": 192,
+      "heightPx": 128,
+      "sha256": "2150e6ec5346a8a18226d513cc53a2822a09baadd97987fbd89daeda41fb840d",
+      "reviewEvidence": "Original unbranded two-part geometric mark with crisp dark-on-light boundaries.",
+      "settings": {
+        "outputWidthMm": 192,
+        "threshold": 128,
+        "speckleAreaPx": 4,
+        "simplificationToleranceMm": 0.1
+      },
       "expected": {
-        "pathCount": 1,
-        "nodeCount": 4,
+        "pathCount": 2,
+        "nodeCount": 14,
+        "traceWidthPx": 192,
+        "traceHeightPx": 128,
         "removedSpeckleCount": 0,
         "removedSpeckleAreaPx": 0,
+        "warningCodes": ["trace-requires-cutability-analysis"],
         "paths": [
-          [[20, 60], [60, 60], [60, 20], [20, 20]]
+          [[34, 106], [58, 106], [58, 46], [146, 46], [146, 22], [34, 22]],
+          [[112, 106], [136, 106], [136, 82], [160, 82], [160, 58], [88, 58], [88, 82], [112, 82]]
         ]
       }
     },
     {
       "id": "noisy-photo",
-      "kind": "rows",
-      "rows": [
-        "..........",
-        ".#........",
-        "..........",
-        "...####...",
-        "...####...",
-        "...####...",
-        "...####...",
-        "..........",
-        "..........",
-        ".........."
-      ],
-      "outputWidthMm": 100,
-      "speckleAreaPx": 2,
+      "file": "m07/noisy-photo.png",
+      "widthPx": 320,
+      "heightPx": 240,
+      "sha256": "1e62da3ec17d5ca1df68ccdafe1c7474155fc81668a0e6bc22fe075a46ce9a5d",
+      "reviewEvidence": "Original grayscale sign-photo analogue with illumination falloff, deterministic sensor noise, edge shadow, and isolated dark dust.",
+      "settings": {
+        "outputWidthMm": 160,
+        "threshold": 142,
+        "speckleAreaPx": 12,
+        "simplificationToleranceMm": 0.1
+      },
       "expected": {
         "pathCount": 1,
-        "nodeCount": 4,
-        "removedSpeckleCount": 1,
-        "removedSpeckleAreaPx": 1,
+        "nodeCount": 12,
+        "traceWidthPx": 320,
+        "traceHeightPx": 240,
+        "removedSpeckleCount": 17,
+        "removedSpeckleAreaPx": 17,
+        "warningCodes": ["raster-speckles-removed", "trace-requires-cutability-analysis"],
         "paths": [
-          [[30, 70], [70, 70], [70, 30], [30, 30]]
+          [[33.5, 96.5], [54, 96.5], [54, 70.5], [106, 70.5], [106, 96.5], [126.5, 96.5], [126.5, 23.5], [106, 23.5], [106, 49.5], [54, 49.5], [54, 23.5], [33.5, 23.5]]
         ]
       }
     },
     {
       "id": "anti-aliased-text",
-      "kind": "rows",
-      "rows": [
-        "............",
-        "..++....++..",
-        "..##....##..",
-        "..########..",
-        "..##....##..",
-        "..##....##..",
-        "............",
-        "............"
-      ],
-      "outputWidthMm": 120,
-      "speckleAreaPx": 1,
+      "file": "m07/anti-aliased-text.png",
+      "widthPx": 256,
+      "heightPx": 128,
+      "sha256": "c9b8a2644dcec3b8d205761ce71fa4d1ef95823317655c21336e6e7b9a069747",
+      "reviewEvidence": "Original unbranded HI-like glyph construction rendered with deterministic 4x4 subpixel coverage and genuine intermediate edge values.",
+      "settings": {
+        "outputWidthMm": 128,
+        "threshold": 128,
+        "speckleAreaPx": 4,
+        "simplificationToleranceMm": 0.1
+      },
       "expected": {
-        "pathCount": 1,
-        "nodeCount": 12,
+        "pathCount": 2,
+        "nodeCount": 16,
+        "traceWidthPx": 256,
+        "traceHeightPx": 128,
         "removedSpeckleCount": 0,
         "removedSpeckleAreaPx": 0,
+        "warningCodes": ["trace-requires-cutability-analysis"],
         "paths": [
-          [[20, 70], [40, 70], [40, 50], [80, 50], [80, 70], [100, 70], [100, 20], [80, 20], [80, 40], [40, 40], [40, 20], [20, 20]]
+          [[21, 52.5], [33.5, 52.5], [33.5, 38], [65, 38], [65, 52.5], [77, 52.5], [77, 11], [65, 11], [65, 25.5], [33.5, 25.5], [33.5, 11], [21, 11]],
+          [[87, 52.5], [99.5, 52.5], [99.5, 11], [87, 11]]
         ]
       }
     },
     {
       "id": "high-resolution",
-      "kind": "rectangle",
-      "widthPx": 2048,
-      "heightPx": 1536,
-      "rectangle": { "left": 512, "top": 384, "right": 1536, "bottom": 1152 },
-      "outputWidthMm": 204.8,
-      "speckleAreaPx": 1,
+      "file": "m07/high-resolution-logo.png",
+      "widthPx": 2560,
+      "heightPx": 1800,
+      "sha256": "2dd75719d79dd9cf86a36cf2b0cb679eff45b5bed549c6f4ab6c02dc4fdb4d44",
+      "reviewEvidence": "Original 4.608-megapixel geometric mark that exceeds the four-million-pixel trace-work boundary and must downsample.",
+      "settings": {
+        "outputWidthMm": 256,
+        "threshold": 128,
+        "speckleAreaPx": 8,
+        "simplificationToleranceMm": 0.1
+      },
       "expected": {
         "pathCount": 1,
-        "nodeCount": 4,
+        "nodeCount": 12,
+        "traceWidthPx": 2385,
+        "traceHeightPx": 1677,
         "removedSpeckleCount": 0,
         "removedSpeckleAreaPx": 0,
+        "warningCodes": ["raster-trace-downsampled", "trace-requires-cutability-analysis"],
         "paths": [
-          [[51.2, 115.2], [153.6, 115.2], [153.6, 38.4], [51.2, 38.4]]
+          [[43.042348, 151.989937], [75.994969, 151.989937], [75.994969, 106.478826], [180.005031, 106.478826], [180.005031, 151.989937], [212.957652, 151.989937], [212.957652, 28.015094], [180.005031, 28.015094], [180.005031, 73.526205], [75.994969, 73.526205], [75.994969, 28.015094], [43.042348, 28.015094]]
         ]
       }
     }

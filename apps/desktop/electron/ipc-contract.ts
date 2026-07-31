@@ -679,7 +679,7 @@ export const desktopStateSchema = z.strictObject({
       .strictObject({
         operationId: z.uuid(),
         percent: z.number().min(0).max(100),
-        stage: z.enum(["reading", "decoding", "preprocessing", "filtering", "tracing", "simplifying", "preview"]),
+        stage: z.enum(["selecting", "reading", "decoding", "preprocessing", "filtering", "tracing", "simplifying", "preview"]),
       })
       .nullable(),
     preview: z

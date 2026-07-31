@@ -1,10 +1,8 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-import { encodeRgbaPng } from "../../electron/raster-codec.js";
 import {
   clickAndWaitForCommand,
   killAndRemove,
@@ -22,31 +20,40 @@ test.afterEach(async () => {
   }
 });
 
+async function configureExactFixtureTrace(
+  page: Page,
+  fixtureSettings: {
+    outputWidthMm: string;
+    threshold: string;
+    speckleAreaPx: string;
+  },
+): Promise<void> {
+  await page
+    .getByLabel("Trace output width millimeters")
+    .fill(fixtureSettings.outputWidthMm);
+  await page.getByLabel("Threshold").fill(fixtureSettings.threshold);
+  await page.getByLabel("Blur px").fill("0");
+  await page.getByLabel("Denoise px").fill("0");
+  await page.getByLabel("Speckle area px").fill(fixtureSettings.speckleAreaPx);
+  await page.getByLabel("Smoothing").fill("0");
+  await page.getByLabel("Simplify mm").fill("0.1");
+}
+
 test("preprocesses a PNG, previews overlays, accepts editable paths, analyzes, saves, and undoes", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "laserx-raster-e2e-"));
-  const rasterPath = join(directory, "clean-logo.png");
-  const widthPx = 64;
-  const heightPx = 48;
-  const rgba = new Uint8Array(widthPx * heightPx * 4).fill(255);
-  for (let index = 0; index < widthPx * heightPx; index += 1) {
-    rgba[index * 4 + 3] = 255;
-  }
-  for (let y = 10; y < 38; y += 1) {
-    for (let x = 14; x < 50; x += 1) {
-      if (x < 21 || x >= 43 || (y >= 21 && y < 27)) {
-        const offset = (y * widthPx + x) * 4;
-        rgba[offset] = 20;
-        rgba[offset + 1] = 20;
-        rgba[offset + 2] = 20;
-      }
-    }
-  }
-  await writeFile(rasterPath, encodeRgbaPng(widthPx, heightPx, rgba));
-  testLaunch = await launchPackaged(directory, "discard", { rasterPath });
+  const rasterPath = resolve(
+    process.cwd(),
+    "../../fixtures/images/m07/noisy-photo.png",
+  );
+  testLaunch = await launchPackaged(undefined, "discard", { rasterPath });
   const page = await testLaunch.electronApp.firstWindow();
 
+  await configureExactFixtureTrace(page, {
+    outputWidthMm: "160",
+    threshold: "142",
+    speckleAreaPx: "12",
+  });
   await page.getByTestId("trace-raster").click();
-  await expect(page.getByTestId("raster-trace-summary")).toContainText("clean-logo.png");
+  await expect(page.getByTestId("raster-trace-summary")).toContainText("noisy-photo.png");
   await expect(page.getByTestId("raster-trace-summary")).toContainText("paths");
   await expect(page.getByTestId("raster-preview-image")).toBeVisible();
   await expect(page.getByTestId("import-preview-overlay")).toBeVisible();
@@ -89,4 +96,50 @@ test("preprocesses a PNG, previews overlays, accepts editable paths, analyzes, s
   await page.getByTestId("undo").click();
   await expect(page.getByTestId("selection-count")).toContainText("No objects selected");
   await expect(page.getByTestId("cutability-analysis")).toHaveCount(0);
+});
+
+test("decodes a real JPEG through Electron and traces the reviewed exact geometry", async () => {
+  const rasterPath = resolve(
+    process.cwd(),
+    "../../fixtures/images/m07/clean-logo.jpg",
+  );
+  testLaunch = await launchPackaged(undefined, "discard", { rasterPath });
+  const page = await testLaunch.electronApp.firstWindow();
+
+  await configureExactFixtureTrace(page, {
+    outputWidthMm: "192",
+    threshold: "128",
+    speckleAreaPx: "4",
+  });
+  await page.getByTestId("trace-raster").click();
+  await expect(page.getByTestId("raster-trace-summary")).toContainText(
+    "clean-logo.jpg",
+  );
+  const previewState = await page.evaluate(() => window.laserx.getState());
+  expect(previewState.editor.rasterTracePreview?.summary).toMatchObject({
+    sourceWidthPx: 192,
+    sourceHeightPx: 128,
+    traceWidthPx: 192,
+    traceHeightPx: 128,
+    pathCount: 2,
+    nodeCount: 14,
+  });
+
+  await page.getByTestId("accept-raster-trace").click();
+  const acceptedState = await page.evaluate(() => window.laserx.getState());
+  expect(
+    acceptedState.project.document.objects.map((object) =>
+      object.type === "path"
+        ? object.points.map((point) => [point.xMm, point.yMm])
+        : [],
+    ),
+  ).toEqual([
+    [[34, 106], [58, 106], [58, 46], [146, 46], [146, 22], [34, 22]],
+    [[112, 106], [136, 106], [136, 82], [160, 82], [160, 58], [88, 58], [88, 82], [112, 82]],
+  ]);
+  expect(acceptedState.editor.history.undoDepth).toBe(1);
+  expect(acceptedState.analysis.cutability).toMatchObject({
+    status: "requires-settings",
+    cutReady: false,
+  });
 });

@@ -158,14 +158,19 @@ pre-decode dimension checks, `nativeImage` normalization, and main-generated
 preview data URLs. The renderer sends only settings and an operation ID; paths
 and raw pixels never enter renderer requests. Decoded input is capped at 20
 million pixels/80 MiB. The worker caps trace resolution at 4 million pixels,
-boundary edges at 800,000, editable results at 200,000 nodes, and wall time at
-30 seconds. Cancellation terminates the worker, progress is projected through
-desktop state, and a document fingerprint rejects stale results.
+boundary edges at 800,000, and editable results at 200,000 nodes. The controller
+reserves before the chooser and applies a post-selection 30-second deadline to
+read, inspect, decode, worker, encode, validate, and publish stages; the worker
+also retains its own deadline. Cancellation is operation-ID-aware, progress is
+projected only for the active operation, and a document fingerprint rejects
+stale results.
 
 The application session owns the raster candidate, fresh path/layer IDs, and
 preview fingerprint. Original, black/white, edge, trace-only, and aligned
-original-plus-trace views remain non-authoritative. Reject/cancel cannot alter
-the document, dirty state, or history. Accept uses one `objects.import`
+original-plus-trace views remain non-authoritative. Encoded previews validate
+before candidate publication so replacement is atomic. Reject, cancel, timeout,
+and any stage failure cannot alter the prior candidate, document, dirty state,
+or history. Accept uses one `objects.import`
 command, after which ordinary schema-v5 paths enter the standard
 `packages/cutability` interface. M07 reports that manufacturing settings are
 required and `cutReady` is false; M08 owns actual manufacturing-rule analysis.

@@ -6,7 +6,7 @@ import {
 } from "@laserx/import-raster";
 
 export interface RasterFileService {
-  read(filePath: string): Promise<Uint8Array>;
+  read(filePath: string, signal?: AbortSignal): Promise<Uint8Array>;
 }
 
 export function validateRasterPath(filePath: string): string {
@@ -19,8 +19,12 @@ export function validateRasterPath(filePath: string): string {
 }
 
 export class RasterStorage implements RasterFileService {
-  public async read(filePath: string): Promise<Uint8Array> {
+  public async read(
+    filePath: string,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
     const normalized = validateRasterPath(filePath);
+    signal?.throwIfAborted();
     let details;
     try {
       details = await stat(normalized);
@@ -34,6 +38,7 @@ export class RasterStorage implements RasterFileService {
         `The selected raster must be a regular file no larger than ${String(MAX_RASTER_SOURCE_BYTES)} bytes.`,
       );
     }
-    return new Uint8Array(await readFile(normalized));
+    signal?.throwIfAborted();
+    return new Uint8Array(await readFile(normalized, { signal }));
   }
 }

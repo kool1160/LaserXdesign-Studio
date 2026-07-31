@@ -18,8 +18,13 @@ export interface NativeImageFactory {
 }
 
 export interface RasterCodecPort {
-  decode(bytes: Uint8Array, metadata: RasterSourceMetadata): DecodedRaster;
-  encodePreview(preview: RasterPreviewPixels): RasterPreviewDataUrls;
+  decode(
+    bytes: Uint8Array,
+    metadata: RasterSourceMetadata,
+  ): DecodedRaster | Promise<DecodedRaster>;
+  encodePreview(
+    preview: RasterPreviewPixels,
+  ): RasterPreviewDataUrls | Promise<RasterPreviewDataUrls>;
 }
 
 export interface RasterPreviewDataUrls {

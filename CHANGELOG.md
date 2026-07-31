@@ -6,6 +6,11 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Raster cancellation now reserves before file selection, remains
+  operation-ID-aware through read/decode/worker/encode stages, and always
+  clears timeout/error progress without publishing a late result.
+- Raster candidate and preview media replacement is atomic, so preview encoding
+  failures preserve the previously visible candidate and complete editor state.
 - Selecting text with a missing or changed font fingerprint no longer triggers
   live rematerialization; explicit substitution remains undoable.
 - Editable text now renders and hit-tests even-odd within each glyph and unions

@@ -329,9 +329,9 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, both production
   audits, the raster provenance/license audit, Windows packaging, the focused
   packaged M07 test, and the complete packaged suite pass locally. The suite
-  contains 186 unit/integration tests and 19 packaged Electron E2E scenarios.
+  contains 194 unit/integration tests and 20 packaged Electron E2E scenarios.
   Four reviewed exact goldens cover a clean logo, noisy photo, anti-aliased
-  text, and a 2048 x 1536 high-resolution source.
+  text, and a 2560 x 1800 high-resolution source that exercises downsampling.
 - Decisions: ADR 0019 keeps source data behind main-process tokens, pins the
   original `laserx-grid-trace` 1.0.0 adapter, defines the deterministic
   preprocessing and physical-scale contract, and records hard byte, pixel,
@@ -344,6 +344,35 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Next allowed work: Review M07 only. Keep the implementation pull request
   draft; do not merge, close Issue #8, advance to M08, or begin later scope
   until independent review and required exact-head Windows CI pass.
+
+## 2026-07-31 - M07 blocking review repairs
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #23 blocking review findings
+- Milestone: M07 - PNG/JPEG Preprocessing and Vector Tracing
+- Delivered: Raster operations now reserve before the native chooser, reject
+  duplicate requests before dialog/file I/O, use operation-ID-aware aborts,
+  support abortable reads, observe cancellation around decode/worker/encoding,
+  and apply one post-selection 30-second deadline through atomic publication.
+  Every stage cleans up unconditionally without hiding another job or changing
+  a previously visible candidate. Four committed real-PNG goldens plus a real
+  JPEG are generated from original repository-owned source; grayscale noise,
+  subpixel antialiasing, exact geometry, speckle evidence, and a 4.608-megapixel
+  downsample path are pinned by hashes and executable tests.
+- Verification: `pnpm verify`, `pnpm audit --prod`, `pnpm audit:raster`,
+  `py -3 scripts/repository_guard.py`, and `git diff --check` pass locally. The
+  suite contains 194 unit/integration tests and 20 packaged Electron E2E
+  scenarios, including real native PNG and JPEG decode-to-trace paths.
+- Decisions: ADR 0019 now defines chooser reservation, the post-selection
+  whole-operation deadline, cancellation checkpoints, operation-owned cleanup,
+  atomic candidate/media publication, and reviewed real-fixture provenance.
+- Known limitations: Human file-selection time is intentionally excluded from
+  the 30-second processing deadline. Synchronous native decode/encoding cannot
+  be interrupted mid-call, so cancellation is observed at explicit event-loop
+  checkpoints immediately after each stage. Existing M07 scope exclusions are
+  unchanged.
+- Next allowed work: Re-review PR #23 on its final exact head after required
+  Windows CI passes. Keep it draft; do not merge, close Issue #8, or begin M08.
 
 ## 2026-07-31 - M06 SVG/DXF interoperability
 

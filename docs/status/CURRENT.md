@@ -111,16 +111,16 @@ and this file records the verified merge commit.
   source paths, source bytes, and decoded pixels stay outside the renderer.
 - [x] Deterministic preprocessing, trace presets, exact speckle reporting,
   smoothing, and tolerance-verified simplification run in a cancellable worker
-  with progress, a 30-second deadline, hard pixel/edge/node caps, and stale
-  result rejection.
+  with progress, a whole-operation 30-second deadline, hard pixel/edge/node
+  caps, operation-aware cleanup, atomic publication, and stale result rejection.
 - [x] Original, black/white, edge, trace, and aligned-overlay previews remain
   non-mutating until one `objects.import` command accepts ordinary editable
   schema-v5 paths; rejection and cancellation preserve project and history.
 - [x] Accepted paths immediately enter the standard cutability-analysis
   boundary and receive a settings-required warning rather than a cut-ready
   claim.
-- [x] Four reviewed deterministic goldens, persistence/invariant/integration
-  coverage, and a packaged Windows raster-to-editable/save/undo scenario pass
-  locally.
+- [x] Four committed real-PNG exact goldens, a committed real-JPEG native-decode
+  scenario, persistence/invariant/integration coverage, and packaged Windows
+  raster-to-editable/save/undo scenarios pass locally.
 - [ ] Independent review, required exact-head Windows CI, merge, Issue #8
   closure, and M08 advancement remain pending.

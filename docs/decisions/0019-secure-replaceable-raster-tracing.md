@@ -29,11 +29,20 @@ fresh operation ID; it never submits or receives a local path or raw pixel
 buffer. Source dimensions are checked before native decode. Decoded input is
 limited to 10,000 pixels per axis, 20 million pixels, and 80 MiB RGBA.
 
+The controller reserves a fresh operation and abort state before opening the
+native chooser, so duplicate requests cannot enter dialog or file I/O. Human
+time in the chooser is excluded from processing time. After selection, one
+30-second whole-operation deadline covers abortable file read, inspection,
+decode, worker execution, preview encoding/validation, and publication. The
+worker retains its own deadline and is terminated on cancellation. Cancellation
+is operation-ID-aware and is observed after every noninterruptible stage and
+before publication. Cleanup belongs to the reserved operation and cannot hide
+or clear a different request.
+
 Preprocessing and tracing run in a dedicated worker thread after decode. Trace
 working resolution is bounded to 4 million pixels, boundary extraction to
-800,000 edges, and accepted output to 200,000 editable nodes. The worker has a
-30-second deadline, emits progress stages, and is terminated on cancellation.
-The controller rejects a completed result if the document fingerprint changed.
+800,000 edges, and accepted output to 200,000 editable nodes. The controller
+rejects a completed result if the document fingerprint changed.
 
 Crop, quarter-turn rotation, luminance/average grayscale, contrast, threshold,
 invert, box blur, median denoise, alpha-background selection, speckle area,
@@ -42,8 +51,13 @@ Speckle removal reports the selected pixel-area threshold, removed component
 count, and removed pixel area. Simplification is accepted only when measured
 source-to-result deviation stays within the selected millimeter tolerance.
 
-Trace preview is application state plus bounded main-generated data URLs. It
-does not mutate the document, dirty state, or history. Acceptance materializes
+Trace preview is application state plus bounded main-generated data URLs. All
+preview images are encoded and validated before candidate publication, then the
+candidate and media references publish as one no-fail logical transition. Any
+read, decode, worker, timeout, cancellation, encode, validation, or publication
+failure restores the previously visible candidate/media and clears only its
+own progress state. Preview does not mutate the document, dirty state, or
+history. Acceptance materializes
 ordinary schema-v5 closed `PathObject` geometry on one new editable layer
 through a single `objects.import` command. The source bitmap and preview data
 are not persisted. Accepted IDs immediately enter the `packages/cutability`
@@ -57,6 +71,13 @@ introducing a native/WASM tracing dependency or a license incompatible with
 desktop distribution. The interface, exact goldens, performance boundary, and
 worker contract preserve a clean replacement path if later profiling proves a
 better engine is necessary.
+
+Five procedurally generated, repository-owned assets pin the reviewed evidence:
+a crisp PNG, its real JPEG encoding, a grayscale noisy-photo analogue, genuine
+subpixel anti-aliased glyph edges, and a 2560 x 1800 source that crosses the
+trace downsample boundary. File hashes, exact geometry, summaries, warnings,
+and Electron PNG/JPEG E2E paths are executable evidence rather than labels for
+synthetic in-memory masks.
 
 Pre-decode header limits prevent compressed pixel bombs from reaching native
 decode unchecked. Worker termination and fingerprint checks preserve the same

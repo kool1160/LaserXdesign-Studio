@@ -25,6 +25,7 @@ import {
 } from "../../electron/raster-worker-service.js";
 
 const OPERATION_ID = "60000000-0000-4000-8000-000000000071";
+const SECOND_OPERATION_ID = "60000000-0000-4000-8000-000000000072";
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
 
@@ -112,41 +113,79 @@ function result(request: RasterTraceTaskRequest): RasterTraceTaskResult {
   };
 }
 
-const rasterStorage: RasterFileService = {
-  read: () => Promise.resolve(pngHeader()),
-};
-
-const rasterCodec: RasterCodecPort = {
-  decode: (): DecodedRaster => ({
+function decodedRaster(): DecodedRaster {
+  return {
     widthPx: 8,
     heightPx: 8,
     rgba: new Uint8Array(8 * 8 * 4).fill(255),
-  }),
-  encodePreview: (): RasterPreviewDataUrls => ({
+  };
+}
+
+function encodedPreview(): RasterPreviewDataUrls {
+  return {
     widthPx: 2,
     heightPx: 2,
     original: "data:image/png;base64,AA==",
     blackWhite: "data:image/png;base64,AA==",
     edges: "data:image/png;base64,AA==",
-  }),
+  };
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
+  let resolvePromise: (value: T) => void = () => undefined;
+  let rejectPromise: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
+const rasterStorage: RasterFileService = {
+  read: () => Promise.resolve(pngHeader()),
 };
 
-async function desktop(worker: RasterWorkerPort): Promise<DesktopController> {
+const rasterCodec: RasterCodecPort = {
+  decode: decodedRaster,
+  encodePreview: encodedPreview,
+};
+
+interface DesktopOverrides {
+  chooseImportRaster?: () => Promise<string | null>;
+  onStateChanged?: (state: DesktopController["state"]) => void;
+  rasterCodec?: RasterCodecPort;
+  rasterOperationTimeoutMs?: number;
+  rasterStorage?: RasterFileService;
+}
+
+async function desktop(
+  worker: RasterWorkerPort,
+  overrides: DesktopOverrides = {},
+): Promise<DesktopController> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-raster-worker-"));
   temporaryDirectories.push(directory);
   const dialogs: DesktopDialogs = {
     chooseOpenProject: () => Promise.resolve(null),
     chooseSaveProject: () => Promise.resolve(null),
     confirmUnsavedChanges: () => Promise.resolve("discard"),
-    chooseImportRaster: () => Promise.resolve(join(directory, "clean-logo.png")),
+    chooseImportRaster:
+      overrides.chooseImportRaster ??
+      (() => Promise.resolve(join(directory, "clean-logo.png"))),
   };
   const controller = new DesktopController({
     userDataPath: directory,
     dialogs,
-    onStateChanged: () => undefined,
-    rasterStorage,
-    rasterCodec,
+    onStateChanged: overrides.onStateChanged ?? (() => undefined),
+    rasterStorage: overrides.rasterStorage ?? rasterStorage,
+    rasterCodec: overrides.rasterCodec ?? rasterCodec,
     rasterWorker: worker,
+    ...(overrides.rasterOperationTimeoutMs === undefined
+      ? {}
+      : { rasterOperationTimeoutMs: overrides.rasterOperationTimeoutMs }),
   });
   controllers.push(controller);
   await controller.initialize();
@@ -234,14 +273,244 @@ describe("raster worker coordination", () => {
     expect(controller.state.editor.rasterTracePreview).toBeNull();
   });
 
+  it("reserves before the dialog and an unrelated cancel cannot hide the active operation", async () => {
+    const selectedPath = deferred<string | null>();
+    let dialogCalls = 0;
+    const worker: RasterWorkerPort = {
+      run: (request) => Promise.resolve(result(request)),
+    };
+    const controller = await desktop(worker, {
+      chooseImportRaster: () => {
+        dialogCalls += 1;
+        return selectedPath.promise;
+      },
+    });
+
+    const first = controller.previewRasterTrace({ operationId: OPERATION_ID, settings });
+    expect(controller.state.raster.job).toMatchObject({
+      operationId: OPERATION_ID,
+      stage: "selecting",
+    });
+    const duplicate = await controller.previewRasterTrace({
+      operationId: SECOND_OPERATION_ID,
+      settings,
+    });
+    expect(duplicate).toMatchObject({ ok: false });
+    expect(dialogCalls).toBe(1);
+
+    const unrelatedCancel = await controller.cancelRasterTrace(SECOND_OPERATION_ID);
+    expect(unrelatedCancel).toMatchObject({ ok: false });
+    expect(controller.state.raster.job?.operationId).toBe(OPERATION_ID);
+
+    await controller.cancelRasterTrace(OPERATION_ID);
+    selectedPath.resolve(null);
+    expect(await first).toMatchObject({ ok: true });
+    expect(controller.state.raster.job).toBeNull();
+  });
+
+  it("cancels an abortable read without allowing later stages to run", async () => {
+    const readStarted = deferred<undefined>();
+    let decoded = false;
+    const storage: RasterFileService = {
+      read: (_filePath, signal) =>
+        new Promise((_resolve, reject) => {
+          readStarted.resolve(undefined);
+          signal?.addEventListener(
+            "abort",
+            () => reject(new RasterTraceCancelledError()),
+            { once: true },
+          );
+        }),
+    };
+    const codec: RasterCodecPort = {
+      decode: () => {
+        decoded = true;
+        return decodedRaster();
+      },
+      encodePreview: encodedPreview,
+    };
+    const controller = await desktop(
+      { run: () => Promise.reject(new Error("Worker must not run.")) },
+      { rasterStorage: storage, rasterCodec: codec },
+    );
+    const before = controller.state;
+    const running = controller.previewRasterTrace({ operationId: OPERATION_ID, settings });
+    await readStarted.promise;
+    expect(controller.state.raster.job?.stage).toBe("reading");
+    await controller.cancelRasterTrace(OPERATION_ID);
+    expect(await running).toMatchObject({ ok: true });
+    expect(decoded).toBe(false);
+    expect(controller.state).toEqual(before);
+  });
+
+  it("observes cancellation during decode before starting the worker", async () => {
+    const decoding = deferred<DecodedRaster>();
+    const decodeStarted = deferred<undefined>();
+    let workerRan = false;
+    const codec: RasterCodecPort = {
+      decode: () => {
+        decodeStarted.resolve(undefined);
+        return decoding.promise;
+      },
+      encodePreview: encodedPreview,
+    };
+    const controller = await desktop(
+      {
+        run: () => {
+          workerRan = true;
+          return Promise.reject(new Error("Worker must not run."));
+        },
+      },
+      { rasterCodec: codec },
+    );
+    const before = controller.state;
+    const running = controller.previewRasterTrace({ operationId: OPERATION_ID, settings });
+    await decodeStarted.promise;
+    await controller.cancelRasterTrace(OPERATION_ID);
+    decoding.resolve(decodedRaster());
+    expect(await running).toMatchObject({ ok: true });
+    expect(workerRan).toBe(false);
+    expect(controller.state).toEqual(before);
+  });
+
+  it("observes cancellation after worker completion but before preview publication", async () => {
+    const encoding = deferred<RasterPreviewDataUrls>();
+    const encodeStarted = deferred<undefined>();
+    const codec: RasterCodecPort = {
+      decode: decodedRaster,
+      encodePreview: () => {
+        encodeStarted.resolve(undefined);
+        return encoding.promise;
+      },
+    };
+    const worker: RasterWorkerPort = {
+      run: (request) => Promise.resolve(result(request)),
+    };
+    const controller = await desktop(worker, { rasterCodec: codec });
+    const before = controller.state;
+    const running = controller.previewRasterTrace({ operationId: OPERATION_ID, settings });
+    await encodeStarted.promise;
+    await controller.cancelRasterTrace(OPERATION_ID);
+    encoding.resolve(encodedPreview());
+    expect(await running).toMatchObject({ ok: true });
+    expect(controller.state).toEqual(before);
+  });
+
+  it.each(["read", "decode"] as const)(
+    "cleans the complete operation after a %s failure",
+    async (failureStage) => {
+      let workerRan = false;
+      const storage: RasterFileService = {
+        read: () =>
+          failureStage === "read"
+            ? Promise.reject(new Error("Fixture read failed."))
+            : Promise.resolve(pngHeader()),
+      };
+      const codec: RasterCodecPort = {
+        decode: () => {
+          if (failureStage === "decode") {
+            throw new Error("Fixture decode failed.");
+          }
+          return decodedRaster();
+        },
+        encodePreview: encodedPreview,
+      };
+      const controller = await desktop(
+        {
+          run: () => {
+            workerRan = true;
+            return Promise.reject(new Error("Worker must not run."));
+          },
+        },
+        { rasterStorage: storage, rasterCodec: codec },
+      );
+      const before = controller.state;
+      const finished = await controller.previewRasterTrace({
+        operationId: OPERATION_ID,
+        settings,
+      });
+      expect(finished).toMatchObject({ ok: false });
+      expect(workerRan).toBe(false);
+      expect(controller.state).toEqual(before);
+    },
+  );
+
+  it("cleans a whole-operation timeout and allows a later request", async () => {
+    let readCount = 0;
+    const storage: RasterFileService = {
+      read: (_filePath, signal) => {
+        readCount += 1;
+        if (readCount > 1) return Promise.resolve(pngHeader());
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener(
+            "abort",
+            () => reject(new RasterTraceCancelledError()),
+            { once: true },
+          );
+        });
+      },
+    };
+    const worker: RasterWorkerPort = {
+      run: (request) => Promise.resolve(result(request)),
+    };
+    const controller = await desktop(worker, {
+      rasterStorage: storage,
+      rasterOperationTimeoutMs: 20,
+    });
+    const before = controller.state;
+    const timedOut = await controller.previewRasterTrace({
+      operationId: OPERATION_ID,
+      settings,
+    });
+    expect(timedOut).toMatchObject({ ok: false });
+    expect(timedOut.ok ? "" : timedOut.error).toMatch(/processing-time safeguard/u);
+    expect(controller.state).toEqual(before);
+
+    const retried = await controller.previewRasterTrace({
+      operationId: SECOND_OPERATION_ID,
+      settings,
+    });
+    expect(retried).toMatchObject({ ok: true });
+    expect(controller.state.editor.rasterTracePreview).not.toBeNull();
+  });
+
+  it("keeps the prior candidate and previews when replacement preview encoding fails", async () => {
+    let failEncoding = false;
+    const codec: RasterCodecPort = {
+      decode: decodedRaster,
+      encodePreview: () => {
+        if (failEncoding) throw new Error("Fixture preview encoding failed.");
+        return encodedPreview();
+      },
+    };
+    const worker: RasterWorkerPort = {
+      run: (request) => Promise.resolve(result(request)),
+    };
+    const controller = await desktop(worker, { rasterCodec: codec });
+    expect(
+      await controller.previewRasterTrace({ operationId: OPERATION_ID, settings }),
+    ).toMatchObject({ ok: true });
+    const beforeReplacement = controller.state;
+    failEncoding = true;
+
+    const replacement = await controller.previewRasterTrace({
+      operationId: SECOND_OPERATION_ID,
+      settings,
+    });
+    expect(replacement).toMatchObject({ ok: false });
+    expect(controller.state).toEqual(beforeReplacement);
+  });
+
   it("rejects a completed stale result after another document command", async () => {
     let complete: (value: RasterTraceTaskResult) => void = () => {
       throw new Error("Worker completion was not initialized.");
     };
+    const workerStarted = deferred<undefined>();
     const captured: { request: RasterTraceTaskRequest | null } = { request: null };
     const worker: RasterWorkerPort = {
       run: (request) => {
         captured.request = request;
+        workerStarted.resolve(undefined);
         return new Promise((resolve) => {
           complete = resolve;
         });
@@ -249,8 +518,9 @@ describe("raster worker coordination", () => {
     };
     const controller = await desktop(worker);
     const running = controller.previewRasterTrace({ operationId: OPERATION_ID, settings });
-    while (captured.request === null) await Promise.resolve();
+    await workerStarted.promise;
     await controller.editorAction({ type: "object.create", objectType: "rectangle" });
+    if (captured.request === null) throw new Error("Worker request was not captured.");
     complete(result(captured.request));
     const finished = await running;
 

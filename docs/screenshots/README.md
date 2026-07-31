@@ -31,4 +31,5 @@ M06 evidence:
 M07 evidence:
 
 - `m07-raster-tracing.png` - packaged Windows workspace showing the traced
-  geometry overlay aligned over its bounded raster preview before acceptance.
+  geometry overlay aligned over the reviewed noisy-photo raster, with exact
+  threshold, speckle, smoothing, and simplification controls before acceptance.
