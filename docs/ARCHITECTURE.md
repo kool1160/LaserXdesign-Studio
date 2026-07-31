@@ -99,6 +99,9 @@ explicit-tolerance curve flattening, simplification, cleanup,
 self-intersection reporting, and a replaceable `GeometryEngine`. The sole
 engine adapter pins `clipper2-ts` for closed booleans and signed offsets and
 quantizes canonical millimeters to integer micrometers at that boundary.
+Cleanup removes duplicate or collinear anchors only when every control involved
+in the affected segments is empty; handled anchors remain authoritative unless
+a future operation can prove a replacement stays within the selected tolerance.
 
 `packages/application` prepares selected closed paths in world millimeters and
 materializes results with stable surviving IDs, fresh additional IDs, warnings,

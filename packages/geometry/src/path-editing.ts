@@ -122,6 +122,10 @@ function compactHandles(
     : undefined;
 }
 
+function handlesAreEmpty(handles: PathControlHandles): boolean {
+  return handles.incoming === null && handles.outgoing === null;
+}
+
 export function copyEditablePath(
   path: EditablePathGeometry,
 ): EditablePathGeometry {
@@ -659,16 +663,30 @@ export function cleanupEditablePath(
   for (let index = 0; index < path.points.length; index += 1) {
     const point = path.points[index] as PointMm;
     const previous = retainedPoints.at(-1);
-    if (previous !== undefined && pointsEqual(previous, point, toleranceMm)) {
+    const handle = handles[index] as PathControlHandles;
+    const previousHandle = retainedHandles.at(-1);
+    if (
+      previous !== undefined &&
+      previousHandle !== undefined &&
+      pointsEqual(previous, point, toleranceMm) &&
+      handlesAreEmpty(previousHandle) &&
+      handlesAreEmpty(handle)
+    ) {
       continue;
     }
     retainedPoints.push(copyPoint(point));
-    retainedHandles.push(handles[index] as PathControlHandles);
+    retainedHandles.push(handle);
   }
+  const firstRetainedHandle = retainedHandles[0];
+  const lastRetainedHandle = retainedHandles.at(-1);
   if (
     path.closed &&
     retainedPoints.length > 3 &&
-    pointsEqual(retainedPoints[0] as PointMm, retainedPoints.at(-1) as PointMm, toleranceMm)
+    firstRetainedHandle !== undefined &&
+    lastRetainedHandle !== undefined &&
+    pointsEqual(retainedPoints[0] as PointMm, retainedPoints.at(-1) as PointMm, toleranceMm) &&
+    handlesAreEmpty(firstRetainedHandle) &&
+    handlesAreEmpty(lastRetainedHandle)
   ) {
     retainedPoints.pop();
     retainedHandles.pop();
@@ -682,10 +700,13 @@ export function cleanupEditablePath(
       }
       const previousIndex = (index - 1 + retainedPoints.length) % retainedPoints.length;
       const nextIndex = (index + 1) % retainedPoints.length;
+      const previousHandle = retainedHandles[previousIndex] as PathControlHandles;
       const handle = retainedHandles[index] as PathControlHandles;
+      const nextHandle = retainedHandles[nextIndex] as PathControlHandles;
       if (
-        handle.incoming === null &&
-        handle.outgoing === null &&
+        handlesAreEmpty(handle) &&
+        previousHandle.outgoing === null &&
+        nextHandle.incoming === null &&
         distancePointToSegment(
           retainedPoints[index] as PointMm,
           retainedPoints[previousIndex] as PointMm,

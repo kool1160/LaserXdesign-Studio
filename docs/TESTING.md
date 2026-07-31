@@ -141,7 +141,9 @@ assertions normalize only below that documented boundary.
 
 - geometry tests cover cubic evaluation/subdivision, handle motion and
   reversal, endpoint joins with invariant adjacent control vectors, path
-  splitting, bounded simplification, millimeter-distance cleanup, and explicit
+  splitting, bounded simplification, millimeter-distance cleanup, retention of
+  collinear anchors between curved segments, retention of handled
+  near-duplicates and their sampled curve/cusp geometry, and explicit
   self-intersection reporting with world-distance endpoint exclusion;
 - the reviewed `fixtures/geometry/m05-boolean-offset-goldens.json` cases cover
   overlapping, nested, touching, and one-micrometer topology plus inward and

@@ -51,6 +51,15 @@ function maximumDistanceToPolyline(
   );
 }
 
+function samplePathSegments(path: EditablePathGeometry): PointMm[][] {
+  const segmentCount = path.closed ? path.points.length : path.points.length - 1;
+  return Array.from({ length: segmentCount }, (_unused, segmentIndex) =>
+    [0.25, 0.5, 0.75].map((ratio) =>
+      evaluatePathSegment(path, segmentIndex, ratio),
+    ),
+  );
+}
+
 describe("editable path geometry", () => {
   it("splits cubic segments without changing their evaluated shape", () => {
     const curved: EditablePathGeometry = {
@@ -202,6 +211,57 @@ describe("editable path geometry", () => {
     expect(result.intersections).toHaveLength(1);
     expect(result.warnings.join(" ")).toMatch(/self-intersection/);
     expect(findPathSelfIntersections(result.path)).toEqual(result.intersections);
+  });
+
+  it("retains a handle-free collinear anchor between curved segments", () => {
+    const source = {
+      closed: false,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 10, yMm: 0 },
+        { xMm: 20, yMm: 0 },
+      ],
+      handles: [
+        { incoming: null, outgoing: { xMm: 3, yMm: 9 } },
+        { incoming: null, outgoing: null },
+        { incoming: { xMm: 17, yMm: -9 }, outgoing: null },
+      ],
+    } satisfies EditablePathGeometry;
+    const samples = samplePathSegments(source);
+
+    const result = cleanupEditablePath(source, 0.001);
+
+    expect(result.removedNodeCount).toBe(0);
+    expect(result.path).toEqual(source);
+    expect(samplePathSegments(result.path)).toEqual(samples);
+  });
+
+  it("retains handled near-duplicate anchors and their curve transition", () => {
+    const source = {
+      closed: false,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 10, yMm: 0 },
+        { xMm: 10.0005, yMm: 0 },
+        { xMm: 20, yMm: 0 },
+      ],
+      handles: [
+        { incoming: null, outgoing: null },
+        { incoming: null, outgoing: { xMm: 10, yMm: 5 } },
+        {
+          incoming: { xMm: 10.0005, yMm: -5 },
+          outgoing: { xMm: 14, yMm: -4 },
+        },
+        { incoming: { xMm: 17, yMm: -4 }, outgoing: null },
+      ],
+    } satisfies EditablePathGeometry;
+    const samples = samplePathSegments(source);
+
+    const result = cleanupEditablePath(source, 0.001);
+
+    expect(result.removedNodeCount).toBe(0);
+    expect(result.path).toEqual(source);
+    expect(samplePathSegments(result.path)).toEqual(samples);
   });
 
   it("keeps a short-segment node beyond the cleanup distance in millimeters", () => {

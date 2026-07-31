@@ -311,3 +311,28 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
 - Next allowed work: review M05 only after the repaired exact head is locally
   and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
   advance to M06.
+
+## 2026-07-31 — M05 controls-aware cleanup repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #20 blocking cleanup re-review finding
+- Milestone: M05 — Node Editing and Boolean Geometry
+- Delivered: Cleanup now compacts near-duplicate anchors only when both are
+  handle-free and removes a collinear anchor only when its two adjacent
+  segments are linear. Curved segments and handled curve/cusp transitions are
+  therefore retained instead of being silently reshaped beyond the selected
+  world-millimeter tolerance.
+- Verification: Focused regressions preserve sampled geometry for a
+  handle-free collinear anchor between pronounced cubic segments and for
+  handled near-duplicate anchors. The complete `pnpm verify` gate, both license
+  audits, lint, typecheck, production builds, and all packaged Windows tests
+  pass. The suite contains 118 unit/integration tests and 17 packaged Windows
+  E2E scenarios.
+- Decisions: Cleanup uses the conservative no-merge rule for controls. A
+  handled anchor remains authoritative until an operation can prove a merged
+  replacement stays within the selected world-millimeter tolerance.
+- Known limitations: Existing M05 exclusions remain unchanged. Independent
+  golden-fixture acceptance and exact-head review remain required.
+- Next allowed work: review M05 only after the repaired exact head is locally
+  and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
+  advance to M06.
