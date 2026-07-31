@@ -342,6 +342,35 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
   merge, close Issue #7, advance status to M07, or begin later scope until the
   review and advancement gates pass.
 
+## 2026-07-31 — M06 interoperability review repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #21 blocking review findings
+- Milestone: M06 — Dimensionally Correct SVG and DXF Interoperability
+- Delivered: Cubic anchors and controls now transform into world millimeters
+  before export flattening; ellipses derive a conservative local tolerance
+  from the full affine transform's maximum stretch. DXF parsing reserves a
+  cumulative 200,000-point expansion budget before curve allocations, and the
+  application enforces the same boundary before preview state. Tiny circles
+  retain three distinct nodes. Independent DXF inspection now verifies the
+  coordinates and bounds of both 600 mm and 24 inch/609.6 mm exports.
+- Verification: Uniform scale, nonuniform scale, shear, and nested-group
+  regressions prove cubic and ellipse deviation stays within 0.01 mm in world
+  space; SVG and DXF round trips preserve transformed bounds. A sub-5-MB DXF
+  expansion bomb fails before the point cap, and application overflow leaves
+  project, dirty state, preview, and history unchanged. The complete
+  `pnpm verify` gate passes with 160 unit/integration tests and all 18 packaged
+  Electron E2E scenarios. Production audit, Repository Guard, and diff checks
+  also pass.
+- Decisions: The documented 0.01 mm interchange tolerance is a world-space
+  guarantee after the complete transform. Expanded geometry is limited at both
+  the parser and application trust boundaries rather than relying only on
+  source bytes, pair count, entity count, or path count.
+- Known limitations: Existing M06 exclusions remain unchanged. Exact-head
+  workflows and independent re-review remain required.
+- Next allowed work: re-review M06 only after the repaired exact head is green.
+  Keep PR #21 draft; do not merge, close Issue #7, or advance to M07.
+
 ## 2026-07-31 — M05 controls-aware cleanup repair
 
 - Date: 2026-07-31

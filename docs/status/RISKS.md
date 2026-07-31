@@ -22,9 +22,10 @@ Raster tracing can create excessive nodes, self-intersections, tiny islands, and
   scope.
 - Imported artwork keeps source coordinates and physical scale. It is not
   centered or fit to stock automatically.
-- Curves flatten at 0.01 mm. Very large files are capped at 5 MB plus explicit
-  pair/entity/element/point limits; high-node production performance remains an
-  M12 measurement.
+- Curves flatten at a 0.01 mm world-space tolerance after complete object/group
+  transforms. Very large files are capped at 5 MB plus explicit
+  pair/entity/element limits and a 200,000-point DXF expansion/application
+  preview budget; high-node production performance remains an M12 measurement.
 
 ## Electron security
 
