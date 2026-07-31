@@ -38,4 +38,4 @@ Native DWG, 3D DXF entities, CAM operations, splines without a proven conversion
 - [x] Supported entity matrix documented.
 - [x] Scale golden suite passes.
 - [x] Independent downstream validation recorded.
-- [ ] Status advances to M07.
+- [x] Status advances to M07.

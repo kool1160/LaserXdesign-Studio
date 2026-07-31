@@ -2,51 +2,55 @@
 
 ## Active gate
 
-**M06 — Dimensionally Correct SVG and DXF Interoperability**
+**M07 — PNG/JPEG Preprocessing and Vector Tracing**
 
-M05 merged through PR #20 in merge commit
-`27cfe2b0c2ae8fcfe365ee2338ad65e764c2de08` after final review of exact feature
-head `48a8519223dbce8438e89397ed40ddad9ec6423f`. Issue #6 is closed. M06 is now
-the only active implementation milestone; Issue #7 is the active delivery gate.
+M06 merged through PR #21 in merge commit
+`d38832446ce43df4c5fb2c620ee70fa556de056e` after final review of exact feature
+head `f9fb69f298580d3346414d445c94c4654a5c177e`. Issue #7 is closed. M07 is now
+the only active implementation milestone; Issue #8 is the active delivery gate.
 
-Start M06 from current `main` in a new working directory and branch
-`feat/m06-svg-dxf`. Do not reuse the M05 feature branch or worktree.
+Start M07 from current `main` in a new working directory and branch
+`feat/m07-raster-tracing`. Do not reuse the M06 feature branch or worktree.
 
 Before implementation, read:
 
 1. `AGENTS.md`
 2. `docs/OPERATOR_PROTOCOL.md`
 3. `docs/status/CURRENT.md`
-4. `docs/milestones/M06-svg-dxf.md`
+4. `docs/milestones/M07-raster-tracing.md`
 5. `docs/ARCHITECTURE.md`
 6. `docs/UNITS_AND_COORDINATES.md`
 7. `docs/FILE_FORMATS.md`
 8. `docs/TESTING.md`
-9. ADRs 0014–0015
+9. ADRs 0014–0016
 
-## M05 completion record
+## M06 completion record
 
-- [x] PR #20 reviewed and merged.
-- [x] Issue #6 closed as completed.
-- [x] Final reviewed head: `48a8519223dbce8438e89397ed40ddad9ec6423f`.
-- [x] Merge commit: `27cfe2b0c2ae8fcfe365ee2338ad65e764c2de08`.
-- [x] Repository Guard run `30634545722` passed on the final head.
-- [x] Windows M05 push run `30634543661` and pull-request run
-  `30634545635` passed on the final head; M04 regression run `30634545664`
-  also passed.
-- [x] The final suite records 118 unit/integration tests and 17 packaged Electron
+- [x] PR #21 reviewed and merged.
+- [x] Issue #7 closed as completed.
+- [x] Final reviewed head: `f9fb69f298580d3346414d445c94c4654a5c177e`.
+- [x] Merge commit: `d38832446ce43df4c5fb2c620ee70fa556de056e`.
+- [x] Repository Guard run `30646696884` passed on the final head.
+- [x] Windows M06 push run `30646693131` and pull-request run
+  `30646696905` passed on the final head; M04 and M05 regression runs
+  `30646696893` and `30646696805` also passed.
+- [x] The final suite records 160 unit/integration tests and 18 packaged Electron
   E2E tests.
-- [x] Direct node/segment editing, cubic handles, join/split/reverse,
-  tolerance-bounded simplify and controls-aware cleanup, closed-path booleans,
-  signed offsets, worker cancellation, exact undo, and schema-v5 persistence
-  are complete and reviewed.
-- [x] Selection-order Subtract semantics, same-layer topology ownership,
-  world-millimeter tolerances, curved joins, handled cleanup safety, and the
-  boolean/offset golden fixtures were independently reviewed on the final head.
-- [x] No M06+ SVG/DXF interoperability, raster tracing, cutability, or export
-  functionality was included in M05.
+- [x] Safe SVG/DXF import, explicit physical units, non-destructive preview,
+  one-command commit/undo, layer mapping, closure preservation, explicit
+  unitless-DXF assumptions, and millimeter SVG/DXF export are complete and
+  reviewed.
+- [x] World-space 0.01 mm curve tolerance, bounded 200,000-point DXF expansion,
+  tiny-circle validity, and independent 600 mm and 24 inch/609.6 mm downstream
+  coordinate/bounds inspection were reviewed on the final head.
+- [x] No M07+ raster preprocessing, vector tracing, cutability analysis, or AI
+  functionality was included in M06.
 
 ## Prior milestones
+
+M05 was merged through PR #20 in merge commit
+`27cfe2b0c2ae8fcfe365ee2338ad65e764c2de08`. The final reviewed feature head
+was `48a8519223dbce8438e89397ed40ddad9ec6423f`.
 
 M04 was merged through PR #18 in merge commit
 `ae693b6ff9f37a7cfdd42095d2b891b64b69fe4b`. The final reviewed feature head
@@ -64,61 +68,39 @@ M01 was merged through PR #14 in commit
 `7a534e9a5424a8dfd17107f398dcd15332720f3f`. M00 remains complete in commit
 `683a0aff72671a76b1e5ac7b366069d4cd0a29d2`.
 
-## M06 user-visible outcome
+## M07 user-visible outcome
 
-Users can import practical SVG/DXF artwork and export files that downstream CAM
-opens at the intended physical size with clean 2D geometry.
+Users can import a logo or sign photograph, clean it visually, trace it into
+manageable vector paths, compare results, and continue editing.
 
-## M06 implementation under review
+## Allowed M07 work
 
-- Draft PR: #21, `feat/m06-svg-dxf` into `main`.
-- Complete implementation commit: `12ae86f7c90554f33bd1529a142a8feabf6a7b2a`.
-- Blocking-review repair commit:
-  `8e62cc6b3c862f74475934c5f013ec01834dad78`.
-- Local gate: `pnpm verify`, production audit, repository guard, and diff check
-  pass; 160 unit/integration tests and 18 packaged Electron E2E scenarios pass.
-- Review repairs enforce the 0.01 mm tolerance after complete world transforms,
-  bound DXF expansion and application preview at 200,000 geometry points,
-  preserve tiny-circle validity, and independently verify both 600 mm and
-  24 inch/609.6 mm export coordinates and bounds.
-- Independent inspection: pinned MIT `dxf-parser` verifies representative DXF
-  millimeter units, entity type, closed shape flag, vertex coordinates, and
-  physical bounds without using the production parser.
-- GitHub verification passed on review-handoff head
-  `f0e9680d909dce88e32402f551b3f835a20f0fc8`: Repository Guard run
-  `30642198794`, M04 regression run `30642199580`, M05 regression run
-  `30642198859`, and M06 push/pull-request runs `30642195200`/`30642198383`.
-- State: review repairs are complete and awaiting exact-head CI and re-review.
-  Do not merge, close Issue #7, advance this file to M07, or begin M07 work
-  from `Continue LaserX`.
-
-## Allowed M06 work
-
-- safe SVG import with supported-element warnings;
-- SVG export with explicit physical dimensions and viewBox;
-- transform normalization;
-- a fixture-driven DXF 2D import/export subset suitable for common plasma and
-  laser CAM;
-- lines, polylines, closed polylines, circles/arcs, and an explicit curve
-  flattening policy where supported;
-- layer mapping, unit metadata, and explicit scale handling;
-- unsupported-entity reporting;
-- import preview with non-destructive commit;
-- round-trip and independently inspected downstream fixtures;
-- export summaries with object counts, warnings, units, and bounds;
-- persistence, invariant, scale-golden, integration, and packaged Windows E2E
+- safe bounded PNG/JPEG import;
+- crop, rotate, grayscale, contrast, threshold, invert, blur/denoise, and
+  background controls required for tracing;
+- black/white and edge previews;
+- a replaceable trace-engine adapter with license review;
+- deterministic detail presets plus explicit threshold/tolerance controls;
+- speckle/island filtering with reported thresholds and removed content;
+- smoothing and tolerance-bounded simplification;
+- node-count and smallest-feature summaries;
+- original-versus-trace overlay;
+- cancellable worker execution with progress;
+- insertion of accepted results as editable objects through one command;
+- reviewed clean-logo, noisy-photo, anti-aliased-text, and high-resolution
+  fixtures;
+- persistence, invariant, golden-fixture, integration, and packaged Windows E2E
   coverage required by the milestone.
 
 ## Explicitly excluded
 
-Do not implement native DWG, 3D DXF entities, CAM operations, splines without a
-proven conversion policy, unsupported styling disguised as cut geometry,
-raster tracing, cutability decisions, layered production export, AI generation,
-or G-code.
+Do not implement a general photo editor, perfect semantic logo reconstruction,
+font identification, an automatic cut-ready claim, bridge/repair tools,
+production-layer export, AI generation, CAM, G-code, or DWG.
 
-## M06 exit rule
+## M07 exit rule
 
-Do not advance to M07 until every acceptance test and exit item in
-`docs/milestones/M06-svg-dxf.md` passes, the M06 pull request is reviewed,
-required Windows CI is green, the pull request is merged, Issue #7 is closed,
+Do not advance to M08 until every acceptance test and exit item in
+`docs/milestones/M07-raster-tracing.md` passes, the M07 pull request is reviewed,
+required Windows CI is green, the pull request is merged, Issue #8 is closed,
 and this file records the verified merge commit.
