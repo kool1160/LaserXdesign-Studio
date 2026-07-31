@@ -7,6 +7,7 @@ import {
   composeAffineTransforms,
   invertAffineTransform,
   pointInPolygon,
+  pointInCompoundPolygonEvenOdd,
   rotationTransformAt,
   scaleTransformAt,
   transformBounds,
@@ -96,5 +97,26 @@ describe("affine transforms", () => {
     ];
     expect(pointInPolygon({ xMm: 2, yMm: 2 }, triangle)).toBe(true);
     expect(pointInPolygon({ xMm: 8, yMm: 8 }, triangle)).toBe(false);
+  });
+
+  it("applies even-odd compound fill semantics to enclosed counters", () => {
+    const outer = [
+      { xMm: 0, yMm: 0 },
+      { xMm: 10, yMm: 0 },
+      { xMm: 10, yMm: 10 },
+      { xMm: 0, yMm: 10 },
+    ];
+    const counter = [
+      { xMm: 3, yMm: 3 },
+      { xMm: 7, yMm: 3 },
+      { xMm: 7, yMm: 7 },
+      { xMm: 3, yMm: 7 },
+    ];
+    expect(
+      pointInCompoundPolygonEvenOdd({ xMm: 1, yMm: 5 }, [outer, counter]),
+    ).toBe(true);
+    expect(
+      pointInCompoundPolygonEvenOdd({ xMm: 5, yMm: 5 }, [outer, counter]),
+    ).toBe(false);
   });
 });

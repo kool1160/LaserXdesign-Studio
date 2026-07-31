@@ -9,6 +9,7 @@ import {
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
+  textUpdateRequestSchema,
 } from "../../electron/ipc-contract.js";
 
 describe("typed IPC validation", () => {
@@ -128,6 +129,31 @@ describe("typed IPC validation", () => {
         fontPath: "C:\\Windows\\Fonts\\arial.ttf",
       }).success,
     ).toBe(false);
+    expect(
+      textUpdateRequestSchema.safeParse({
+        fontId: "bundled:noto-sans",
+        content: "LaserX",
+        sizeMm: 20,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+        arc: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      textUpdateRequestSchema.safeParse({
+        fontId: "bundled:noto-sans",
+        content: "LaserX",
+        sizeMm: 20,
+        trackingMm: 0,
+        wordSpacingMm: 0,
+        lineSpacing: 1.2,
+        alignment: "left",
+        arc: null,
+        mode: "explicit",
+      }).success,
+    ).toBe(true);
     expect(
       fontCatalogSchema.safeParse([
         {

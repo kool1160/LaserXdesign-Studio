@@ -367,6 +367,17 @@ export function pointInPolygon(
   return inside;
 }
 
+export function pointInCompoundPolygonEvenOdd(
+  point: PointMm,
+  contours: readonly (readonly PointMm[])[],
+): boolean {
+  return contours.reduce(
+    (inside, contour) =>
+      pointInPolygon(point, contour) ? !inside : inside,
+    false,
+  );
+}
+
 function clampZoom(zoomCssPxPerMm: number): number {
   return Math.min(
     MAX_ZOOM_CSS_PX_PER_MM,

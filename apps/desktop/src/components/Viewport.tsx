@@ -74,6 +74,31 @@ function pointsAttribute(points: readonly ScreenPointCssPx[]): string {
     .join(" ");
 }
 
+function compoundPathData(
+  contours: readonly {
+    closed: boolean;
+    points: readonly ScreenPointCssPx[];
+  }[],
+): string {
+  return contours
+    .map((contour) => {
+      const first = contour.points[0];
+      if (first === undefined) {
+        return "";
+      }
+      const segments = contour.points
+        .slice(1)
+        .map(
+          (point) =>
+            `L ${String(point.xCssPx)} ${String(point.yCssPx)}`,
+        )
+        .join(" ");
+      return `M ${String(first.xCssPx)} ${String(first.yCssPx)} ${segments}${contour.closed ? " Z" : ""}`;
+    })
+    .filter((path) => path.length > 0)
+    .join(" ");
+}
+
 function selectionMode(
   event: Pick<React.PointerEvent, "ctrlKey" | "metaKey" | "shiftKey">,
 ): "replace" | "add" | "toggle" {
@@ -442,7 +467,22 @@ export function Viewport({
           </g>
           <g className="placeholder-objects">
             {scene.objects.map((object) =>
-              object.closed ? (
+              object.kind === "compound" ? (
+                <path
+                  key={object.key}
+                  className={
+                    selectionIds.includes(object.objectId)
+                      ? "selected-object"
+                      : ""
+                  }
+                  data-object-id={object.objectId}
+                  data-source-id={object.sourceId}
+                  data-testid="compound-text-path"
+                  d={compoundPathData(object.contours)}
+                  fillRule={object.fillRule}
+                  clipRule={object.fillRule}
+                />
+              ) : object.closed ? (
                 <polygon
                   key={object.key}
                   className={

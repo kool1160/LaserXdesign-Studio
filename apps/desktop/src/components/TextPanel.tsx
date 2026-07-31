@@ -137,6 +137,7 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
   useEffect(() => {
     if (
       selectedId === undefined ||
+      availableSelectedFont === undefined ||
       form.content.length === 0 ||
       form.sizeMm <= 0 ||
       form.lineSpacing <= 0 ||
@@ -145,10 +146,12 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
       return;
     }
     const timer = window.setTimeout(() => {
-      run(() => window.laserx.updateSelectedText(form));
+      run(() =>
+        window.laserx.updateSelectedText({ ...form, mode: "live" }),
+      );
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [form, run, selectedId]);
+  }, [availableSelectedFont, form, run, selectedId]);
 
   const rememberFont = (fontId: string) => {
     const next = [fontId, ...recent.filter((id) => id !== fontId)].slice(0, 8);
@@ -160,7 +163,7 @@ export function TextPanel({ state, busy, run }: TextPanelProps) {
     rememberFont(form.fontId);
     run(() =>
       update
-        ? window.laserx.updateSelectedText(form)
+        ? window.laserx.updateSelectedText({ ...form, mode: "explicit" })
         : window.laserx.createText(form),
     );
   };

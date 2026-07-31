@@ -14,6 +14,7 @@ import {
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
+  textUpdateRequestSchema,
   type CreateDocumentRequest,
   type DesktopState,
   type LaserxDesktopApi,
@@ -22,6 +23,7 @@ import {
   type SetDisplayUnitRequest,
   type SetViewportPreferencesRequest,
   type TextLayoutRequestDto,
+  type TextUpdateRequestDto,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -98,8 +100,8 @@ const api: LaserxDesktopApi = Object.freeze({
       await ipcRenderer.invoke(IPC_CHANNELS.createText, validated),
     );
   },
-  async updateSelectedText(request: TextLayoutRequestDto) {
-    const validated = textLayoutRequestSchema.parse(request);
+  async updateSelectedText(request: TextUpdateRequestDto) {
+    const validated = textUpdateRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(
         IPC_CHANNELS.updateSelectedText,

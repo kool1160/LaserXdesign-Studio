@@ -199,17 +199,22 @@ export const setViewportPreferencesRequestSchema = z.strictObject({
   snapToDocument: z.boolean().optional(),
 });
 
+const textLayoutRequestShape = {
+  fontId: z.string().trim().min(1).max(200),
+  content: z.string().min(1).max(10_000),
+  sizeMm: positiveNumber,
+  trackingMm: finiteNumber,
+  wordSpacingMm: finiteNumber,
+  lineSpacing: positiveNumber,
+  alignment: z.enum(["left", "center", "right"]),
+  arc: textArcSchema.nullable(),
+};
 export const textLayoutRequestSchema: z.ZodType<TextLayoutRequest> =
-  z.strictObject({
-    fontId: z.string().trim().min(1).max(200),
-    content: z.string().min(1).max(10_000),
-    sizeMm: positiveNumber,
-    trackingMm: finiteNumber,
-    wordSpacingMm: finiteNumber,
-    lineSpacing: positiveNumber,
-    alignment: z.enum(["left", "center", "right"]),
-    arc: textArcSchema.nullable(),
-  });
+  z.strictObject(textLayoutRequestShape);
+export const textUpdateRequestSchema = z.strictObject({
+  ...textLayoutRequestShape,
+  mode: z.enum(["live", "explicit"]),
+});
 
 const fontCategorySchema = z.enum([
   "stencil",
@@ -461,6 +466,7 @@ export type ResolveRecoveryRequest = z.infer<
   typeof resolveRecoveryRequestSchema
 >;
 export type TextLayoutRequestDto = z.infer<typeof textLayoutRequestSchema>;
+export type TextUpdateRequestDto = z.infer<typeof textUpdateRequestSchema>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -482,7 +488,7 @@ export interface LaserxDesktopApi {
   getFontCatalog(): Promise<FontCatalogEntry[]>;
   createText(request: TextLayoutRequestDto): Promise<CommandResult>;
   updateSelectedText(
-    request: TextLayoutRequestDto,
+    request: TextUpdateRequestDto,
   ): Promise<CommandResult>;
   resolveRecovery(request: ResolveRecoveryRequest): Promise<CommandResult>;
   onStateChanged(listener: (state: DesktopState) => void): () => void;

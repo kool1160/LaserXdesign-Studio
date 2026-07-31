@@ -33,6 +33,18 @@ remain unchanged until the user explicitly chooses a substitute and updates
 the text. Converting text creates ordinary path children and can preserve the
 editable text record as group source metadata.
 
+Live editing is allowed only while the selected object's saved font ID and
+fingerprint exactly match the current catalog. Both the renderer and
+main-process service enforce this rule. A mismatch pauses live materialization;
+choosing a current font and pressing Update is the explicit, undoable
+substitution boundary.
+
+Text contours use the even-odd compound-fill rule in both viewport projection
+and domain hit testing. All contours for an editable text object project to one
+compound SVG path, so enclosed counters remain empty regardless of contour
+winding. Outline conversion still emits every contour as an individual path
+child for later geometric containment analysis.
+
 ## Rationale
 
 Font files are privileged local inputs, while the renderer is untrusted.

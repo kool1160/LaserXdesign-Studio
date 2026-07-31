@@ -28,6 +28,7 @@ import {
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
+  textUpdateRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 
@@ -176,7 +177,7 @@ function registerIpc(): void {
   ipcMain.handle(
     IPC_CHANNELS.updateSelectedText,
     (_event, request: unknown) => {
-      const validated = textLayoutRequestSchema.parse(request);
+      const validated = textUpdateRequestSchema.parse(request);
       return requireController().updateSelectedText(validated);
     },
   );

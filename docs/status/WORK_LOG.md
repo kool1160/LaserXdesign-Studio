@@ -182,3 +182,24 @@ advanced OpenType feature controls, arbitrary path text, embedded font files,
 automatic bridging, and node editing remain excluded.
 - Next allowed work: review M04 only. Do not merge, close Issue #5, advance to
 M05, or begin M05 implementation until final-head Windows CI and review pass.
+
+## 2026-07-31 — M04 review correctness repairs
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #18 blocking review findings
+- Milestone: M04 — Text, Fonts, and Outline Conversion
+- Delivered: Live text materialization now pauses when the saved font ID and
+fingerprint do not exactly match the catalog, with the rule enforced in both
+the renderer and main process; explicit substitution remains undoable. Text
+objects now project as one even-odd compound SVG path, and domain hit testing
+uses the same rule so enclosed counters remain empty. Outline conversion still
+preserves every contour.
+- Verification: focused geometry, domain, IPC, viewport, and packaged
+regressions cover compound counters and same-ID/changed-fingerprint reopen,
+selection, explicit substitution, and undo. The complete suite contains 85
+unit/integration tests and 12 packaged Windows E2E scenarios.
+- Decisions: ADR 0012 now records the explicit substitution boundary and the
+shared even-odd compound-fill policy.
+- Known limitations: existing documented M04 exclusions remain unchanged.
+- Next allowed work: review M04 only after final-head local verification and
+GitHub CI pass. Do not merge, close Issue #5, or advance to M05.

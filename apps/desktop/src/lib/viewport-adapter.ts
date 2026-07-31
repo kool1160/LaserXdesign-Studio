@@ -41,13 +41,30 @@ export interface StockPrimitive {
   heightCssPx: number;
 }
 
-export interface ObjectPrimitive {
+interface ObjectPrimitiveBase {
   key: string;
   objectId: string;
   sourceId: string;
+}
+
+export interface PointObjectPrimitive extends ObjectPrimitiveBase {
+  kind: "points";
   closed: boolean;
   points: ScreenPointCssPx[];
 }
+
+export interface CompoundObjectPrimitive extends ObjectPrimitiveBase {
+  kind: "compound";
+  fillRule: "evenodd";
+  contours: Array<{
+    closed: boolean;
+    points: ScreenPointCssPx[];
+  }>;
+}
+
+export type ObjectPrimitive =
+  | PointObjectPrimitive
+  | CompoundObjectPrimitive;
 
 export interface GuidePrimitive {
   id: string;
@@ -372,28 +389,35 @@ function objectPrimitives(
     );
   }
   if (object.type === "text") {
-    return object.contours.map((contour, index) => ({
-      key: `${selectionId}:${object.id}:text:${String(index)}`,
-      objectId: selectionId,
-      sourceId: object.id,
-      closed: contour.closed,
-      points: contour.points.map((point) =>
-        domainToScreen(
-          applyAffineTransform(
-            {
-              xMm: point.xMm + object.origin.xMm,
-              yMm: point.yMm + object.origin.yMm,
-            },
-            worldTransform,
+    return [
+      {
+        kind: "compound",
+        key: `${selectionId}:${object.id}:text`,
+        objectId: selectionId,
+        sourceId: object.id,
+        fillRule: "evenodd",
+        contours: object.contours.map((contour) => ({
+          closed: contour.closed,
+          points: contour.points.map((point) =>
+            domainToScreen(
+              applyAffineTransform(
+                {
+                  xMm: point.xMm + object.origin.xMm,
+                  yMm: point.yMm + object.origin.yMm,
+                },
+                worldTransform,
+              ),
+              viewport,
+            ),
           ),
-          viewport,
-        ),
-      ),
-    }));
+        })),
+      },
+    ];
   }
   const primitive = primitiveDomainPoints(object);
   return [
     {
+      kind: "points",
       key: `${selectionId}:${object.id}`,
       objectId: selectionId,
       sourceId: object.id,

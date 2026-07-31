@@ -6,6 +6,7 @@ import {
   composeAffineTransforms,
   distancePointToSegment,
   invertAffineTransform,
+  pointInCompoundPolygonEvenOdd,
   pointInPolygon,
   type AffineTransformMm,
   type BoundsMm,
@@ -114,8 +115,9 @@ function primitiveHitDistance(
   transform: AffineTransformMm,
 ): number {
   if (object.type === "text") {
-    return object.contours.reduce((minimum, contour) => {
-      const points = contour.points.map((candidate) =>
+    const contours = object.contours.map((contour) => ({
+      closed: contour.closed,
+      points: contour.points.map((candidate) =>
         applyAffineTransform(
           {
             xMm: candidate.xMm + object.origin.xMm,
@@ -123,14 +125,25 @@ function primitiveHitDistance(
           },
           transform,
         ),
-      );
-      return Math.min(
-        minimum,
-        contour.closed && pointInPolygon(point, points)
-          ? 0
-          : distanceToPolyline(point, points, contour.closed),
-      );
-    }, Number.POSITIVE_INFINITY);
+      ),
+    }));
+    const filled = pointInCompoundPolygonEvenOdd(
+      point,
+      contours
+        .filter((contour) => contour.closed)
+        .map((contour) => contour.points),
+    );
+    if (filled) {
+      return 0;
+    }
+    return contours.reduce(
+      (minimum, contour) =>
+        Math.min(
+          minimum,
+          distanceToPolyline(point, contour.points, contour.closed),
+        ),
+      Number.POSITIVE_INFINITY,
+    );
   }
   if (object.type === "ellipse") {
     const local = applyAffineTransform(

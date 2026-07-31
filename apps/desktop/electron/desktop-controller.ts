@@ -23,6 +23,7 @@ import type {
   DesktopState,
   ResolveRecoveryRequest,
   SetViewportPreferencesRequest,
+  TextUpdateRequestDto,
 } from "./ipc-contract.js";
 import { AppLogger } from "./logger.js";
 import {
@@ -322,7 +323,7 @@ export class DesktopController {
   }
 
   public async updateSelectedText(
-    request: TextLayoutRequest,
+    request: TextUpdateRequestDto,
   ): Promise<CommandResult> {
     return this.#run(() => {
       const state = this.#session.state;
@@ -338,7 +339,20 @@ export class DesktopController {
       if (previous === undefined) {
         return;
       }
-      const layout = this.#fontEngine.layout(request);
+      const { mode, ...layoutRequest } = request;
+      const layout = this.#fontEngine.layout(layoutRequest);
+      if (
+        mode === "live" &&
+        !this.#fontEngine.catalog().some(
+          (font) =>
+            font.id === previous.style.fontId &&
+            font.fingerprint === previous.style.fontFingerprint,
+        )
+      ) {
+        throw new RangeError(
+          "Live editing is paused until the font substitution is explicitly confirmed.",
+        );
+      }
       if (layout.missingCodePoints.length > 0) {
         throw new RangeError(
           `The selected font is missing ${layout.missingCodePoints

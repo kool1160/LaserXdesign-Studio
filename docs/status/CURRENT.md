@@ -99,6 +99,6 @@ with optional source preservation, missing-font geometry preservation, and
 schema-v4 persistence/migration.
 
 Local `pnpm verify`, the font audit, repository guard, and `git diff --check`
-pass with 82 unit/integration tests and 11 packaged Windows E2E scenarios.
+pass with 85 unit/integration tests and 12 packaged Windows E2E scenarios.
 M04 remains the active gate. Do not advance to M05, merge the pull request, or
 close Issue #5 until review and final-head Windows CI are complete.

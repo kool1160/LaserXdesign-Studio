@@ -6,6 +6,11 @@ All notable project changes will be documented here.
 
 ### Fixed
 
+- Selecting text with a missing or changed font fingerprint no longer triggers
+  live rematerialization; explicit substitution remains undoable.
+- Editable text now renders and hit-tests as one even-odd compound shape, so
+  enclosed counters remain empty while outline conversion preserves every
+  contour.
 - Alt-drag and middle-button pan gestures now take precedence over artwork and
   transform-handle hit testing, so viewport navigation cannot accidentally
   mutate geometry or history.

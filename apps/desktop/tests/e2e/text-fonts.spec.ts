@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 import { expect, test } from "@playwright/test";
 
@@ -34,6 +34,14 @@ test("packaged text stays editable, arcs, converts, undoes, and reopens", async 
         ),
       )
       .toBe("text");
+    const compoundPath = page.getByTestId("compound-text-path");
+    await expect(compoundPath).toHaveAttribute("fill-rule", "evenodd");
+    await expect
+      .poll(async () => {
+        const path = (await compoundPath.getAttribute("d")) ?? "";
+        return path.match(/\bM\b/gu)?.length ?? 0;
+      })
+      .toBeGreaterThanOrEqual(3);
 
     await page.getByLabel("Arc text").check();
     await page.getByTestId("arc-radius").fill("90");
@@ -101,6 +109,183 @@ test("packaged text stays editable, arcs, converts, undoes, and reopens", async 
         }),
       )
       .toBe(savedContours);
+  } finally {
+    await killAndRemove(reopened);
+  }
+});
+
+test("changed font fingerprint preserves geometry until explicit substitution", async () => {
+  const launched = await launchPackaged();
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await expect
+      .poll(() => page.getByTestId("font-family").locator("option").count())
+      .toBeGreaterThanOrEqual(6);
+    await page.getByTestId("text-content").fill("O LaserX");
+    await page.getByTestId("create-text").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.laserx.getState()).project.document.objects.at(-1)
+              ?.type,
+        ),
+      )
+      .toBe("text");
+    await clickAndWaitForCommand(page, "Save as");
+    await waitForProjectSchema(launched.projectPath, 4);
+  } finally {
+    await kill(launched);
+  }
+
+  const project = JSON.parse(
+    await readFile(launched.projectPath, "utf8"),
+  ) as {
+    document: {
+      objects: Array<{
+        type: string;
+        contours?: unknown;
+        style?: { fontFingerprint: string };
+      }>;
+    };
+  };
+  const text = project.document.objects.at(-1);
+  if (
+    text?.type !== "text" ||
+    text.style === undefined ||
+    text.contours === undefined
+  ) {
+    throw new Error("Expected saved editable text.");
+  }
+  const preservedContours = JSON.stringify(text.contours);
+  text.style.fontFingerprint = "f".repeat(64);
+  await writeFile(
+    launched.projectPath,
+    `${JSON.stringify(project, null, 2)}\n`,
+    "utf8",
+  );
+
+  const reopened = await launchPackaged(launched.directory);
+  try {
+    const page = await reopened.electronApp.firstWindow();
+    await page.locator(".recent-section button").first().click();
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.laserx.getState()).project.document.objects.at(-1)
+              ?.type,
+        ),
+      )
+      .toBe("text");
+    await page.evaluate(async () => {
+      await window.laserx.editorAction({ type: "selection.all" });
+    });
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          async () =>
+            (await window.laserx.getState()).editor.selectionIds.length,
+        ),
+      )
+      .toBe(1);
+    const rejectedLiveUpdate = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      const object = state.project.document.objects.at(-1);
+      if (object?.type !== "text") {
+        throw new Error("Expected selected text.");
+      }
+      return window.laserx.updateSelectedText({
+        fontId: object.style.fontId,
+        content: object.content,
+        sizeMm: object.style.sizeMm,
+        trackingMm: object.style.trackingMm,
+        wordSpacingMm: object.style.wordSpacingMm,
+        lineSpacing: object.style.lineSpacing,
+        alignment: object.style.alignment,
+        arc: object.arc,
+        mode: "live",
+      });
+    });
+    expect(rejectedLiveUpdate).toMatchObject({
+      ok: false,
+      error:
+        "Live editing is paused until the font substitution is explicitly confirmed.",
+    });
+    await expect(page.getByTestId("missing-font-warning")).toBeVisible();
+    await page.waitForTimeout(800);
+
+    const unchanged = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      const object = state.project.document.objects.at(-1);
+      return {
+        dirty: state.dirty,
+        undoDepth: state.editor.history.undoDepth,
+        fingerprint:
+          object?.type === "text" ? object.style.fontFingerprint : "",
+        contours:
+          object?.type === "text" ? JSON.stringify(object.contours) : "",
+      };
+    });
+    expect(unchanged).toEqual({
+      dirty: false,
+      undoDepth: 0,
+      fingerprint: "f".repeat(64),
+      contours: preservedContours,
+    });
+
+    await page
+      .getByTestId("font-family")
+      .selectOption("bundled:noto-serif");
+    await page.getByTestId("update-text").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async (originalContours) => {
+          const state = await window.laserx.getState();
+          const object = state.project.document.objects.at(-1);
+          return {
+            dirty: state.dirty,
+            undoDepth: state.editor.history.undoDepth,
+            substituted:
+              object?.type === "text" &&
+              object.style.fontFingerprint !== "f".repeat(64),
+            contoursChanged:
+              object?.type === "text" &&
+              JSON.stringify(object.contours) !== originalContours,
+          };
+        }, preservedContours),
+      )
+      .toMatchObject({
+        dirty: true,
+        undoDepth: 1,
+        substituted: true,
+        contoursChanged: true,
+      });
+
+    await page.getByTestId("undo").click();
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const state = await window.laserx.getState();
+          const object = state.project.document.objects.at(-1);
+          return {
+            dirty: state.dirty,
+            fingerprint:
+              object?.type === "text"
+                ? object.style.fontFingerprint
+                : "",
+            contours:
+              object?.type === "text"
+                ? JSON.stringify(object.contours)
+                : "",
+          };
+        }),
+      )
+      .toEqual({
+        dirty: false,
+        fingerprint: "f".repeat(64),
+        contours: preservedContours,
+      });
   } finally {
     await killAndRemove(reopened);
   }
