@@ -169,7 +169,7 @@ the document, dirty state, or history. Accept uses one `objects.import`
 command, after which ordinary schema-v5 paths enter the standard
 `packages/cutability` interface. M07 reports that manufacturing settings are
 required and `cutReady` is false; M08 owns actual manufacturing-rule analysis.
-ADR 0017 records the engine, licensing, trust boundary, and limits.
+ADR 0019 records the engine, licensing, trust boundary, and limits.
 
 ## State flow
 

@@ -22,7 +22,7 @@ if (
 }
 
 const adr = await readFile(
-  resolve(root, "docs/decisions/0017-secure-replaceable-raster-tracing.md"),
+  resolve(root, "docs/decisions/0019-secure-replaceable-raster-tracing.md"),
   "utf8",
 );
 const licenseReview = await readFile(

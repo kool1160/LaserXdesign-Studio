@@ -332,7 +332,7 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
   contains 186 unit/integration tests and 19 packaged Electron E2E scenarios.
   Four reviewed exact goldens cover a clean logo, noisy photo, anti-aliased
   text, and a 2048 x 1536 high-resolution source.
-- Decisions: ADR 0017 keeps source data behind main-process tokens, pins the
+- Decisions: ADR 0019 keeps source data behind main-process tokens, pins the
   original `laserx-grid-trace` 1.0.0 adapter, defines the deterministic
   preprocessing and physical-scale contract, and records hard byte, pixel,
   edge, node, preview, worker, cancellation, persistence, and cutability

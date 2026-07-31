@@ -25,7 +25,7 @@ REQUIRED_FILES = (
     "docs/milestones/M01-desktop-shell.md",
     "docs/milestones/M12-beta-hardening.md",
     "docs/decisions/0016-secure-svg-dxf-interchange.md",
-    "docs/decisions/0017-secure-replaceable-raster-tracing.md",
+    "docs/decisions/0019-secure-replaceable-raster-tracing.md",
     ".github/workflows/m06-svg-dxf.yml",
     ".github/workflows/m07-raster-tracing.yml",
     "fixtures/svg/24-inch.svg",
