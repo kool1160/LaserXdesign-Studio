@@ -1,10 +1,10 @@
-name: M02 Document Viewport
+name: M03 Editing Core
 
 on:
   push:
     branches:
       - main
-      - "feat/m02-document-viewport"
+      - "feat/m03-editing-core"
   pull_request:
 
 permissions:
@@ -41,14 +41,14 @@ jobs:
       - name: Verify clean patch formatting
         run: git diff --check
 
-      - name: Verify M02
+      - name: Verify M03
         run: pnpm verify
 
-      - name: Upload packaged viewport smoke application
+      - name: Upload packaged editing smoke application
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: laserx-m02-windows-unpacked
+          name: laserx-m03-windows-unpacked
           path: apps/desktop/dist-packaged/win-unpacked
           if-no-files-found: error
           retention-days: 7

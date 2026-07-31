@@ -9,3 +9,5 @@ Accepted implementation decisions:
 - ADR 0007 — project schema v1, atomic saves, and recovery
 - ADR 0008 — canonical document and viewport boundary
 - ADR 0009 — project schema v2 migration
+- ADR 0010 — editing commands, state ownership, and history
+- ADR 0011 — project schema v3 editing state

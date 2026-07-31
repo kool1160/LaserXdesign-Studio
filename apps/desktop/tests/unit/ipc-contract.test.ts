@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDocumentRequestSchema,
   desktopStateSchema,
+  editorActionRequestSchema,
   openRecentRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -33,6 +34,24 @@ describe("typed IPC validation", () => {
         gridSpacingMm: 0,
       }).success,
     ).toBe(false);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "objects.move",
+        objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+        deltaXmm: 1,
+        deltaYmm: 2,
+        document: { arbitrary: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "objects.duplicate",
+        objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+        idMap: {},
+        offsetXmm: 10,
+        offsetYmm: 10,
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts only a complete renderer document snapshot", () => {
@@ -51,10 +70,37 @@ describe("typed IPC validation", () => {
               rulersVisible: true,
               gridVisible: true,
               gridSpacingMm: 12.7,
-              snapping: { enabled: false, snapToGrid: true },
+              snapping: {
+                enabled: false,
+                snapToGrid: true,
+                snapToGuides: true,
+                snapToObjects: true,
+                snapToDocument: true,
+              },
             },
           },
+          layers: [
+            {
+              id: "123e4567-e89b-42d3-a456-426614174002",
+              name: "Layer 1",
+              visible: true,
+              locked: false,
+            },
+          ],
+          activeLayerId: "123e4567-e89b-42d3-a456-426614174002",
+          guides: [],
           objects: [],
+        },
+      },
+      editor: {
+        selectionIds: [],
+        selectionBounds: null,
+        clipboardHasContent: false,
+        history: {
+          undoDepth: 0,
+          redoDepth: 0,
+          limit: 100,
+          transactionActive: false,
         },
       },
       filePath: null,
@@ -64,5 +110,26 @@ describe("typed IPC validation", () => {
       recovery: null,
     });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts signed exact coordinates and zero line extents", () => {
+    const result = editorActionRequestSchema.safeParse({
+      type: "objects.set-bounds",
+      objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+      xMm: 0,
+      yMm: -25,
+      widthMm: 120,
+      heightMm: 0,
+      lockAspectRatio: false,
+    });
+    expect(result.success).toBe(true);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "objects.set-bounds",
+        objectIds: ["123e4567-e89b-42d3-a456-426614174002"],
+        widthMm: -1,
+        lockAspectRatio: false,
+      }).success,
+    ).toBe(false);
   });
 });

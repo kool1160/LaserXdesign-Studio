@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   ProjectSession,
+  type EditorActionRequest,
   type ProjectFileService,
   type RecoverySnapshot,
 } from "@laserx/application";
@@ -100,23 +101,9 @@ export class DesktopController {
       project: {
         id: session.project.project.id,
         name: session.project.project.name,
-        document: {
-          kind: session.project.document.kind,
-          id: session.project.document.id,
-          dimensions: { ...session.project.document.dimensions },
-          origin: { ...session.project.document.origin },
-          settings: {
-            ...session.project.document.settings,
-            viewport: {
-              ...session.project.document.settings.viewport,
-              snapping: {
-                ...session.project.document.settings.viewport.snapping,
-              },
-            },
-          },
-          objects: structuredClone(session.project.document.objects),
-        },
+        document: structuredClone(session.project.document),
       },
+      editor: structuredClone(session.editor),
       filePath: session.filePath,
       dirty: session.dirty,
       recovered: session.recovered,
@@ -229,10 +216,27 @@ export class DesktopController {
       if (updates.snapToGrid !== undefined) {
         domainUpdates.snapToGrid = updates.snapToGrid;
       }
+      if (updates.snapToGuides !== undefined) {
+        domainUpdates.snapToGuides = updates.snapToGuides;
+      }
+      if (updates.snapToObjects !== undefined) {
+        domainUpdates.snapToObjects = updates.snapToObjects;
+      }
+      if (updates.snapToDocument !== undefined) {
+        domainUpdates.snapToDocument = updates.snapToDocument;
+      }
       this.#session.dispatch({
         type: "project.set-viewport-preferences",
         updates: domainUpdates,
       });
+    });
+  }
+
+  public async editorAction(
+    request: EditorActionRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.performEditorAction(request);
     });
   }
 

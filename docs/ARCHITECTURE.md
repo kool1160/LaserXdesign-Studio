@@ -52,7 +52,7 @@ The application-command interface and file-service boundary live in
 migration registry live in `packages/project-format`; Electron adapters perform
 actual filesystem access.
 
-For M02, the authoritative session contains a schema-v2 `LaserxDocument`.
+For M02, the authoritative session introduced a schema-v2 `LaserxDocument`.
 `packages/domain` owns millimeter dimensions, the Cartesian stock region,
 display/viewport preferences, stable IDs, placeholder object types, and the
 domain-unit hit-test contract. `packages/geometry` owns pure coordinate and
@@ -60,6 +60,24 @@ viewport math. `apps/desktop/src/lib/viewport-adapter.ts` is the renderer
 adapter: it translates document objects, grid lines, rulers, and bounds into
 CSS-pixel SVG primitives. React forwards interactions and renders the adapter
 projection; it does not calculate canonical dimensions or mutate geometry.
+
+For M03, the authoritative session writes schema v3 and explicitly separates
+state ownership:
+
+- `packages/domain` owns serializable layers, guides, recursive groups,
+  millimeter geometry, affine transforms, hit testing, snapping, and pure
+  editing commands;
+- `packages/application` owns selection, clipboard, fresh-ID allocation,
+  bounded history, transactions, undo/redo, and command orchestration;
+- Electron main owns the application session and validates all renderer action
+  requests;
+- React owns only input/form and ephemeral camera presentation state.
+
+Pointer, keyboard, menus, toolbars, and inspector controls all dispatch the
+same `EditorActionRequest` union. The renderer adapter projects transformed
+objects and selection handles to SVG, but SVG and CSS state are never
+authoritative geometry. ADRs 0010–0011 record the editing and persistence
+decisions.
 
 ## State flow
 
@@ -114,12 +132,17 @@ The final representation will be selected and recorded during the relevant miles
 
 All persisted dimensions use millimeters. UI may display inches or millimeters. DXF/SVG adapters handle unit metadata explicitly and are covered by scale fixtures.
 
-The M02 domain coordinate system is Cartesian with the stock origin at its
+The domain coordinate system is Cartesian with the stock origin at its
 lower-left corner, positive X right, and positive Y up. Screen Y points down.
 The pure boundary conversion and inverse are specified in
 `docs/UNITS_AND_COORDINATES.md` and tested to `1e-9 mm`. Camera scale is CSS
 pixels per millimeter; device-pixel ratio affects rendering density, not
 measurements.
+
+M03 object placement uses explicit affine matrices in millimeters. Composition,
+world bounds, handle scaling/rotation, snapping targets, and group transform
+composition remain in domain/geometry or renderer-adapter modules rather than
+React components.
 
 ## Performance strategy
 

@@ -3,7 +3,12 @@ import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { killAndRemove, launchPackaged } from "./helpers.js";
+import {
+  clickAndWaitForCommand,
+  killAndRemove,
+  launchPackaged,
+  waitForProjectSchema,
+} from "./helpers.js";
 
 test("pan, zoom, fit, rulers, grid, and exact readout work at high DPI", async () => {
   const launched = await launchPackaged(
@@ -39,9 +44,11 @@ test("pan, zoom, fit, rulers, grid, and exact readout work at high DPI", async (
       .not.toBe(initialZoom);
 
     await page.mouse.move(bounds.x + 300, bounds.y + 220);
+    await page.keyboard.down("Alt");
     await page.mouse.down();
     await page.mouse.move(bounds.x + 360, bounds.y + 270);
     await page.mouse.up();
+    await page.keyboard.up("Alt");
 
     await page.getByTestId("reset-view").click();
     await expect(page.getByTestId("zoom-readout")).toHaveText("100%");
@@ -103,64 +110,12 @@ test("schema-v1 project opens through the packaged migration path", async () => 
       documentId: "123e4567-e89b-42d3-a456-426614174000",
       dimensions: { widthMm: 304.8, heightMm: 304.8 },
     });
-    const saveButton = page.getByRole("button", {
-      name: "Save",
-      exact: true,
-    });
-    await saveButton.evaluate(async (element) => {
-      const button = element as HTMLButtonElement;
-      await new Promise<void>((resolveSave, rejectSave) => {
-        let observedBusy = button.disabled;
-        const observer = new MutationObserver(() => {
-          if (button.disabled) {
-            observedBusy = true;
-          } else if (observedBusy) {
-            window.clearTimeout(timeoutId);
-            observer.disconnect();
-            resolveSave();
-          }
-        });
-        const timeoutId = window.setTimeout(() => {
-          observer.disconnect();
-          rejectSave(
-            new Error(
-              "Save did not complete its disabled-to-enabled UI cycle within 10 seconds.",
-            ),
-          );
-        }, 10_000);
-        observer.observe(button, {
-          attributes: true,
-          attributeFilter: ["disabled"],
-        });
-        button.click();
-      });
-    });
-    await expect
-      .poll(
-        async () => {
-          try {
-            const candidate = JSON.parse(
-              await readFile(launched.projectPath, "utf8"),
-            ) as { schemaVersion?: unknown };
-            return candidate.schemaVersion;
-          } catch (error) {
-            return error instanceof Error
-              ? `parse/read error: ${error.message}`
-              : "parse/read error: unknown failure";
-          }
-        },
-        {
-          message:
-            "Expected the explicitly saved .laserx file to become valid schema version 2.",
-          timeout: 10_000,
-          intervals: [50, 100, 250, 500],
-        },
-      )
-      .toBe(2);
+    await clickAndWaitForCommand(page, "Save");
+    await waitForProjectSchema(launched.projectPath, 3);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       schemaVersion: number;
     };
-    expect(saved.schemaVersion).toBe(2);
+    expect(saved.schemaVersion).toBe(3);
   } finally {
     await killAndRemove(launched);
   }

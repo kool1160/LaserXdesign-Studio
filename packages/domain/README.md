@@ -2,8 +2,9 @@
 
 Serializable project/document entities, object IDs, layers, transforms, units, process settings, invariants, command contracts, and migration-neutral types. No UI, Electron, Node-only, or file-format dependencies.
 
-M02 implements canonical millimeter dimensions, a Cartesian stock/document,
-display and viewport preferences, stable IDs, minimal line/rectangle/ellipse/
-path objects, bounds, conversion helpers, immutable updates, and a hit-test
-interface. It does not implement selection, transforms, layers, or production
-geometry editing.
+M03 implements canonical millimeter documents, ordered layers and guides,
+stable IDs, minimal line/rectangle/ellipse/path/group objects, affine
+transforms, bounds, hit testing, snapping, and pure editing commands. It has no
+React, Electron, Node, clipboard, or history dependency. Production text,
+curves, node editing, booleans, offsets, and manufacturing geometry remain
+deferred.

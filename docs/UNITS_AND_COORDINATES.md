@@ -31,8 +31,49 @@ The domain is Cartesian:
 - the stock occupies `(0, 0)` through `(widthMm, heightMm)`;
 - object geometry is never stored in screen pixels.
 
-The M02 line, rectangle, ellipse, and path objects use explicit `Mm` field
-names. A path declares whether it is open or closed.
+Line, rectangle, ellipse, and path objects use explicit `Mm` field names. A
+path declares whether it is open or closed.
+
+## M03 transforms
+
+Each object stores raw geometry in canonical millimeters plus an affine
+transform:
+
+```text
+x' = a*x + c*y + eMm
+y' = b*x + d*y + fMm
+```
+
+Translation fields are explicitly millimeters. Scale, rotation, and mirror
+compose matrices at a documented domain pivot. A group adds one parent matrix;
+its child geometry and IDs stay unchanged. Ungrouping composes the parent
+matrix into each child, preserving the same world geometry.
+
+Exact inspector values are converted at the renderer-adapter boundary before
+the validated command enters the application. Repeated-transform tests use the
+existing `1e-9 mm` numerical tolerance. That tolerance covers IEEE-754 matrix
+composition error and is not a manufacturing tolerance.
+
+Inspector X/Y values are signed finite coordinates, so zero and positions
+outside the stock region are valid. Inspector width/height values are
+nonnegative dimensions. A line's intrinsically zero bounds axis remains zero
+while its other axis can be resized and its X/Y position can be changed. A
+request to expand an intrinsically zero bounds axis is rejected explicitly
+instead of dividing by zero or producing a non-invertible transform.
+
+With aspect locking enabled, the last edited Width or Height field is the
+authoritative dimension and the other nonzero axis is derived from the current
+selection ratio. Shift-dragging an edge handle uses that edge's scale factor
+uniformly on both axes: east/west handles pivot at the opposite edge and
+vertical center, while north/south handles pivot at the opposite edge and
+horizontal center. Corner handles retain their opposite-corner pivot.
+
+Move snapping is evaluated in domain millimeters. Enabled targets are grid
+lines, explicit guides, document bounds/center, and visible editable object
+bounds/centers. Candidate distance is compared across enabled target families;
+an exact zero-distance guide, document, or object match cannot be displaced by
+a nearby grid line. Camera position and device-pixel ratio do not affect
+targets.
 
 ## Renderer conversion boundary
 
@@ -52,7 +93,8 @@ yMm = (originScreenYCssPx - screenYCssPx) / zoomCssPxPerMm
 Pan changes only the two screen-origin fields. Zoom changes the CSS-pixel scale
 and screen origin. Zoom around a pointer first resolves the domain point under
 the pointer, then chooses the new screen origin so that domain point remains
-fixed.
+fixed. Explicit Alt-drag and middle-button gestures take precedence over
+artwork and transform-handle hit testing, so panning changes camera state only.
 
 The coordinate round-trip tolerance is `1e-9 mm`. This tolerance covers normal
 IEEE-754 inverse-operation error; it is not a manufacturing tolerance.
@@ -67,7 +109,8 @@ canonical dimensions and displayed measurements remain unchanged.
 
 ## Hit testing
 
-M02 defines `HitTestService`, `HitTestRequest`, and `HitTestResult` in the
-domain. The request uses a domain point and millimeter tolerance. M02 does not
-implement selection, hit-test algorithms, handles, or transforms; those remain
-blocked until M03.
+Hit testing consumes a domain point and millimeter tolerance. M03 returns
+topmost object IDs in layer/z order and implements domain-bounds marquee
+testing. Hidden- or locked-layer objects are excluded before selection and
+editing. Transform handles are screen projections only; their gestures convert
+back to domain commands through the renderer adapter.

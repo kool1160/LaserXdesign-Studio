@@ -213,7 +213,7 @@ button:disabled {
   display: grid;
   flex: 1 1 auto;
   min-height: 0;
-  grid-template-columns: 286px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr) 292px;
 }
 
 .sidebar {
@@ -224,6 +224,11 @@ button:disabled {
   background: #11161c;
   scrollbar-color: #39444c #11161c;
   scrollbar-width: thin;
+}
+
+.editing-sidebar {
+  border-right: 0;
+  border-left: 1px solid #222a31;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -299,6 +304,164 @@ button:disabled {
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
+}
+
+.button-grid {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.button-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.button-grid.compact.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.button-grid button,
+.inspector-form button,
+.rotate-row button,
+.section-heading button {
+  min-width: 0;
+  padding: 7px 5px;
+  border: 1px solid #303a42;
+  border-radius: 5px;
+  color: #bfc9ce;
+  background: #1a2229;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.button-grid button:hover:not(:disabled),
+.inspector-form button:hover:not(:disabled),
+.rotate-row button:hover:not(:disabled),
+.section-heading button:hover:not(:disabled) {
+  border-color: #42605e;
+  color: #e9fffb;
+  background: #22312f;
+}
+
+.selection-summary {
+  margin: 10px 0 0;
+  color: #a9b5bb;
+  font-size: 11px;
+}
+
+.inspector-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.inspector-form label,
+.rotate-row label {
+  display: grid;
+  gap: 5px;
+  color: #75838c;
+  font-size: 9px;
+}
+
+.inspector-form input,
+.rotate-row input,
+.layer-list input {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #303942;
+  border-radius: 4px;
+  color: #d6dfe3;
+  background: #0c1116;
+  font: inherit;
+}
+
+.inspector-form .check-row,
+.inspector-form button {
+  grid-column: 1 / -1;
+}
+
+.check-row {
+  display: flex !important;
+  align-items: center;
+  gap: 7px !important;
+  color: #aab5bb !important;
+  font-size: 10px !important;
+}
+
+.check-row input {
+  accent-color: #5ccdbc;
+}
+
+.rotate-row {
+  display: grid;
+  align-items: end;
+  gap: 7px;
+  margin-top: 9px;
+  grid-template-columns: 1fr auto;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-heading button {
+  padding: 4px 7px;
+}
+
+.layer-list,
+.guide-list {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layer-list li {
+  display: grid;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  grid-template-columns: 24px minmax(0, 1fr) repeat(4, 24px);
+}
+
+.layer-list li.active {
+  border-color: #31534f;
+  background: #182522;
+}
+
+.layer-list button,
+.guide-list button {
+  display: grid;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border-radius: 4px;
+  color: #93a2aa;
+  background: #1b2329;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.layer-list .layer-activate {
+  color: #6ed5c5;
+  font-weight: 700;
+}
+
+.guide-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8b989f;
+  font: 10px "Cascadia Mono", Consolas, monospace;
 }
 
 .recent-section li button {
@@ -655,6 +818,62 @@ button:disabled {
   stroke: #209b89;
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
+}
+
+.placeholder-objects .selected-object {
+  fill: rgb(64 211 188 / 23%);
+  stroke: #55e0ca;
+}
+
+.guides line {
+  stroke: #e9a959;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.marquee-rect {
+  fill: rgb(87 211 191 / 12%);
+  stroke: #64d7c5;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.selection-box {
+  fill: none;
+  stroke: #62d8c6;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.transform-handle {
+  fill: #d9fffa;
+  stroke: #267a6f;
+  stroke-width: 1;
+  cursor: nwse-resize;
+}
+
+.transform-handle[data-kind="north"],
+.transform-handle[data-kind="south"] {
+  cursor: ns-resize;
+}
+
+.transform-handle[data-kind="east"],
+.transform-handle[data-kind="west"] {
+  cursor: ew-resize;
+}
+
+.transform-handle[data-kind="north-east"],
+.transform-handle[data-kind="south-west"] {
+  cursor: nesw-resize;
+}
+
+.transform-handle[data-kind="rotate"] {
+  fill: #f6b963;
+  cursor: crosshair;
 }
 
 .ruler-background {

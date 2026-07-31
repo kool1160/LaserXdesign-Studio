@@ -200,4 +200,88 @@ describe("desktop project lifecycle", () => {
       "millimeters",
     );
   });
+
+  it("saves and reopens layers, groups, transforms, guides, and order", async () => {
+    const directory = await temporaryDirectory();
+    const projectPath = join(directory, "editing-state.laserx");
+    const controller = makeController(
+      join(directory, "user-data"),
+      dialogs(projectPath),
+    );
+    await controller.initialize();
+
+    await controller.editorAction({
+      type: "object.create",
+      objectType: "rectangle",
+    });
+    const rectangleId = controller.state.editor.selectionIds[0];
+    await controller.editorAction({
+      type: "object.create",
+      objectType: "ellipse",
+    });
+    const ellipseId = controller.state.editor.selectionIds[0];
+    expect(rectangleId).toBeDefined();
+    expect(ellipseId).toBeDefined();
+    await controller.editorAction({ type: "selection.all" });
+    await controller.editorAction({ type: "objects.group-selection" });
+    const groupId = controller.state.editor.selectionIds[0];
+    const bounds = controller.state.editor.selectionBounds;
+    expect(groupId).toBeDefined();
+    expect(bounds).not.toBeNull();
+    if (groupId === undefined || bounds === null) {
+      throw new Error("Expected grouped objects and selection bounds.");
+    }
+    await controller.editorAction({
+      type: "objects.rotate",
+      objectIds: [groupId],
+      angleDeg: 30,
+      pivot: {
+        xMm: (bounds.minXmm + bounds.maxXmm) / 2,
+        yMm: (bounds.minYmm + bounds.maxYmm) / 2,
+      },
+    });
+    await controller.editorAction({
+      type: "guide.create",
+      axis: "x",
+      positionMm: 152.4,
+    });
+    await controller.editorAction({
+      type: "layer.create",
+      name: "Annotations",
+    });
+    const annotationLayer =
+      controller.state.project.document.layers.at(-1);
+    expect(annotationLayer).toBeDefined();
+    if (annotationLayer === undefined) {
+      throw new Error("Expected a second layer.");
+    }
+    await controller.editorAction({
+      type: "layer.set-visibility",
+      layerId: annotationLayer.id,
+      visible: false,
+    });
+    await controller.editorAction({
+      type: "layer.set-locked",
+      layerId: annotationLayer.id,
+      locked: true,
+    });
+    await controller.editorAction({
+      type: "layer.reorder",
+      layerId: annotationLayer.id,
+      toIndex: 0,
+    });
+    const beforeSave = structuredClone(controller.state.project.document);
+
+    await controller.saveProjectAs();
+    await controller.newProject();
+    await controller.openProject();
+
+    expect(controller.state.project.document).toEqual(beforeSave);
+    expect(controller.state.project.document.objects[0]).toMatchObject({
+      id: groupId,
+      type: "group",
+      children: [{ id: rectangleId }, { id: ellipseId }],
+    });
+    expect(controller.state.dirty).toBe(false);
+  });
 });
