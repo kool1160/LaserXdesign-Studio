@@ -22,6 +22,10 @@ export const IPC_CHANNELS = {
   commitVectorImport: "laserx:vector:commit-import",
   cancelVectorImport: "laserx:vector:cancel-import",
   exportVector: "laserx:vector:export",
+  previewRasterTrace: "laserx:raster:preview-trace",
+  cancelRasterTrace: "laserx:raster:cancel-trace",
+  acceptRasterTrace: "laserx:raster:accept-trace",
+  rejectRasterTrace: "laserx:raster:reject-trace",
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   editorAction: "laserx:editor:action",
@@ -511,6 +515,39 @@ export const vectorExportRequestSchema = z.strictObject({
   format: z.enum(["svg", "dxf"]),
 });
 
+const rasterCropSchema = z.strictObject({
+  left: z.number().min(0).lt(1),
+  top: z.number().min(0).lt(1),
+  right: z.number().min(0).lt(1),
+  bottom: z.number().min(0).lt(1),
+});
+
+export const rasterTraceSettingsSchema = z.strictObject({
+  preset: z.enum(["draft", "balanced", "detailed"]),
+  outputWidthMm: z.number().positive().max(10_000),
+  crop: rasterCropSchema,
+  rotationDeg: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+  grayscaleMode: z.enum(["luminance", "average"]),
+  contrast: z.number().int().min(-100).max(100),
+  threshold: z.number().int().min(0).max(255),
+  invert: z.boolean(),
+  blurRadiusPx: z.number().int().min(0).max(3),
+  denoiseRadiusPx: z.number().int().min(0).max(2),
+  background: z.enum(["auto", "white", "black"]),
+  speckleAreaPx: z.number().int().min(0).max(100_000),
+  smoothingPasses: z.number().int().min(0).max(3),
+  simplificationToleranceMm: z.number().positive().max(10),
+});
+
+export const rasterTraceRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+  settings: rasterTraceSettingsSchema,
+});
+
+export const cancelRasterTraceRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
 const interchangeWarningSchema = z.strictObject({
   code: z.string().min(1),
   message: z.string().min(1),
@@ -580,6 +617,42 @@ export const desktopStateSchema = z.strictObject({
         bounds: boundsSchema.nullable(),
       })
       .nullable(),
+    rasterTracePreview: z
+      .strictObject({
+        sourceName: z.string().min(1),
+        source: z.strictObject({
+          format: z.enum(["png", "jpeg"]),
+          widthPx: z.number().int().positive(),
+          heightPx: z.number().int().positive(),
+          sourceBytes: z.number().int().positive(),
+          decodedBytes: z.number().int().positive(),
+        }),
+        settings: rasterTraceSettingsSchema,
+        layers: z.array(layerSchema),
+        objects: z.array(documentObjectSchema),
+        warnings: z.array(interchangeWarningSchema),
+        assumptions: z.array(z.string()),
+        summary: z.strictObject({
+          engineId: z.string().min(1),
+          engineVersion: z.string().min(1),
+          sourceWidthPx: z.number().int().positive(),
+          sourceHeightPx: z.number().int().positive(),
+          traceWidthPx: z.number().int().positive(),
+          traceHeightPx: z.number().int().positive(),
+          outputWidthMm: positiveNumber,
+          outputHeightMm: positiveNumber,
+          pathCount: z.number().int().positive(),
+          nodeCount: z.number().int().positive(),
+          sourceBoundaryNodeCount: z.number().int().positive(),
+          smallestFeatureMm: positiveNumber.nullable(),
+          speckleThresholdPx: z.number().int().nonnegative(),
+          removedSpeckleCount: z.number().int().nonnegative(),
+          removedSpeckleAreaPx: z.number().int().nonnegative(),
+          simplificationToleranceMm: positiveNumber,
+          bounds: boundsSchema.nullable(),
+        }),
+      })
+      .nullable(),
     history: z.strictObject({
       undoDepth: z.number().int().nonnegative(),
       redoDepth: z.number().int().nonnegative(),
@@ -600,6 +673,51 @@ export const desktopStateSchema = z.strictObject({
     .nullable(),
   interchange: z.strictObject({
     exportSummary: vectorExportSummarySchema.nullable(),
+  }),
+  raster: z.strictObject({
+    job: z
+      .strictObject({
+        operationId: z.uuid(),
+        percent: z.number().min(0).max(100),
+        stage: z.enum(["reading", "decoding", "preprocessing", "filtering", "tracing", "simplifying", "preview"]),
+      })
+      .nullable(),
+    preview: z
+      .strictObject({
+        operationId: z.uuid(),
+        widthPx: z.number().int().positive(),
+        heightPx: z.number().int().positive(),
+        original: z.string().startsWith("data:image/png;base64,"),
+        blackWhite: z.string().startsWith("data:image/png;base64,"),
+        edges: z.string().startsWith("data:image/png;base64,"),
+      })
+      .nullable(),
+  }),
+  analysis: z.strictObject({
+    cutability: z
+      .strictObject({
+        status: z.literal("requires-settings"),
+        analyzedObjectIds: z.array(z.uuid()),
+        pathCount: z.number().int().nonnegative(),
+        closedPathCount: z.number().int().nonnegative(),
+        openPathCount: z.number().int().nonnegative(),
+        smallestSegmentMm: positiveNumber.nullable(),
+        issueCount: z.number().int().positive(),
+        issues: z.array(
+          z.strictObject({
+            code: z.string().min(1),
+            severity: z.enum(["warning", "error"]),
+            objectId: z.uuid().nullable(),
+            segmentIndex: z.number().int().nonnegative().nullable(),
+            measuredValueMm: z.number().nonnegative().nullable(),
+            configuredLimitMm: z.number().nonnegative().nullable(),
+            message: z.string().min(1),
+            suggestion: z.string().min(1),
+          }),
+        ),
+        cutReady: z.literal(false),
+      })
+      .nullable(),
   }),
 });
 
@@ -642,6 +760,10 @@ export type VectorImportPreviewRequest = z.infer<
   typeof vectorImportPreviewRequestSchema
 >;
 export type VectorExportRequest = z.infer<typeof vectorExportRequestSchema>;
+export type RasterTraceRequest = z.infer<typeof rasterTraceRequestSchema>;
+export type CancelRasterTraceRequest = z.infer<
+  typeof cancelRasterTraceRequestSchema
+>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -659,6 +781,10 @@ export interface LaserxDesktopApi {
   commitVectorImport(): Promise<CommandResult>;
   cancelVectorImport(): Promise<CommandResult>;
   exportVector(request: VectorExportRequest): Promise<CommandResult>;
+  previewRasterTrace(request: RasterTraceRequest): Promise<CommandResult>;
+  cancelRasterTrace(request: CancelRasterTraceRequest): Promise<CommandResult>;
+  acceptRasterTrace(): Promise<CommandResult>;
+  rejectRasterTrace(): Promise<CommandResult>;
   setDisplayUnit(request: SetDisplayUnitRequest): Promise<CommandResult>;
   setViewportPreferences(
     request: SetViewportPreferencesRequest,

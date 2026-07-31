@@ -868,6 +868,86 @@ button:disabled {
   color: #efbd75;
 }
 
+.raster-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.raster-panel > label,
+.raster-control-grid label,
+.raster-summary label {
+  display: grid;
+  gap: 5px;
+  color: #7c8991;
+  font-size: 10px;
+}
+
+.raster-control-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.raster-panel input,
+.raster-panel select {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #303942;
+  border-radius: 5px;
+  color: #d6dfe3;
+  background: #0c1116;
+  font: inherit;
+}
+
+.raster-panel .toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.raster-panel .toggle-row input {
+  margin: 0;
+}
+
+.raster-panel > button,
+.raster-progress button,
+.raster-summary button {
+  min-width: 0;
+  padding: 7px 6px;
+  border: 1px solid #35524e;
+  border-radius: 5px;
+  color: #d9f5f0;
+  background: #1b3733;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.raster-progress,
+.raster-summary {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid #30413f;
+  border-radius: 6px;
+  color: #aab5bb;
+  background: #0d1418;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.raster-progress progress {
+  width: 100%;
+  accent-color: #53cdb9;
+}
+
+.raster-summary ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+  color: #efbd75;
+}
+
 .guides line {
   stroke: #e9a959;
   stroke-width: 1;

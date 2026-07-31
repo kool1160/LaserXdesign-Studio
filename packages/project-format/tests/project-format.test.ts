@@ -289,6 +289,42 @@ describe("schema version 5", () => {
     expectProjectError(() => serializeProject(project), "INVALID_PROJECT");
   });
 
+  it("persists accepted raster traces as ordinary editable schema-v5 paths", () => {
+    const project = createBlankProject({
+      id: PROJECT_ID,
+      documentId: DOCUMENT_ID,
+      now: NOW,
+      width: 200,
+      height: 100,
+      layers: [
+        { id: ARTWORK_LAYER, name: "Raster Trace", visible: true, locked: false },
+      ],
+      activeLayerId: ARTWORK_LAYER,
+      objects: [
+        {
+          id: "723e4567-e89b-42d3-a456-426614174070",
+          type: "path",
+          layerId: ARTWORK_LAYER,
+          transform: identityTransform(),
+          closed: true,
+          points: [
+            { xMm: 10, yMm: 10 },
+            { xMm: 90, yMm: 10 },
+            { xMm: 90, yMm: 60 },
+            { xMm: 10, yMm: 60 },
+          ],
+        },
+      ],
+    });
+
+    const serialized = serializeProject(project);
+    const reopened = parseProject(serialized);
+    expect(reopened.document.objects[0]).toEqual(project.document.objects[0]);
+    expect(serializeProject(reopened)).toBe(serialized);
+    expect(serialized).not.toContain("png");
+    expect(serialized).not.toContain("data:image");
+  });
+
   it("rejects corrupt, future, duplicate-ID, and dangling-layer projects safely", () => {
     expectProjectError(
       () => parseProject(fixture("corrupt-v1.laserx")),

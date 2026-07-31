@@ -81,6 +81,12 @@ writes explicit millimeter metadata and reports path count, warnings, units,
 and bounds. The exact supported-entity and unit matrix is documented in
 [`docs/FILE_FORMATS.md`](docs/FILE_FORMATS.md).
 
+M07 raster tracing keeps PNG/JPEG paths and pixels out of renderer requests,
+runs deterministic preprocessing and tracing in a cancellable bounded worker,
+and previews original, black/white, edge, trace, and aligned overlay views.
+Accepted candidates become ordinary editable schema-v5 paths through one
+undoable command and are explicitly marked as requiring cutability review.
+
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete development workflow.
 
 ## Licensing note

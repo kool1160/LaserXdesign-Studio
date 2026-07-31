@@ -312,6 +312,39 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
   and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
   advance to M06.
 
+## 2026-07-31 - M07 raster tracing
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #8 implementation
+- Milestone: M07 - PNG/JPEG Preprocessing and Vector Tracing
+- Delivered: Bounded PNG/JPEG inspection and main-process decode; crop,
+  quarter-turn rotation, grayscale/background handling, contrast, threshold,
+  invert, blur, median denoise, and exact speckle reporting; deterministic
+  presets; a replaceable trace adapter; smoothing and deviation-verified
+  simplification; node/path/smallest-feature summaries; bounded original,
+  black/white, edge, trace, and aligned-overlay previews; cancellable worker
+  progress with deadline and stale-result rejection; one-command editable path
+  acceptance, undo/redo, schema-v5 persistence, and standard cutability
+  warnings.
+- Verification: `pnpm lint`, `pnpm typecheck`, `pnpm test`, both production
+  audits, the raster provenance/license audit, Windows packaging, the focused
+  packaged M07 test, and the complete packaged suite pass locally. The suite
+  contains 186 unit/integration tests and 19 packaged Electron E2E scenarios.
+  Four reviewed exact goldens cover a clean logo, noisy photo, anti-aliased
+  text, and a 2048 x 1536 high-resolution source.
+- Decisions: ADR 0017 keeps source data behind main-process tokens, pins the
+  original `laserx-grid-trace` 1.0.0 adapter, defines the deterministic
+  preprocessing and physical-scale contract, and records hard byte, pixel,
+  edge, node, preview, worker, cancellation, persistence, and cutability
+  boundaries.
+- Known limitations: Four-connected pixel-boundary tracing is intentionally
+  mechanical rather than semantic; EXIF orientation is not applied; accepted
+  projects persist vectors rather than embedded raster bytes; complete
+  manufacturability analysis and repair remain M08+ work.
+- Next allowed work: Review M07 only. Keep the implementation pull request
+  draft; do not merge, close Issue #8, advance to M08, or begin later scope
+  until independent review and required exact-head Windows CI pass.
+
 ## 2026-07-31 - M06 SVG/DXF interoperability
 
 - Date: 2026-07-31

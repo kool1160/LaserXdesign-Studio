@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "engine": {
+    "id": "laserx-grid-trace",
+    "version": "1.0.0"
+  },
+  "cases": [
+    {
+      "id": "clean-logo",
+      "kind": "rows",
+      "rows": [
+        "........",
+        "........",
+        "..####..",
+        "..####..",
+        "..####..",
+        "..####..",
+        "........",
+        "........"
+      ],
+      "outputWidthMm": 80,
+      "speckleAreaPx": 1,
+      "expected": {
+        "pathCount": 1,
+        "nodeCount": 4,
+        "removedSpeckleCount": 0,
+        "removedSpeckleAreaPx": 0,
+        "paths": [
+          [[20, 60], [60, 60], [60, 20], [20, 20]]
+        ]
+      }
+    },
+    {
+      "id": "noisy-photo",
+      "kind": "rows",
+      "rows": [
+        "..........",
+        ".#........",
+        "..........",
+        "...####...",
+        "...####...",
+        "...####...",
+        "...####...",
+        "..........",
+        "..........",
+        ".........."
+      ],
+      "outputWidthMm": 100,
+      "speckleAreaPx": 2,
+      "expected": {
+        "pathCount": 1,
+        "nodeCount": 4,
+        "removedSpeckleCount": 1,
+        "removedSpeckleAreaPx": 1,
+        "paths": [
+          [[30, 70], [70, 70], [70, 30], [30, 30]]
+        ]
+      }
+    },
+    {
+      "id": "anti-aliased-text",
+      "kind": "rows",
+      "rows": [
+        "............",
+        "..++....++..",
+        "..##....##..",
+        "..########..",
+        "..##....##..",
+        "..##....##..",
+        "............",
+        "............"
+      ],
+      "outputWidthMm": 120,
+      "speckleAreaPx": 1,
+      "expected": {
+        "pathCount": 1,
+        "nodeCount": 12,
+        "removedSpeckleCount": 0,
+        "removedSpeckleAreaPx": 0,
+        "paths": [
+          [[20, 70], [40, 70], [40, 50], [80, 50], [80, 70], [100, 70], [100, 20], [80, 20], [80, 40], [40, 40], [40, 20], [20, 20]]
+        ]
+      }
+    },
+    {
+      "id": "high-resolution",
+      "kind": "rectangle",
+      "widthPx": 2048,
+      "heightPx": 1536,
+      "rectangle": { "left": 512, "top": 384, "right": 1536, "bottom": 1152 },
+      "outputWidthMm": 204.8,
+      "speckleAreaPx": 1,
+      "expected": {
+        "pathCount": 1,
+        "nodeCount": 4,
+        "removedSpeckleCount": 0,
+        "removedSpeckleAreaPx": 0,
+        "paths": [
+          [[51.2, 115.2], [153.6, 115.2], [153.6, 38.4], [51.2, 38.4]]
+        ]
+      }
+    }
+  ]
+}

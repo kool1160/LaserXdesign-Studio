@@ -27,3 +27,8 @@ M06 evidence:
   600 mm SVG import preview, explicit source units/dimensions, commit/cancel
   controls, and the dashed geometry overlay before history or dirty state
   changes.
+
+M07 evidence:
+
+- `m07-raster-tracing.png` - packaged Windows workspace showing the traced
+  geometry overlay aligned over its bounded raster preview before acceptance.

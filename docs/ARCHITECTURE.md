@@ -144,6 +144,33 @@ transform to preserve the 0.01 mm world-space tolerance. DXF expansion and the
 application preview boundary each enforce a 200,000-point budget. ADR 0016
 records this boundary.
 
+For M07, `packages/import-raster` owns source-header inspection, preprocessing,
+the replaceable `RasterTraceEngine`, deterministic contour filtering/tracing,
+and bounded preview pixels. The selected LaserX-owned grid-trace adapter is
+pinned at version 1.0.0 and has no third-party runtime dependency. It converts
+four-connected thresholded pixel regions into normalized closed millimeter
+paths, reports every removed sub-threshold foreground island, and accepts a
+simplified result only when measured deviation stays within the selected
+millimeter tolerance.
+
+Electron main owns PNG/JPEG dialogs, a 12 MiB binary storage adapter,
+pre-decode dimension checks, `nativeImage` normalization, and main-generated
+preview data URLs. The renderer sends only settings and an operation ID; paths
+and raw pixels never enter renderer requests. Decoded input is capped at 20
+million pixels/80 MiB. The worker caps trace resolution at 4 million pixels,
+boundary edges at 800,000, editable results at 200,000 nodes, and wall time at
+30 seconds. Cancellation terminates the worker, progress is projected through
+desktop state, and a document fingerprint rejects stale results.
+
+The application session owns the raster candidate, fresh path/layer IDs, and
+preview fingerprint. Original, black/white, edge, trace-only, and aligned
+original-plus-trace views remain non-authoritative. Reject/cancel cannot alter
+the document, dirty state, or history. Accept uses one `objects.import`
+command, after which ordinary schema-v5 paths enter the standard
+`packages/cutability` interface. M07 reports that manufacturing settings are
+required and `cutReady` is false; M08 owns actual manufacturing-rule analysis.
+ADR 0017 records the engine, licensing, trust boundary, and limits.
+
 ## State flow
 
 ```text

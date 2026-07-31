@@ -1,1 +1,19 @@
-{"name":"@laserx/import-raster","version":"0.0.0","private":true,"type":"module"}
+{
+  "name": "@laserx/import-raster",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@laserx/domain": "workspace:*",
+    "@laserx/geometry": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

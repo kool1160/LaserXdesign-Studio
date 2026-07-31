@@ -2,6 +2,8 @@ import {
   previewSelectedPathJoin,
   type EditorActionRequest,
 } from "@laserx/application";
+import type { RasterTracePreset, RasterTraceSettings } from "@laserx/domain";
+import { settingsForRasterTracePreset } from "@laserx/import-raster";
 import {
   useCallback,
   useEffect,
@@ -58,6 +60,15 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [activeGeometryOperationId, setActiveGeometryOperationId] =
     useState<string | null>(null);
+  const [activeRasterOperationId, setActiveRasterOperationId] =
+    useState<string | null>(null);
+  const [rasterSettings, setRasterSettings] = useState<RasterTraceSettings>(
+    () => settingsForRasterTracePreset("balanced"),
+  );
+  const [rasterPreviewMode, setRasterPreviewMode] = useState<
+    "original" | "blackWhite" | "edges" | "trace" | "overlay"
+  >("overlay");
+  const [rasterOverlayOpacity, setRasterOverlayOpacity] = useState(0.45);
   const [width, setWidth] = useState("24");
   const [height, setHeight] = useState("12");
   const [inputUnit, setInputUnit] = useState<
@@ -180,6 +191,36 @@ export function App() {
       setActiveGeometryOperationId(null);
       setBusy(false);
     }
+  }, []);
+
+  const runRasterTrace = useCallback(async () => {
+    const operationId = window.crypto.randomUUID();
+    setActiveRasterOperationId(operationId);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.laserx.previewRasterTrace({
+        operationId,
+        settings: rasterSettings,
+      });
+      setState(result.state);
+      if (!result.ok) setError(result.error);
+    } catch {
+      setError("The raster worker returned an invalid response.");
+    } finally {
+      setActiveRasterOperationId(null);
+      setBusy(false);
+    }
+  }, [rasterSettings]);
+
+  const chooseRasterPreset = useCallback((preset: RasterTracePreset) => {
+    setRasterSettings((current) => ({
+      ...settingsForRasterTracePreset(preset),
+      outputWidthMm: current.outputWidthMm,
+      crop: { ...current.crop },
+      rotationDeg: current.rotationDeg,
+      background: current.background,
+    }));
   }, []);
 
   useEffect(() => {
@@ -504,6 +545,14 @@ export function App() {
         </button>
         <button
           type="button"
+          data-testid="trace-raster"
+          disabled={busy}
+          onClick={() => void runRasterTrace()}
+        >
+          Trace PNG/JPEG
+        </button>
+        <button
+          type="button"
           data-testid="export-svg"
           disabled={busy}
           onClick={() =>
@@ -522,7 +571,7 @@ export function App() {
         >
           DXF
         </button>
-        <span className="shell-badge">M06 SVG & DXF</span>
+        <span className="shell-badge">M07 Raster tracing</span>
       </nav>
 
       {state.recovery !== null && (
@@ -704,6 +753,281 @@ export function App() {
                     ))}
                   </ul>
                 )}
+              </div>
+            )}
+          </section>
+
+          <section className="raster-panel" data-testid="raster-panel">
+            <span className="section-label">PNG / JPEG tracing</span>
+            <label>
+              Detail preset
+              <select
+                aria-label="Raster detail preset"
+                value={rasterSettings.preset}
+                disabled={busy}
+                onChange={(event) =>
+                  chooseRasterPreset(event.target.value as RasterTracePreset)
+                }
+              >
+                <option value="draft">Draft</option>
+                <option value="balanced">Balanced</option>
+                <option value="detailed">Detailed</option>
+              </select>
+            </label>
+            <div className="raster-control-grid">
+              <label>
+                Width (mm)
+                <input
+                  aria-label="Trace output width millimeters"
+                  type="number"
+                  min="0.001"
+                  max="10000"
+                  step="1"
+                  value={rasterSettings.outputWidthMm}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setRasterSettings((current) => ({
+                      ...current,
+                      outputWidthMm: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Rotate
+                <select
+                  aria-label="Raster rotation"
+                  value={rasterSettings.rotationDeg}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setRasterSettings((current) => ({
+                      ...current,
+                      rotationDeg: Number(event.target.value) as 0 | 90 | 180 | 270,
+                    }))
+                  }
+                >
+                  <option value="0">0Â°</option>
+                  <option value="90">90Â°</option>
+                  <option value="180">180Â°</option>
+                  <option value="270">270Â°</option>
+                </select>
+              </label>
+              {(["left", "top", "right", "bottom"] as const).map((side) => (
+                <label key={side}>
+                  Crop {side} (%)
+                  <input
+                    aria-label={`Crop ${side} percent`}
+                    type="number"
+                    min="0"
+                    max="90"
+                    step="1"
+                    value={Math.round(rasterSettings.crop[side] * 100)}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setRasterSettings((current) => ({
+                        ...current,
+                        crop: {
+                          ...current.crop,
+                          [side]: Number(event.target.value) / 100,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+              <label>
+                Grayscale
+                <select
+                  aria-label="Grayscale mode"
+                  value={rasterSettings.grayscaleMode}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setRasterSettings((current) => ({
+                      ...current,
+                      grayscaleMode: event.target.value as "luminance" | "average",
+                    }))
+                  }
+                >
+                  <option value="luminance">Perceptual</option>
+                  <option value="average">Channel average</option>
+                </select>
+              </label>
+              <label>
+                Background
+                <select
+                  aria-label="Raster background"
+                  value={rasterSettings.background}
+                  disabled={busy}
+                  onChange={(event) =>
+                    setRasterSettings((current) => ({
+                      ...current,
+                      background: event.target.value as "auto" | "white" | "black",
+                    }))
+                  }
+                >
+                  <option value="auto">Auto</option>
+                  <option value="white">White</option>
+                  <option value="black">Black</option>
+                </select>
+              </label>
+              {([
+                ["Contrast", "contrast", -100, 100, 1],
+                ["Threshold", "threshold", 0, 255, 1],
+                ["Blur px", "blurRadiusPx", 0, 3, 1],
+                ["Denoise px", "denoiseRadiusPx", 0, 2, 1],
+                ["Speckle area px", "speckleAreaPx", 0, 100000, 1],
+                ["Smoothing", "smoothingPasses", 0, 3, 1],
+                ["Simplify mm", "simplificationToleranceMm", 0.001, 10, 0.01],
+              ] as const).map(([label, key, min, max, step]) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    aria-label={label}
+                    type="number"
+                    min={min}
+                    max={max}
+                    step={step}
+                    value={rasterSettings[key]}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setRasterSettings((current) => ({
+                        ...current,
+                        [key]: Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={rasterSettings.invert}
+                disabled={busy}
+                onChange={(event) =>
+                  setRasterSettings((current) => ({
+                    ...current,
+                    invert: event.target.checked,
+                  }))
+                }
+              />
+              Invert foreground
+            </label>
+            <button
+              type="button"
+              data-testid="start-raster-trace"
+              disabled={busy}
+              onClick={() => void runRasterTrace()}
+            >
+              Choose image and trace
+            </button>
+            {state.raster.job !== null && (
+              <div className="raster-progress" data-testid="raster-progress">
+                <strong>{state.raster.job.stage}</strong>
+                <progress max="100" value={state.raster.job.percent} />
+                <span>{state.raster.job.percent.toFixed(0)}%</span>
+                <button
+                  type="button"
+                  className="quiet"
+                  data-testid="cancel-raster-trace"
+                  onClick={() =>
+                    void run(() =>
+                      window.laserx.cancelRasterTrace({
+                        operationId: state.raster.job?.operationId ?? activeRasterOperationId ?? "",
+                      }),
+                    )
+                  }
+                >
+                  Cancel trace
+                </button>
+              </div>
+            )}
+            {state.editor.rasterTracePreview !== null && state.raster.preview !== null && (
+              <div className="raster-summary" data-testid="raster-trace-summary">
+                <strong>{state.editor.rasterTracePreview.sourceName}</strong>
+                <span>
+                  {state.editor.rasterTracePreview.summary.pathCount} paths Â· {state.editor.rasterTracePreview.summary.nodeCount} nodes
+                </span>
+                <span>
+                  {state.editor.rasterTracePreview.summary.outputWidthMm.toFixed(2)} Ã— {state.editor.rasterTracePreview.summary.outputHeightMm.toFixed(2)} mm
+                </span>
+                <span>
+                  Smallest segment: {state.editor.rasterTracePreview.summary.smallestFeatureMm?.toFixed(3) ?? "n/a"} mm
+                </span>
+                <span data-testid="speckle-summary">
+                  Removed {state.editor.rasterTracePreview.summary.removedSpeckleCount} island(s), {state.editor.rasterTracePreview.summary.removedSpeckleAreaPx} px below {state.editor.rasterTracePreview.summary.speckleThresholdPx} px
+                </span>
+                <label>
+                  Preview
+                  <select
+                    aria-label="Raster preview mode"
+                    value={rasterPreviewMode}
+                    onChange={(event) =>
+                      setRasterPreviewMode(
+                        event.target.value as typeof rasterPreviewMode,
+                      )
+                    }
+                  >
+                    <option value="original">Original</option>
+                    <option value="blackWhite">Black / white</option>
+                    <option value="edges">Edges</option>
+                    <option value="trace">Trace only</option>
+                    <option value="overlay">Original + trace</option>
+                  </select>
+                </label>
+                {rasterPreviewMode === "overlay" && (
+                  <label>
+                    Original opacity
+                    <input
+                      aria-label="Raster overlay opacity"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={rasterOverlayOpacity}
+                      onChange={(event) =>
+                        setRasterOverlayOpacity(Number(event.target.value))
+                      }
+                    />
+                  </label>
+                )}
+                {state.editor.rasterTracePreview.warnings.length > 0 && (
+                  <ul data-testid="raster-warnings">
+                    {state.editor.rasterTracePreview.warnings.map((warning, index) => (
+                      <li key={`${warning.code}-${String(index)}`}>{warning.message}</li>
+                    ))}
+                  </ul>
+                )}
+                <div className="button-grid compact">
+                  <button
+                    type="button"
+                    data-testid="accept-raster-trace"
+                    disabled={busy}
+                    onClick={() => void run(() => window.laserx.acceptRasterTrace())}
+                  >
+                    Accept editable paths
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    data-testid="reject-raster-trace"
+                    disabled={busy}
+                    onClick={() => void run(() => window.laserx.rejectRasterTrace())}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
+            {state.analysis.cutability !== null && (
+              <div className="raster-summary" data-testid="cutability-analysis">
+                <strong>Cutability review required</strong>
+                <span>{state.analysis.cutability.issueCount} warning(s); cut-ready: no</span>
+                <ul>
+                  {state.analysis.cutability.issues.map((issue) => (
+                    <li key={`${issue.code}-${issue.objectId ?? "global"}`}>{issue.message}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </section>
@@ -923,7 +1247,36 @@ export function App() {
             selectionIds={selectionIds}
             selectionBounds={selectionBounds}
             pathSelection={pathSelection}
-            importPreview={state.editor.importPreview}
+            importPreview={
+              state.editor.importPreview ?? state.editor.rasterTracePreview
+            }
+            previewGeometryVisible={
+              state.editor.rasterTracePreview === null ||
+              rasterPreviewMode === "trace" ||
+              rasterPreviewMode === "overlay"
+            }
+            rasterBackground={
+              state.editor.rasterTracePreview === null ||
+              state.raster.preview === null ||
+              rasterPreviewMode === "trace"
+                ? null
+                : {
+                    dataUrl:
+                      rasterPreviewMode === "blackWhite"
+                        ? state.raster.preview.blackWhite
+                        : rasterPreviewMode === "edges"
+                          ? state.raster.preview.edges
+                          : state.raster.preview.original,
+                    widthMm:
+                      state.editor.rasterTracePreview.summary.outputWidthMm,
+                    heightMm:
+                      state.editor.rasterTracePreview.summary.outputHeightMm,
+                    opacity:
+                      rasterPreviewMode === "overlay"
+                        ? rasterOverlayOpacity
+                        : 1,
+                  }
+            }
             onEditorAction={dispatchEditorAction}
           />
         </main>

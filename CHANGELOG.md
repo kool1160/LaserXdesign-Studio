@@ -32,6 +32,11 @@ All notable project changes will be documented here.
 
 ### Added
 
+- Safe bounded PNG/JPEG tracing with crop/rotate/grayscale/contrast/threshold/
+  invert/blur/denoise/background controls, deterministic presets, exact
+  speckle reporting, tolerance-checked simplification, cancellable worker
+  progress, aligned previews, editable one-command acceptance, persistence,
+  cutability-interface warning, reviewed goldens, and packaged Windows E2E.
 - Dimensionally correct SVG/DXF import preview, atomic undoable commit, and
   explicit-mm export with layers, units, transforms, closure, warnings,
   bounds/count summaries, scale fixtures, and independent DXF inspection.

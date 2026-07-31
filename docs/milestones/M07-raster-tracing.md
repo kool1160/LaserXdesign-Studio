@@ -35,8 +35,8 @@ General photo editing, perfect semantic logo reconstruction, optical font identi
 
 ## Exit checklist
 
-- [ ] Trace-engine ADR and license review complete.
-- [ ] Fixture/golden set reviewed.
-- [ ] Performance targets recorded.
-- [ ] Raster-to-editable end-to-end test passes.
+- [x] Trace-engine ADR and license review complete.
+- [x] Fixture/golden set reviewed.
+- [x] Performance targets recorded.
+- [x] Raster-to-editable end-to-end test passes.
 - [ ] Status advances to M08.

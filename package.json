@@ -17,7 +17,8 @@
     "test:e2e": "pnpm --filter @laserx/desktop test:e2e",
     "audit:fonts": "node scripts/font-license-audit.mjs",
     "audit:geometry": "node scripts/geometry-license-audit.mjs",
-    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+    "audit:raster": "node scripts/raster-license-audit.mjs",
+    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm audit:raster && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

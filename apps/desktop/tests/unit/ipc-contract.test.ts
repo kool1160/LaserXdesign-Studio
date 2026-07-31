@@ -6,6 +6,7 @@ import {
   editorActionRequestSchema,
   fontCatalogSchema,
   openRecentRequestSchema,
+  rasterTraceRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
@@ -29,6 +30,47 @@ describe("typed IPC validation", () => {
     ).toBe(false);
     expect(vectorExportRequestSchema.safeParse({ format: "svg" }).success).toBe(true);
     expect(vectorExportRequestSchema.safeParse({ format: "dwg" }).success).toBe(false);
+  });
+
+  it("keeps raster paths and pixels out of strict tracing requests", () => {
+    const request = {
+      operationId: "60000000-0000-4000-8000-000000000071",
+      settings: {
+        preset: "balanced",
+        outputWidthMm: 150,
+        crop: { left: 0, top: 0, right: 0, bottom: 0 },
+        rotationDeg: 0,
+        grayscaleMode: "luminance",
+        contrast: 0,
+        threshold: 128,
+        invert: false,
+        blurRadiusPx: 1,
+        denoiseRadiusPx: 1,
+        background: "auto",
+        speckleAreaPx: 6,
+        smoothingPasses: 1,
+        simplificationToleranceMm: 0.2,
+      },
+    };
+    expect(rasterTraceRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      rasterTraceRequestSchema.safeParse({
+        ...request,
+        filePath: "C:\\private\\logo.png",
+      }).success,
+    ).toBe(false);
+    expect(
+      rasterTraceRequestSchema.safeParse({
+        ...request,
+        pixels: [0, 0, 0, 255],
+      }).success,
+    ).toBe(false);
+    expect(
+      rasterTraceRequestSchema.safeParse({
+        ...request,
+        settings: { ...request.settings, threshold: 300 },
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects arbitrary fields, pixels, and invalid viewport values", () => {
@@ -120,6 +162,7 @@ describe("typed IPC validation", () => {
         pathSelection: null,
         topologySummary: null,
         importPreview: null,
+        rasterTracePreview: null,
         history: {
           undoDepth: 0,
           redoDepth: 0,
@@ -133,6 +176,8 @@ describe("typed IPC validation", () => {
       recentProjects: [],
       recovery: null,
       interchange: { exportSummary: null },
+      raster: { job: null, preview: null },
+      analysis: { cutability: null },
     });
     expect(result.success).toBe(true);
   });

@@ -31,4 +31,10 @@ await Promise.all([
     outfile: "dist/electron/geometry-worker.cjs",
     format: "cjs",
   }),
+  build({
+    ...shared,
+    entryPoints: ["electron/raster-worker.ts"],
+    outfile: "dist/electron/raster-worker.cjs",
+    format: "cjs",
+  }),
 ]);

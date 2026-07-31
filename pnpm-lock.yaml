@@ -32,6 +32,9 @@ importers:
       '@laserx/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@laserx/cutability':
+        specifier: workspace:*
+        version: link:../../packages/cutability
       '@laserx/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -41,6 +44,9 @@ importers:
       '@laserx/geometry':
         specifier: workspace:*
         version: link:../../packages/geometry
+      '@laserx/import-raster':
+        specifier: workspace:*
+        version: link:../../packages/import-raster
       '@laserx/io-dxf':
         specifier: workspace:*
         version: link:../../packages/io-dxf
@@ -127,7 +133,21 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
-  packages/cutability: {}
+  packages/cutability:
+    dependencies:
+      '@laserx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../geometry
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/domain:
     dependencies:
@@ -195,7 +215,21 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
-  packages/import-raster: {}
+  packages/import-raster:
+    dependencies:
+      '@laserx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../geometry
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/io-dxf:
     dependencies:
