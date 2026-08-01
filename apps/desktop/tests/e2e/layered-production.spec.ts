@@ -180,17 +180,69 @@ test("layered sign analysis, registration, persistence, and production package",
     await expect(page.getByTestId("production-package")).toBeVisible();
     await expect(page.getByLabel("Exploded two-dimensional assembly preview").locator(".assembly-layer")).toHaveCount(2);
 
-    const scoped = await page.evaluate(async (layerId) =>
-      window.laserx.runManufacturingLayerAnalysis({
-        operationId: window.crypto.randomUUID(),
-        layerId,
-      }), layerIds.backingId);
-    expect(scoped.ok).toBe(true);
-    expect(scoped.state.analysis.scope).toMatchObject({
+    const expectedAnalysisIds = await page.evaluate(async ({ backingId }) => {
+      const state = await window.laserx.getState();
+      return {
+        whole: state.project.document.objects.map((object) => object.id).sort(),
+        selection: [...state.editor.selectionIds].sort(),
+        backing: state.project.document.objects
+          .filter((object) => object.layerId === backingId)
+          .map((object) => object.id)
+          .sort(),
+      };
+    }, layerIds);
+    expect(expectedAnalysisIds.selection).toEqual([layerIds.faceHoleId]);
+
+    await page.getByTestId("run-cutability-analysis").click();
+    await expect(page.getByTestId("cutability-scope")).toContainText(
+      "Whole-design analysis",
+    );
+    let analysisState = await page.evaluate(async () =>
+      (await window.laserx.getState()).analysis,
+    );
+    expect(analysisState.scope).toEqual({
+      kind: "whole-design",
+      layerId: null,
+      layerName: null,
+    });
+    expect(analysisState.cutability?.analyzedObjectIds).toEqual(
+      expectedAnalysisIds.whole,
+    );
+
+    await page.getByTestId("run-selection-cutability-analysis").click();
+    await expect(page.getByTestId("cutability-scope")).toContainText(
+      "Selection analysis",
+    );
+    analysisState = await page.evaluate(async () =>
+      (await window.laserx.getState()).analysis,
+    );
+    expect(analysisState.scope).toEqual({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: expectedAnalysisIds.selection,
+    });
+    expect(analysisState.cutability?.analyzedObjectIds).toEqual(
+      expectedAnalysisIds.selection,
+    );
+
+    await page.evaluate(async (layerId) => {
+      await window.laserx.editorAction({ type: "layer.activate", layerId });
+    }, layerIds.backingId);
+    await page.getByTestId("analyze-manufacturing-layer").click();
+    await expect(page.getByTestId("cutability-scope")).toContainText(
+      "Physical layer: Backing",
+    );
+    analysisState = await page.evaluate(async () =>
+      (await window.laserx.getState()).analysis,
+    );
+    expect(analysisState.scope).toMatchObject({
       kind: "manufacturing-layer",
       layerId: layerIds.backingId,
     });
-    await expect(page.getByTestId("cutability-scope")).toContainText("Physical layer: Backing");
+    expect(analysisState.cutability?.analyzedObjectIds).toEqual(
+      expectedAnalysisIds.backing,
+    );
 
     await page.getByTestId("export-production-package").click();
     await expect(page.getByTestId("production-export-summary")).toContainText("Exported 2 layer(s) and 5 file(s).");

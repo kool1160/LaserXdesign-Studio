@@ -1259,7 +1259,11 @@ export function App() {
                 <span data-testid="cutability-scope">
                   {state.analysis.scope?.kind === "manufacturing-layer"
                     ? `Physical layer: ${state.analysis.scope.layerName}`
-                    : "Whole-design analysis"}
+                    : state.analysis.scope?.kind === "selection"
+                      ? "Selection analysis"
+                      : state.analysis.scope?.kind === "whole-design"
+                        ? "Whole-design analysis"
+                        : "Analysis scope unavailable"}
                   {" · "}{cutability.analyzedObjectIds.length} object(s)
                 </span>
                 <label className="toggle-row">

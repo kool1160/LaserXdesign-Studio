@@ -101,6 +101,15 @@ cache. The desktop projection labels the returned scope with layer ID/name;
 switching back to whole-design analysis replaces that label. A preview-only or
 ordinary layer cannot claim an independent physical analysis.
 
+Whole-design means only an empty object-ID request over the complete visible
+document. Analyze selection publishes a distinct `selection` scope with the
+exact analyzed IDs. Result and scope are one atomic desktop projection: an
+in-flight, canceled, or failed request cannot relabel an older result. Cache
+hits publish the newly requested scope with the matching cached summary.
+Bridge acceptance reruns the successful source scope: empty IDs for whole-
+design, current authoritative layer IDs for a physical layer, or the original
+selection IDs mapped through the topology replacement.
+
 ## Explicit limitations
 
 The preview does not generate G-code, lead-ins, cut order, heat simulation, or

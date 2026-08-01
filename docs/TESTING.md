@@ -377,13 +377,17 @@ secret or prompt content.
   replacement, rollback-safe staging, and partial-file failure reporting with
   no published success folder;
 - desktop integration tests persist/reopen semantic layers, switch visibly
-  between whole-design and physical-layer analysis, export two real layers,
-  and parse the actual manifest;
+  between whole-design, explicit-selection, and physical-layer analysis,
+  preserve the prior result/scope pair on worker cancellation or failure,
+  replay bridge analysis from whole, mapped-selection, and authoritative-layer
+  scopes, export two real layers, and parse the actual manifest;
 - the packaged Windows scenario constructs face/backing/non-cut layers with
   multiple decorative ellipses, coordinates only designated holes, proves
   unrelated target geometry plus exact undo/redo and save/reopen identity,
-  runs scoped analysis, inspects designated-only manifest evidence and exact-
-  scale SVGs, and proves conflict and replacement behavior;
+  drives Analyze all, Analyze selection, and Analyze this physical layer from
+  the renderer with distinct truthful labels and exact analyzed IDs, inspects
+  designated-only manifest evidence and exact-scale SVGs, and proves conflict
+  and replacement behavior;
 - `pnpm audit:production` enforces explicit physical scope, preview exclusion,
   atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
 

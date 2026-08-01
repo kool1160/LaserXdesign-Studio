@@ -1088,6 +1088,12 @@ export const desktopStateSchema = z.strictObject({
   analysis: z.strictObject({
     scope: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("whole-design"), layerId: z.null(), layerName: z.null() }),
+      z.strictObject({
+        kind: z.literal("selection"),
+        layerId: z.null(),
+        layerName: z.null(),
+        objectIds: z.array(z.uuid()).min(1),
+      }),
       z.strictObject({ kind: z.literal("manufacturing-layer"), layerId: z.uuid(), layerName: z.string().min(1) }),
     ]).nullable(),
     job: z

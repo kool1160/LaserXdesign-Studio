@@ -173,6 +173,26 @@ export interface AutosaveScheduler {
   schedule(callback: () => void, intervalMs: number): () => void;
 }
 
+type CutabilityAnalysisScope = NonNullable<DesktopState["analysis"]["scope"]>;
+
+interface CutabilityAnalysisProjection {
+  scope: CutabilityAnalysisScope;
+  cutability: CutabilityAnalysisSummary;
+}
+
+function objectCutabilityScope(
+  objectIds: readonly string[],
+): Extract<CutabilityAnalysisScope, { kind: "whole-design" | "selection" }> {
+  return objectIds.length === 0
+    ? { kind: "whole-design", layerId: null, layerName: null }
+    : {
+        kind: "selection",
+        layerId: null,
+        layerName: null,
+        objectIds: [...objectIds],
+      };
+}
+
 const intervalAutosaveScheduler: AutosaveScheduler = {
   schedule(callback, intervalMs) {
     const timer = setInterval(callback, intervalMs);
@@ -316,11 +336,7 @@ export class DesktopController {
     stage: "selecting" | "reading" | "decoding" | RasterTraceProgress["stage"];
   } | null = null;
   #rasterPreview: (RasterPreviewDataUrls & { operationId: string }) | null = null;
-  #cutabilityAnalysis: CutabilityAnalysisSummary | null = null;
-  #cutabilityScope:
-    | { kind: "whole-design"; layerId: null; layerName: null }
-    | { kind: "manufacturing-layer"; layerId: string; layerName: string }
-    | null = null;
+  #cutabilityProjection: CutabilityAnalysisProjection | null = null;
   #cutabilityJob: {
     operationId: string;
     percent: number;
@@ -471,9 +487,9 @@ export class DesktopController {
       },
       analysis: {
         scope:
-          this.#cutabilityScope === null
+          this.#cutabilityProjection === null
             ? null
-            : structuredClone(this.#cutabilityScope),
+            : structuredClone(this.#cutabilityProjection.scope),
         job: this.#cutabilityJob === null ? null : { ...this.#cutabilityJob },
         focusedIssueId: this.#focusedCutabilityIssueId,
         bridgeProposal:
@@ -481,9 +497,9 @@ export class DesktopController {
             ? null
             : structuredClone(this.#bridgeProposal),
         cutability:
-          this.#cutabilityAnalysis === null
+          this.#cutabilityProjection === null
             ? null
-            : structuredClone(this.#cutabilityAnalysis),
+            : structuredClone(this.#cutabilityProjection.cutability),
       },
     };
   }
@@ -743,7 +759,11 @@ export class DesktopController {
       const accepted = this.#session.commitRasterTrace();
       this.#invalidateCutability();
       this.#rasterPreview = null;
-      await this.#analyzeCutability(randomUUID(), accepted.editor.selectionIds);
+      await this.#analyzeCutability(
+        randomUUID(),
+        accepted.editor.selectionIds,
+        objectCutabilityScope(accepted.editor.selectionIds),
+      );
     });
   }
 
@@ -776,7 +796,11 @@ export class DesktopController {
       const objectIds = preview.objects.map((object) => object.id);
       this.#session.acceptSignToolPreview();
       this.#invalidateCutability();
-      await this.#analyzeCutability(randomUUID(), objectIds);
+      await this.#analyzeCutability(
+        randomUUID(),
+        objectIds,
+        objectCutabilityScope(objectIds),
+      );
     });
   }
 
@@ -1150,7 +1174,11 @@ export class DesktopController {
       this.#session.acceptAiConceptPreview();
       this.#clearAiConcepts(false);
       this.#invalidateCutability();
-      await this.#analyzeCutability(randomUUID(), objectIds);
+      await this.#analyzeCutability(
+        randomUUID(),
+        objectIds,
+        objectCutabilityScope(objectIds),
+      );
     });
   }
 
@@ -1289,12 +1317,11 @@ export class DesktopController {
     objectIds: readonly string[],
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      this.#cutabilityScope = {
-        kind: "whole-design",
-        layerId: null,
-        layerName: null,
-      };
-      await this.#analyzeCutability(operationId, objectIds);
+      await this.#analyzeCutability(
+        operationId,
+        objectIds,
+        objectCutabilityScope(objectIds),
+      );
     });
   }
 
@@ -1312,12 +1339,11 @@ export class DesktopController {
       if (objectIds.length === 0) {
         throw new RangeError("Add geometry to the manufacturing layer before analyzing it.");
       }
-      this.#cutabilityScope = {
+      await this.#analyzeCutability(operationId, objectIds, {
         kind: "manufacturing-layer",
         layerId,
         layerName: layer.name,
-      };
-      await this.#analyzeCutability(operationId, objectIds);
+      });
     });
   }
 
@@ -1341,7 +1367,7 @@ export class DesktopController {
         this.#focusedCutabilityIssueId = null;
         return;
       }
-      const issue = this.#cutabilityAnalysis?.issues.find(
+      const issue = this.#cutabilityProjection?.cutability.issues.find(
         (candidate) => candidate.id === issueId,
       );
       if (issue === undefined) {
@@ -1356,12 +1382,12 @@ export class DesktopController {
     request: BridgeProposalRequestDto,
   ): Promise<CommandResult> {
     return this.#run(() => {
-      if (this.#cutabilityAnalysis === null) {
+      if (this.#cutabilityProjection === null) {
         throw new RangeError("Run manufacturing analysis before proposing a bridge.");
       }
       this.#bridgeProposal = proposeBridge(
         this.#session.state.project.document,
-        this.#cutabilityAnalysis,
+        this.#cutabilityProjection.cutability,
         request,
       );
       this.#focusedCutabilityIssueId = request.issueId;
@@ -1378,7 +1404,10 @@ export class DesktopController {
       if (fingerprintCutabilityDocument(before) !== proposal.documentFingerprint) {
         throw new Error("The document changed after this bridge preview; preview it again.");
       }
-      const analysisScope = this.#cutabilityScope;
+      const analysisScope = this.#cutabilityProjection?.scope;
+      if (analysisScope === undefined) {
+        throw new RangeError("Run manufacturing analysis before accepting a bridge.");
+      }
       const replacements = materializeBridgeProposal(proposal, randomUUID);
       const beforeNodeCount = before.objects.reduce(
         (count, object) =>
@@ -1407,22 +1436,52 @@ export class DesktopController {
       );
       this.#invalidateCutability();
       const state = this.#session.state;
-      if (analysisScope?.kind === "manufacturing-layer") {
-        this.#cutabilityScope = analysisScope;
+      if (analysisScope.kind === "manufacturing-layer") {
+        const layer = state.project.document.layers.find(
+          (candidate) => candidate.id === analysisScope.layerId,
+        );
+        if (layer === undefined) {
+          throw new RangeError("That manufacturing layer is unavailable.");
+        }
         await this.#analyzeCutability(
           randomUUID(),
           manufacturingLayerObjectIds(
             state.project.document,
             analysisScope.layerId,
           ),
+          {
+            kind: "manufacturing-layer",
+            layerId: analysisScope.layerId,
+            layerName: layer.name,
+          },
         );
+      } else if (analysisScope.kind === "selection") {
+        const replacedIds = new Set(proposal.sourceObjectIds);
+        const availableIds = new Set(
+          state.project.document.objects.map((object) => object.id),
+        );
+        const objectIds = analysisScope.objectIds.filter(
+          (id) => !replacedIds.has(id) && availableIds.has(id),
+        );
+        if (analysisScope.objectIds.some((id) => replacedIds.has(id))) {
+          objectIds.push(...replacements.map((object) => object.id));
+        }
+        const remappedObjectIds = [...new Set(objectIds)].sort();
+        if (remappedObjectIds.length === 0) {
+          throw new Error("The analyzed selection could not be mapped after bridge acceptance.");
+        }
+        await this.#analyzeCutability(randomUUID(), remappedObjectIds, {
+          kind: "selection",
+          layerId: null,
+          layerName: null,
+          objectIds: remappedObjectIds,
+        });
       } else {
-        this.#cutabilityScope = {
+        await this.#analyzeCutability(randomUUID(), [], {
           kind: "whole-design",
           layerId: null,
           layerName: null,
-        };
-        await this.#analyzeCutability(randomUUID(), state.editor.selectionIds);
+        });
       }
     });
   }
@@ -1991,8 +2050,7 @@ export class DesktopController {
     this.#cutabilityAbortControllers.clear();
     this.#rasterJob = null;
     this.#rasterPreview = null;
-    this.#cutabilityAnalysis = null;
-    this.#cutabilityScope = null;
+    this.#cutabilityProjection = null;
     this.#productionExportSummary = null;
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
@@ -2023,8 +2081,7 @@ export class DesktopController {
     }
     this.#cutabilityAbortControllers.clear();
     this.#cutabilityCache.invalidate();
-    this.#cutabilityAnalysis = null;
-    this.#cutabilityScope = null;
+    this.#cutabilityProjection = null;
     this.#productionExportSummary = null;
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
@@ -2034,6 +2091,7 @@ export class DesktopController {
   async #analyzeCutability(
     operationId: string,
     objectIds: readonly string[],
+    scope: CutabilityAnalysisScope,
   ): Promise<CutabilityAnalysisSummary | null> {
     if (this.#cutabilityAbortControllers.size > 0) {
       throw new RangeError("Finish or cancel the active manufacturing analysis first.");
@@ -2041,8 +2099,9 @@ export class DesktopController {
     const document = this.#session.state.project.document;
     const cached = this.#cutabilityCache.get(document, objectIds);
     if (cached !== null) {
-      this.#cutabilityAnalysis = { ...cached, operationId };
-      return this.#cutabilityAnalysis;
+      const analysis = { ...cached, operationId };
+      this.#publishCutabilityAnalysis(scope, analysis);
+      return analysis;
     }
     const fingerprint = fingerprintCutabilityDocument(document);
     const abortController = new AbortController();
@@ -2071,10 +2130,8 @@ export class DesktopController {
       ) {
         throw new Error("The document changed while manufacturing analysis was running; the stale result was discarded.");
       }
-      this.#cutabilityAnalysis = analysis;
       this.#cutabilityCache.set(document, objectIds, analysis);
-      this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
-      this.#bridgeProposal = null;
+      this.#publishCutabilityAnalysis(scope, analysis);
       return analysis;
     } catch (error) {
       if (error instanceof CutabilityAnalysisCancelledError) return null;
@@ -2086,6 +2143,26 @@ export class DesktopController {
       this.#clearCutabilityJob(operationId);
       this.#emit();
     }
+  }
+
+  #publishCutabilityAnalysis(
+    scope: CutabilityAnalysisScope,
+    analysis: CutabilityAnalysisSummary,
+  ): void {
+    const publishedScope: CutabilityAnalysisScope = scope.kind === "selection"
+      ? {
+          kind: "selection",
+          layerId: null,
+          layerName: null,
+          objectIds: [...analysis.analyzedObjectIds],
+        }
+      : { ...scope };
+    this.#cutabilityProjection = {
+      scope: publishedScope,
+      cutability: analysis,
+    };
+    this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
+    this.#bridgeProposal = null;
   }
 
   async #run(action: () => void | Promise<void>): Promise<CommandResult> {

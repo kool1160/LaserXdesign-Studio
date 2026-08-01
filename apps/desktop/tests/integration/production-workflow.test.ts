@@ -2,8 +2,10 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { analyzeDocumentCutability } from "@laserx/cutability";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { CutabilityWorkerPort } from "../../electron/cutability-worker-service.js";
 import {
   DesktopController,
   type DesktopDialogs,
@@ -11,6 +13,12 @@ import {
 
 const directories: string[] = [];
 const controllers: DesktopController[] = [];
+const cutabilityWorker: CutabilityWorkerPort = {
+  run: (request) => Promise.resolve(analyzeDocumentCutability(
+    request.document,
+    { operationId: request.operationId, objectIds: request.objectIds },
+  )),
+};
 
 afterEach(async () => {
   controllers.splice(0).forEach((controller) => controller.stop());
@@ -37,6 +45,7 @@ describe("layered production workflow", () => {
       userDataPath: join(directory, "user-data"),
       dialogs,
       onStateChanged: () => undefined,
+      cutabilityWorker,
     });
     controllers.push(controller);
     await controller.initialize();
@@ -121,19 +130,32 @@ describe("layered production workflow", () => {
     await controller.editorAction({ type: "history.redo" });
     expect(JSON.stringify(controller.state.project)).toBe(afterCoordination);
 
-    await controller.runCutabilityAnalysis(
+    expect(await controller.runCutabilityAnalysis(
       "11111111-1111-4111-8111-111111111111",
       [],
-    );
+    )).toMatchObject({ ok: true });
     expect(controller.state.analysis.scope).toEqual({
       kind: "whole-design",
       layerId: null,
       layerName: null,
     });
-    await controller.runManufacturingLayerAnalysis(
+    expect(await controller.runCutabilityAnalysis(
+      "11111111-1111-4111-8111-111111111112",
+      [faceHoleId],
+    )).toMatchObject({ ok: true });
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: [faceHoleId],
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual([
+      faceHoleId,
+    ]);
+    expect(await controller.runManufacturingLayerAnalysis(
       "22222222-2222-4222-8222-222222222222",
       backingId,
-    );
+    )).toMatchObject({ ok: true });
     expect(controller.state.analysis.scope).toEqual({
       kind: "manufacturing-layer",
       layerId: backingId,

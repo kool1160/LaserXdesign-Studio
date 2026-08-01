@@ -89,6 +89,19 @@ describe("typed IPC validation", () => {
       ...analysisRequest,
       document: { objects: [] },
     }).success).toBe(false);
+    const analysisScopeSchema = desktopStateSchema.shape.analysis.shape.scope;
+    expect(analysisScopeSchema.safeParse({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: analysisRequest.objectIds,
+    }).success).toBe(true);
+    expect(analysisScopeSchema.safeParse({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: [],
+    }).success).toBe(false);
     const bridgeRequest = {
       issueId: "DISCONNECTED_ISLAND:1",
       widthMm: 2,

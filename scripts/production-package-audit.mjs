@@ -20,6 +20,7 @@ const projectFormat = await source("packages/project-format/src/index.ts");
 const production = await source("packages/production-export/src/index.ts");
 const application = await source("packages/application/src/project-session.ts");
 const storage = await source("apps/desktop/electron/production-storage.ts");
+const controller = await source("apps/desktop/electron/desktop-controller.ts");
 const renderer = await source("apps/desktop/src/app/App.tsx");
 const contract = await source("apps/desktop/electron/ipc-contract.ts");
 const documentation = await source("docs/PRODUCTION_PACKAGES.md");
@@ -66,6 +67,14 @@ for (const marker of [
   "runManufacturingLayerAnalysis",
   'conflictPolicy: z.enum(["fail", "replace"])',
 ]) requireText(contract, marker, "strict production IPC");
+
+for (const marker of [
+  "#cutabilityProjection",
+  'kind: "selection"',
+  "objectCutabilityScope",
+  "analysisScope.objectIds",
+  "manufacturingLayerObjectIds",
+]) requireText(controller, marker, "truthful atomic analysis scope");
 
 rejectText(renderer, /node:fs|node:path|writeFile|rename\(/u, "renderer source");
 

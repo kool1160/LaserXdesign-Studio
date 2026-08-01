@@ -18,6 +18,11 @@ Whole-design M08 analysis remains available. “Analyze this physical layer”
 passes only that layer’s authoritative object IDs to the same analysis worker
 and projects the result with an explicit manufacturing-layer scope. A result
 never implies that the whole design and one physical layer are equivalent.
+“Analyze selection” is a third, explicit scope and records the exact analyzed
+object IDs. Scope and result publish atomically only after a successful worker
+or cache result; cancellation or failure preserves the prior pair unchanged.
+After bridge acceptance, reanalysis uses the original successful scope rather
+than the renderer's incidental current selection.
 
 ## Alignment and registration
 

@@ -48,6 +48,9 @@ Adapters translate external data into or out of normalized domain types. They do
 For M12, schema v8 adds optional manufacturing metadata to ordinary layers.
 Only explicitly tagged physical layers enter `packages/production-export` or
 the per-layer analysis action; whole-design M08 analysis remains independent.
+The Electron controller binds every successful cutability summary to one
+atomic whole-design, explicit-selection, or manufacturing-layer projection;
+pending and failed worker requests cannot mutate that published scope.
 Electron main owns an atomic production-folder storage adapter and exposes only
 layer IDs, output formats, and conflict intent through strict IPC. React owns
 metadata forms, selection, status, and a presentation-only exploded stack.

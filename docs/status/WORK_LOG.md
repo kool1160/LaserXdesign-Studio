@@ -2,6 +2,37 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-01 - M12 truthful analysis-scope review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking re-review finding on `e08a996`
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Replaced independently mutable cutability result/scope fields with
+  one atomic successful projection. Whole-design is now only an empty object-ID
+  request; Analyze selection publishes an explicit scope with exact IDs; cache
+  hits switch labels with their matching result; and cancellation or failure
+  leaves the previous result and its original scope unchanged. Bridge acceptance
+  reruns the original successful scope using the full document, current physical-
+  layer IDs, or selection IDs mapped through the topology replacement.
+- Verification: Controller regressions cover all-to-selection-to-physical-layer
+  switching, identical-ID cache reuse, cancellation/failure with a prior result,
+  and bridge acceptance from whole-design, selection, and physical-layer runs.
+  Packaged Windows coverage drives all three renderer actions and asserts their
+  distinct text plus exact analyzed IDs. Full `pnpm verify` passes in 262
+  seconds with all audits, lint, typecheck, 267 unit/integration tests, build/
+  package, and all 29 serial packaged Windows Electron E2E scenarios.
+  Production dependency audit reports no known vulnerabilities, Repository
+  Guard passes 68 required files and 17 milestones, and patch checks are clean.
+  Exact-head CI remains required before re-review.
+- Decisions: A pending request may publish job progress but cannot mutate the
+  last successful manufacturing evidence. A successful cache or worker result
+  replaces scope, summary, issue focus, and bridge proposal together.
+- Known limitations: Analysis remains advisory and does not certify machine
+  safety or part quality. Existing no-CAM, no-3D, no-machine-control, and no-
+  M13-or-later boundaries are unchanged.
+- Next allowed work: Complete exact-head verification and stop for independent
+  re-review. Do not merge, close Issue #12, advance status, or begin M13+.
+
 ## 2026-08-01 - M12 explicit registration-hole review repair
 
 - Date: 2026-08-01
