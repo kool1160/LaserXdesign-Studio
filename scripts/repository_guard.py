@@ -23,7 +23,7 @@ REQUIRED_FILES = (
     "docs/status/CURRENT.md",
     "docs/milestones/M00-foundation.md",
     "docs/milestones/M01-desktop-shell.md",
-    "docs/milestones/M12-beta-hardening.md",
+    "docs/milestones/M13-windows-installer-beta-hardening.md",
     "docs/decisions/0016-secure-svg-dxf-interchange.md",
     "docs/decisions/0019-secure-replaceable-raster-tracing.md",
     "docs/decisions/0020-deterministic-cutability-and-bridge-proposals.md",
@@ -76,8 +76,9 @@ EXPECTED_MILESTONES = tuple(
         "M08-cutability.md",
         "M09-sign-tools.md",
         "M10-ai-generation.md",
-        "M11-layered-production.md",
-        "M12-beta-hardening.md",
+        "M11-ui-branding-polish.md",
+        "M12-layered-production.md",
+        "M13-windows-installer-beta-hardening.md",
     )
 )
 
