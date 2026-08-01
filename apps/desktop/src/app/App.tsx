@@ -64,6 +64,13 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
+function scrollToWorkflow(id: string): void {
+  window.document.getElementById(id)?.scrollIntoView({
+    block: "start",
+    behavior: "auto",
+  });
+}
+
 export function App() {
   const [state, setState] = useState<DesktopState | null>(null);
   const [startupError, setStartupError] = useState<string | null>(null);
@@ -405,6 +412,7 @@ export function App() {
     if (startupError !== null) {
       return (
         <main className="startup-error" role="alert">
+          <img className="startup-mark" src="./laserx-mark.svg" alt="" />
           <span className="eyebrow">Startup problem</span>
           <h1>LaserX could not finish loading.</h1>
           <p data-testid="startup-error">{startupError}</p>
@@ -418,7 +426,14 @@ export function App() {
         </main>
       );
     }
-    return <main className="loading">Starting LaserX Design Studio…</main>;
+    return (
+      <main className="loading" role="status" aria-live="polite">
+        <img className="startup-mark" src="./laserx-mark.svg" alt="" />
+        <span className="loading-spinner" aria-hidden="true" />
+        <strong>Starting LaserX Design Studio</strong>
+        <span>Preparing your precision design workspace.</span>
+      </main>
+    );
   }
 
   const document = state.project.document;
@@ -447,6 +462,12 @@ export function App() {
     (issue) =>
       issueSeverityFilter === "all" || issue.severity === issueSeverityFilter,
   );
+  const workspaceIsEmpty =
+    document.objects.length === 0 &&
+    state.editor.importPreview === null &&
+    state.editor.rasterTracePreview === null &&
+    state.editor.signToolPreview === null &&
+    state.editor.aiConceptPreview === null;
 
   const createExactDocument = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -529,14 +550,16 @@ export function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" aria-busy={busy}>
+      <a className="skip-link" href="#design-workspace">
+        Skip to design workspace
+      </a>
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            LX
-          </div>
+          <img className="brand-mark" src="./laserx-mark.svg" alt="" />
           <div>
-            <span className="eyebrow">LaserX Design Studio</span>
+            <span className="brand-name">LaserX</span>
+            <span className="brand-product">Design Studio</span>
             <div className="project-title" data-testid="project-title">
               {state.project.name}
               {state.dirty && (
@@ -549,119 +572,74 @@ export function App() {
             </div>
           </div>
         </div>
-        <div className="file-location" title={state.filePath ?? "Not saved yet"}>
-          {state.filePath ?? "Not saved yet"}
+        <div className="project-location">
+          <span className={`save-state${state.dirty ? " dirty" : ""}`}>
+            <span aria-hidden="true">{state.dirty ? "●" : "✓"}</span>
+            {state.dirty ? "Unsaved changes" : "Saved"}
+          </span>
+          <div
+            className="file-location"
+            title={state.filePath ?? "New project — not saved yet"}
+          >
+            {state.filePath ?? "New project — not saved yet"}
+          </div>
         </div>
       </header>
 
       <nav className="commandbar" aria-label="Project and edit commands">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(() => window.laserx.newProject())}
-        >
-          New
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(() => window.laserx.openProject())}
-        >
-          Open
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(() => window.laserx.saveProject())}
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(() => window.laserx.saveProjectAs())}
-        >
-          Save as
-        </button>
-        <span className="command-divider" />
-        <button
-          type="button"
-          disabled={busy || state.editor.history.undoDepth === 0}
-          data-testid="undo"
-          onClick={() => dispatchEditorAction({ type: "history.undo" })}
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          disabled={busy || state.editor.history.redoDepth === 0}
-          data-testid="redo"
-          onClick={() => dispatchEditorAction({ type: "history.redo" })}
-        >
-          Redo
-        </button>
-        <button
-          type="button"
-          disabled={busy || selectionIds.length === 0}
-          onClick={() => dispatchEditorAction({ type: "clipboard.copy" })}
-        >
-          Copy
-        </button>
-        <button
-          type="button"
-          disabled={busy || !state.editor.clipboardHasContent}
-          onClick={() => dispatchEditorAction({ type: "clipboard.paste" })}
-        >
-          Paste
-        </button>
-        <span className="command-divider" />
-        <button
-          type="button"
-          data-testid="preview-vector-import"
-          disabled={busy}
-          onClick={() =>
-            void run(() =>
-              window.laserx.previewVectorImport({ unitlessDxfUnit }),
-            )
-          }
-        >
-          Import SVG/DXF
-        </button>
-        <button
-          type="button"
-          data-testid="trace-raster"
-          disabled={busy}
-          onClick={() => void runRasterTrace()}
-        >
-          Trace PNG/JPEG
-        </button>
-        <button
-          type="button"
-          data-testid="export-svg"
-          disabled={busy}
-          onClick={() =>
-            void run(() => window.laserx.exportVector({ format: "svg" }))
-          }
-        >
-          SVG
-        </button>
-        <button
-          type="button"
-          data-testid="export-dxf"
-          disabled={busy}
-          onClick={() =>
-            void run(() => window.laserx.exportVector({ format: "dxf" }))
-          }
-        >
-          DXF
-        </button>
-        <span className="shell-badge">M09 Sign tools</span>
+        <div className="command-group project-command-group">
+          <span className="command-group-label">Project</span>
+          <div className="command-group-actions">
+            <button type="button" className="command-primary" disabled={busy} title="Start a new LaserX project" onClick={() => void run(() => window.laserx.newProject())}>
+              <span className="command-icon" aria-hidden="true">+</span><span>New Design</span>
+            </button>
+            <button type="button" disabled={busy} title="Open an existing .laserx project" onClick={() => void run(() => window.laserx.openProject())}>
+              <span className="command-icon" aria-hidden="true">↗</span><span>Open Project</span>
+            </button>
+            <button type="button" disabled={busy} title="Save this .laserx project" onClick={() => void run(() => window.laserx.saveProject())}>
+              <span className="command-icon" aria-hidden="true">↓</span><span>Save</span>
+            </button>
+            <button type="button" aria-label="Save as" disabled={busy} title="Save this project to a different .laserx file" onClick={() => void run(() => window.laserx.saveProjectAs())}>Save As</button>
+          </div>
+        </div>
+        <div className="command-group edit-command-group">
+          <span className="command-group-label">Edit</span>
+          <div className="command-group-actions">
+            <button type="button" disabled={busy || state.editor.history.undoDepth === 0} data-testid="undo" title="Undo (Ctrl+Z)" aria-keyshortcuts="Control+Z" onClick={() => dispatchEditorAction({ type: "history.undo" })}>Undo</button>
+            <button type="button" disabled={busy || state.editor.history.redoDepth === 0} data-testid="redo" title="Redo (Ctrl+Y)" aria-keyshortcuts="Control+Y" onClick={() => dispatchEditorAction({ type: "history.redo" })}>Redo</button>
+            <button type="button" disabled={busy || selectionIds.length === 0} title="Copy selection (Ctrl+C)" aria-keyshortcuts="Control+C" onClick={() => dispatchEditorAction({ type: "clipboard.copy" })}>Copy</button>
+            <button type="button" disabled={busy || !state.editor.clipboardHasContent} title="Paste (Ctrl+V)" aria-keyshortcuts="Control+V" onClick={() => dispatchEditorAction({ type: "clipboard.paste" })}>Paste</button>
+          </div>
+        </div>
+        <div className="command-group artwork-command-group">
+          <span className="command-group-label">Bring in artwork</span>
+          <div className="command-group-actions">
+            <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
+              <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
+            </button>
+            <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
+              <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
+            </button>
+          </div>
+        </div>
+        <div className="command-group output-command-group">
+          <span className="command-group-label">Output</span>
+          <div className="command-group-actions">
+            <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
+            <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
+          </div>
+        </div>
+        <span className="shell-badge">Precision workspace</span>
       </nav>
 
+      <div className="activity-status" role="status" aria-live="polite">
+        {busy ? <><span className="loading-spinner" aria-hidden="true" />Working… controls are temporarily unavailable.</> : null}
+      </div>
+
       {state.recovery !== null && (
-        <section className="recovery-banner" data-testid="recovery-banner">
+        <section className="recovery-banner" data-testid="recovery-banner" role="status">
           <div>
-            <strong>Recovered work is available</strong>
+            <strong><span aria-hidden="true">↺</span> Recovered work is available</strong>
             <span>
               Autosaved {new Date(state.recovery.capturedAt).toLocaleString()}.
               Your original file has not been overwritten.
@@ -697,7 +675,7 @@ export function App() {
 
       {error !== null && (
         <div className="error-strip" role="alert" data-testid="error-message">
-          <span>{error}</span>
+          <span><strong>Action could not be completed.</strong> {error}</span>
           <button type="button" onClick={() => setError(null)}>
             Dismiss
           </button>
@@ -705,8 +683,21 @@ export function App() {
       )}
 
       <div className="content-grid">
-        <aside className="sidebar">
-          <section>
+        <aside className="sidebar" aria-label="Workflow tools">
+          <nav className="workflow-index" aria-label="Design workflows" data-testid="workflow-navigation">
+            <span className="section-label">Workflows</span>
+            <div>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-create")}>Create</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-import")}>Import</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-trace")}>Trace</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-analyze")}>Analyze</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-text")}>Text</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-sign")}>Sign</button>
+              <button type="button" onClick={() => scrollToWorkflow("workflow-ai")}>AI</button>
+            </div>
+          </nav>
+
+          <section id="workflow-project">
             <span className="section-label">Project</span>
             <dl className="project-facts">
               <div>
@@ -726,8 +717,9 @@ export function App() {
             </dl>
           </section>
 
-          <section className="interchange-panel" data-testid="interchange-panel">
-            <span className="section-label">SVG / DXF interchange</span>
+          <section id="workflow-import" className="interchange-panel" data-testid="interchange-panel">
+            <span className="section-label">Import & export artwork</span>
+            <p className="workflow-description">Bring SVG or DXF paths into this project, or export current geometry. This does not open a `.laserx` project.</p>
             <label>
               Unitless DXF assumption
               <select
@@ -841,8 +833,9 @@ export function App() {
             )}
           </section>
 
-          <section className="raster-panel" data-testid="raster-panel">
-            <span className="section-label">PNG / JPEG tracing</span>
+          <section id="workflow-trace" className="raster-panel" data-testid="raster-panel">
+            <span className="section-label">Trace an image</span>
+            <p className="workflow-description">Convert a PNG or JPEG into editable vector paths, then review before accepting.</p>
             <label>
               Detail preset
               <select
@@ -1105,8 +1098,8 @@ export function App() {
             )}
           </section>
 
-          <section className="manufacturing-panel" data-testid="manufacturing-panel">
-            <span className="section-label">Manufacturing analysis</span>
+          <section id="workflow-analyze" className="manufacturing-panel" data-testid="manufacturing-panel">
+            <span className="section-label">Check manufacturability</span>
             <p className="manufacturing-disclaimer">
               Guidance from editable values—not a certification of machine safety or part quality.
             </p>
@@ -1363,8 +1356,9 @@ export function App() {
             )}
           </section>
 
-          <section>
-            <span className="section-label">Create objects</span>
+          <section id="workflow-create">
+            <span className="section-label">Create basic shapes</span>
+            <p className="workflow-description">Add precise editable geometry to the active layer.</p>
             <div className="button-grid">
               {(["line", "rectangle", "ellipse"] as const).map(
                 (objectType) => (
@@ -1386,11 +1380,17 @@ export function App() {
             </div>
           </section>
 
-          <TextPanel state={state} busy={busy} run={run} />
+          <div id="workflow-text" className="workflow-anchor">
+            <TextPanel state={state} busy={busy} run={run} />
+          </div>
 
-          <SignToolsPanel state={state} busy={busy} run={run} />
+          <div id="workflow-sign" className="workflow-anchor">
+            <SignToolsPanel state={state} busy={busy} run={run} />
+          </div>
 
-          <AiGenerationPanel state={state} busy={busy} run={run} />
+          <div id="workflow-ai" className="workflow-anchor">
+            <AiGenerationPanel state={state} busy={busy} run={run} />
+          </div>
 
           <section>
             <span className="section-label">New exact document</span>
@@ -1576,7 +1576,7 @@ export function App() {
           </section>
         </aside>
 
-        <main className="workspace">
+        <main className="workspace" id="design-workspace" tabIndex={-1}>
           <Viewport
             document={document}
             selectionIds={selectionIds}
@@ -1632,10 +1632,33 @@ export function App() {
             }
             onEditorAction={dispatchEditorAction}
           />
+          {workspaceIsEmpty && (
+            <section className="workspace-welcome" aria-labelledby="workspace-welcome-title" data-testid="workspace-welcome">
+              <img src="./laserx-mark.svg" alt="" />
+              <span className="eyebrow">Ready to design</span>
+              <h1 id="workspace-welcome-title">Start with a project or artwork</h1>
+              <p>Open a LaserX project, import vector artwork, trace an image, or build directly on the stock.</p>
+              <div className="welcome-actions">
+                <button type="button" disabled={busy} onClick={() => void run(() => window.laserx.openProject())}>Open Project <small>.laserx</small></button>
+                <button type="button" disabled={busy} onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>Import Artwork <small>SVG / DXF</small></button>
+                <button type="button" disabled={busy} onClick={() => void runRasterTrace()}>Trace Image <small>PNG / JPEG</small></button>
+                <button type="button" className="quiet" onClick={() => scrollToWorkflow("workflow-create")}>Create a shape</button>
+              </div>
+            </section>
+          )}
         </main>
 
-        <aside className="sidebar editing-sidebar">
-          <section>
+        <aside className="sidebar editing-sidebar" aria-label="Editing tools">
+          <nav className="workflow-index editing-index" aria-label="Editing workflows">
+            <span className="section-label">Edit</span>
+            <div>
+              <button type="button" onClick={() => scrollToWorkflow("edit-selection")}>Select</button>
+              <button type="button" onClick={() => scrollToWorkflow("edit-geometry")}>Geometry</button>
+              <button type="button" onClick={() => scrollToWorkflow("edit-transform")}>Transform</button>
+              <button type="button" onClick={() => scrollToWorkflow("edit-layers")}>Layers</button>
+            </div>
+          </nav>
+          <section id="edit-selection">
             <span className="section-label">Selection</span>
             <p className="selection-summary" data-testid="selection-count">
               {selectionIds.length === 0
@@ -1692,7 +1715,7 @@ export function App() {
             </div>
           </section>
 
-          <section data-testid="geometry-panel">
+          <section id="edit-geometry" data-testid="geometry-panel">
             <span className="section-label">Node & geometry editing</span>
             <div className="button-grid compact">
               {pathSelection === null ? (
@@ -2056,7 +2079,7 @@ export function App() {
             )}
           </section>
 
-          <section>
+          <section id="edit-transform">
             <span className="section-label">Exact transform</span>
             <form className="inspector-form" onSubmit={applyInspector}>
               {(["x", "y", "width", "height"] as const).map((field) => (
@@ -2223,7 +2246,7 @@ export function App() {
             </div>
           </section>
 
-          <section>
+          <section id="edit-layers">
             <div className="section-heading">
               <span className="section-label">Layers</span>
               <button
@@ -2382,10 +2405,12 @@ export function App() {
       </div>
 
       <footer className="statusbar">
-        <span>{state.dirty ? "Unsaved changes" : "All changes saved"}</span>
+        <span className={state.dirty ? "status-warning" : "status-success"}>
+          <span aria-hidden="true">{state.dirty ? "●" : "✓"}</span>{" "}
+          {state.dirty ? "Unsaved changes" : "All changes saved"}
+        </span>
         <span>
-          {selectionIds.length} selected · undo {state.editor.history.undoDepth} ·
-          redo {state.editor.history.redoDepth}
+          {selectionIds.length} selected · undo {state.editor.history.undoDepth} · redo {state.editor.history.redoDepth}
         </span>
         <span>Cartesian · +X right · +Y up · schema v7</span>
       </footer>

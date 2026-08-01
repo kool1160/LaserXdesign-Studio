@@ -150,7 +150,7 @@ async function runBoolean(
 }
 
 async function openOverlappingPaths(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole("button", { name: "Open Project", exact: true }).click();
   await expect
     .poll(async () => (await currentDocument(page)).objects.length)
     .toBe(2);
@@ -270,8 +270,8 @@ test("packaged geometry workflow unions, edits, undoes, and persists paths", asy
     expect(disk.schemaVersion).toBe(7);
     expect(disk.document).toEqual(editedDocument);
 
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "New Design", exact: true }).click();
+    await page.getByRole("button", { name: "Open Project", exact: true }).click();
     await expect
       .poll(async () =>
         page.evaluate(

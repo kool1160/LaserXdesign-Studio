@@ -144,7 +144,7 @@ for (const fixture of cases) {
       ).toBe(before);
 
       if (fixture.saveTemplate) {
-        await page.getByRole("button", { name: "Open", exact: true }).click();
+        await page.getByRole("button", { name: "Open Project", exact: true }).click();
         await expect(page.getByTestId("saved-sign-templates")).toContainText(
           "Reviewed address plate",
         );

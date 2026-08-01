@@ -58,18 +58,17 @@ test("packaged editing workflow persists deterministic M03 state", async () => {
       const bounds = (await window.laserx.getState()).editor.selectionBounds;
       return bounds === null ? 0 : bounds.maxXmm - bounds.minXmm;
     });
-    const eastHandle = await page.getByTestId("handle-east").boundingBox();
+    const eastHandleLocator = page.getByTestId("handle-east");
+    await eastHandleLocator.hover();
+    const eastHandle = await eastHandleLocator.boundingBox();
     if (eastHandle === null) {
       throw new Error("The east transform handle has no screen bounds.");
     }
-    await page.mouse.move(
-      eastHandle.x + eastHandle.width / 2,
-      eastHandle.y + eastHandle.height / 2,
-    );
     await page.mouse.down();
     await page.mouse.move(
       eastHandle.x + eastHandle.width / 2 + 30,
       eastHandle.y + eastHandle.height / 2,
+      { steps: 5 },
     );
     await page.mouse.up();
     await expect
@@ -222,8 +221,8 @@ test("packaged editing workflow persists deterministic M03 state", async () => {
     expect(diskProject.schemaVersion).toBe(7);
     expect(diskProject.document).toEqual(beforeSave);
 
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "New Design", exact: true }).click();
+    await page.getByRole("button", { name: "Open Project", exact: true }).click();
     await expect
       .poll(async () =>
         page.evaluate(
@@ -355,8 +354,8 @@ test("packaged exact inspector preserves signed horizontal-line geometry", async
       worldEnd: { xMm: 120, yMm: -25 },
     });
 
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "New Design", exact: true }).click();
+    await page.getByRole("button", { name: "Open Project", exact: true }).click();
     await expect
       .poll(async () =>
         page.evaluate(async (selectedId) => {

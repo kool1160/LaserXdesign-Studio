@@ -73,7 +73,7 @@ async function launchAnalyzedFixture(): Promise<{
   const directory = await seedNestedProject();
   const launched = await launchPackaged(directory, "discard");
   const page = await launched.electronApp.firstWindow();
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByRole("button", { name: "Open Project", exact: true }).click();
   await expect.poll(
     async () => (await page.evaluate(() => window.laserx.getState())).project.name,
   ).toBe("M08 bridge fixture");

@@ -335,6 +335,25 @@ Real-provider calls are never required in CI. The separate procedure in
 `docs/AI_PIPELINE.md` uses a dedicated spending-limited user key and records no
 secret or prompt content.
 
+## M11 executable layers
+
+- the packaged shell test distinguishes **Open Project** (`.laserx`) from
+  **Import Artwork** (SVG/DXF) and **Trace Image** (PNG/JPEG), checks first-run
+  guidance and both workflow navigators, and exercises keyboard focus through
+  the skip link;
+- layout measurements prove the full shell has no horizontal clipping and the
+  design surface remains usable at 1366 × 768 and 1920 × 1080;
+- a separate packaged launch forces 150% Windows scaling and checks the same
+  primary workflow landmarks plus the device-pixel-ratio projection;
+- repository-owned Playwright goldens capture empty 1366 × 768, empty
+  1920 × 1080, and populated editing 1366 × 768 states under
+  `apps/desktop/tests/e2e/m11-polish.spec.ts-snapshots/`;
+- the M02 high-DPI pointer/zoom test and every earlier packaged project,
+  editing, geometry, text, interchange, tracing, cutability, sign-tool, and AI
+  workflow remain in the same 28-test serial packaged suite;
+- `pnpm --filter @laserx/desktop brand:assets` deterministically regenerates
+  the Windows icon, and the M11 workflow fails if the committed output changes.
+
 Run all milestone checks from the repository root:
 
 ```bash

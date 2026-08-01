@@ -87,7 +87,7 @@ test("schema-v1 project opens through the packaged migration path", async () => 
       launched.projectPath,
     );
     const page = await launched.electronApp.firstWindow();
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("button", { name: "Open Project", exact: true }).click();
     await expect
       .poll(async () =>
         page.evaluate(async () => {
