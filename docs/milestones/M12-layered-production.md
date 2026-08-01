@@ -40,8 +40,8 @@ Full 3D rendering, bend design, weld symbols, BOM/ERP, quoting, nesting, and CAM
 
 ## Exit checklist
 
-- [ ] Export package schema documented.
-- [ ] Manufacturing-layer metadata and scope rules documented.
-- [ ] Layer alignment golden fixtures pass.
-- [ ] Production-package end-to-end test passes.
+- [x] Export package schema documented.
+- [x] Manufacturing-layer metadata and scope rules documented.
+- [x] Layer alignment golden fixtures pass.
+- [x] Production-package end-to-end test passes.
 - [ ] Status advances to M13.

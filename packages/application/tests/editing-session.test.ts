@@ -1,6 +1,7 @@
 import {
   createBlankProject,
   getObjectBounds,
+  getSelectionBounds,
   identityTransform,
   type DocumentObject,
   type EditorCommand,
@@ -130,6 +131,266 @@ function expectUndoRedo(
 }
 
 describe("editing ProjectSession", () => {
+  it("aligns physical layers and coordinates registration holes as one undoable action", () => {
+    const session = sessionWithFixture();
+    const sourceHoleId = "b0000000-0000-4000-8000-000000000000";
+    const sourceDecorativeIds = [
+      "b1000000-0000-4000-8000-000000000001",
+      "b1000000-0000-4000-8000-000000000002",
+    ];
+    const targetHoleId = "c0000000-0000-4000-8000-000000000000";
+    const targetDecorativeIds = [
+      "c1000000-0000-4000-8000-000000000001",
+      "c1000000-0000-4000-8000-000000000002",
+    ];
+    session.performEditorAction({
+      type: "layer.set-visibility",
+      layerId: HIDDEN_LAYER_ID,
+      visible: true,
+    });
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: sourceHoleId,
+          type: "ellipse",
+          layerId: LAYER_ID,
+          transform: { a: 0, b: 2, c: -2, d: 0, eMm: 50, fMm: 10 },
+          center: { xMm: 25, yMm: 25 },
+          radiusXmm: 3,
+          radiusYmm: 3,
+        },
+        {
+          id: sourceDecorativeIds[0] as string,
+          type: "ellipse",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 70, yMm: 40 },
+          radiusXmm: 12,
+          radiusYmm: 6,
+        },
+        {
+          id: sourceDecorativeIds[1] as string,
+          type: "ellipse",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 105, yMm: 55 },
+          radiusXmm: 8,
+          radiusYmm: 8,
+        },
+        {
+          id: targetHoleId,
+          type: "ellipse",
+          layerId: HIDDEN_LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 180, yMm: 60 },
+          radiusXmm: 5,
+          radiusYmm: 5,
+        },
+        {
+          id: targetDecorativeIds[0] as string,
+          type: "ellipse",
+          layerId: HIDDEN_LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 120, yMm: 40 },
+          radiusXmm: 18,
+          radiusYmm: 7,
+        },
+        {
+          id: targetDecorativeIds[1] as string,
+          type: "ellipse",
+          layerId: HIDDEN_LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 145, yMm: 70 },
+          radiusXmm: 9,
+          radiusYmm: 9,
+        },
+      ],
+    });
+    for (const [layerId, role, registrationHoleIds] of [
+      [LAYER_ID, "face", [sourceHoleId]],
+      [HIDDEN_LAYER_ID, "backing", [targetHoleId]],
+    ] as const) {
+      session.performEditorAction({
+        type: "layer.set-manufacturing",
+        layerId,
+        manufacturing: {
+          role,
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: "main",
+          registrationHoleIds: [...registrationHoleIds],
+        },
+      });
+    }
+
+    const beforeCoordination = projectJson(session);
+    const targetDecorativeBefore = session.state.project.document.objects.filter(
+      (object) => targetDecorativeIds.includes(object.id),
+    );
+
+    session.performEditorAction({
+      type: "layers.coordinate-registration",
+      sourceLayerId: LAYER_ID,
+      targetLayerId: HIDDEN_LAYER_ID,
+    });
+    const coordinatedDocument = session.state.project.document;
+    const coordinatedMetadata = coordinatedDocument.layers.find(
+      (layer) => layer.id === HIDDEN_LAYER_ID,
+    )?.manufacturing;
+    expect(
+      coordinatedDocument.objects.filter((object) =>
+        targetDecorativeIds.includes(object.id),
+      ),
+    ).toEqual(targetDecorativeBefore);
+    expect(
+      coordinatedDocument.objects.some((object) => object.id === targetHoleId),
+    ).toBe(false);
+    expect(
+      coordinatedDocument.objects.filter(
+        (object) => object.layerId === HIDDEN_LAYER_ID && object.type === "ellipse",
+      ),
+    ).toHaveLength(3);
+    expect(coordinatedMetadata?.registrationHoleIds).toHaveLength(1);
+    const coordinatedHoleId = coordinatedMetadata?.registrationHoleIds[0];
+    expect(coordinatedHoleId).not.toBe(sourceHoleId);
+    expect(coordinatedHoleId).not.toBe(targetHoleId);
+    expect(coordinatedDocument.objects.find((object) => object.id === coordinatedHoleId)).toMatchObject({
+      type: "ellipse",
+      transform: { a: 0, b: 2, c: -2, d: 0, eMm: 50, fMm: 10 },
+      center: { xMm: 25, yMm: 25 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+    const afterCoordination = projectJson(session);
+    session.undo();
+    expect(projectJson(session)).toBe(beforeCoordination);
+    session.redo();
+    expect(projectJson(session)).toBe(afterCoordination);
+
+    session.performEditorAction({
+      type: "layers.align-to-reference",
+      sourceLayerId: LAYER_ID,
+      targetLayerId: HIDDEN_LAYER_ID,
+    });
+    const document = session.state.project.document;
+    const sourceBounds = getSelectionBounds(
+      document,
+      document.objects
+        .filter((object) => object.layerId === LAYER_ID)
+        .map((object) => object.id),
+    );
+    const targetBounds = getSelectionBounds(
+      document,
+      document.objects
+        .filter((object) => object.layerId === HIDDEN_LAYER_ID)
+        .map((object) => object.id),
+    );
+    expect(sourceBounds).not.toBeNull();
+    expect(targetBounds).not.toBeNull();
+    expect(boundsCenter(sourceBounds as NonNullable<typeof sourceBounds>)).toEqual(
+      boundsCenter(targetBounds as NonNullable<typeof targetBounds>),
+    );
+  });
+
+  it("rejects ambiguous or stale registration designations without mutation", () => {
+    const session = sessionWithFixture();
+    const before = projectJson(session);
+    const metadata = {
+      role: "face" as const,
+      material: "mild-steel" as const,
+      thicknessMm: 3,
+      process: "laser" as const,
+      notes: "",
+      registrationGroup: "main",
+    };
+    expect(() =>
+      session.performEditorAction({
+        type: "layer.set-manufacturing",
+        layerId: LAYER_ID,
+        manufacturing: {
+          ...metadata,
+          registrationHoleIds: [RECT_ONE],
+        },
+      }),
+    ).toThrow("must identify a top-level ellipse");
+    expect(projectJson(session)).toBe(before);
+
+    expect(() =>
+      session.performEditorAction({
+        type: "layer.set-manufacturing",
+        layerId: LAYER_ID,
+        manufacturing: {
+          ...metadata,
+          registrationHoleIds: [
+            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+          ],
+        },
+      }),
+    ).toThrow("must be unique");
+    expect(projectJson(session)).toBe(before);
+  });
+
+  it("rejects oval, skewed, and non-uniformly distorted registration geometry without mutation", () => {
+    const session = sessionWithFixture();
+    const invalidObjects = [
+      {
+        id: "d0000000-0000-4000-8000-000000000001",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        center: { xMm: 80, yMm: 50 },
+        radiusXmm: 4,
+        radiusYmm: 3,
+      },
+      {
+        id: "d0000000-0000-4000-8000-000000000002",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+        center: { xMm: 90, yMm: 50 },
+        radiusXmm: 3,
+        radiusYmm: 3,
+      },
+      {
+        id: "d0000000-0000-4000-8000-000000000003",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 },
+        center: { xMm: 100, yMm: 50 },
+        radiusXmm: 3,
+        radiusYmm: 3,
+      },
+    ];
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: invalidObjects,
+    });
+    const before = projectJson(session);
+
+    for (const object of invalidObjects) {
+      expect(() =>
+        session.performEditorAction({
+          type: "layer.set-manufacturing",
+          layerId: LAYER_ID,
+          manufacturing: {
+            role: "face",
+            material: "mild-steel",
+            thicknessMm: 3,
+            process: "laser",
+            notes: "",
+            registrationGroup: "main",
+            registrationHoleIds: [object.id],
+          },
+        }),
+      ).toThrow("true circle in world space");
+      expect(projectJson(session)).toBe(before);
+    }
+  });
+
   it("owns single, modifier, and marquee selection outside the document", () => {
     const session = sessionWithFixture();
     session.performEditorAction({

@@ -147,7 +147,7 @@ function editingProject(): LaserxProject {
   );
 }
 
-describe("schema version 7", () => {
+describe("schema version 8", () => {
   it("round trips layers, groups, transforms, guides, and order deterministically", () => {
     const project = editingProject();
     const first = serializeProject(project);
@@ -155,7 +155,7 @@ describe("schema version 7", () => {
 
     expect(reopened).toEqual(project);
     expect(serializeProject(reopened)).toBe(first);
-    expect(first).toContain('"schemaVersion": 7');
+    expect(first).toContain('"schemaVersion": 8');
     expect(reopened.document.layers.map((layer) => layer.id)).toEqual([
       ARTWORK_LAYER,
       NOTES_LAYER,
@@ -170,15 +170,18 @@ describe("schema version 7", () => {
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
     const migrated = parseProject(fixture("populated-v2.laserx"));
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.migrationHistory.at(-1)).toEqual({
-      fromVersion: 6,
-      toVersion: 7,
+      fromVersion: 7,
+      toVersion: 8,
       migratedAt: NOW,
     });
     expect(migrated.document.settings.manufacturing).toEqual(
       DEFAULT_MANUFACTURING_SETTINGS,
     );
+    expect(
+      migrated.document.layers.every((layer) => layer.manufacturing === undefined),
+    ).toBe(true);
     expect(
       migrated.document.objects.every(
         (object) =>
@@ -189,9 +192,9 @@ describe("schema version 7", () => {
     ).toBe(true);
   });
 
-  it("chains schema v1 through v7 without rewriting source metadata", () => {
+  it("chains schema v1 through v8 without rewriting source metadata", () => {
     const migrated = parseProject(fixture("blank-v1.laserx"));
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.document.id).toBe(PROJECT_ID);
     expect(migrated.document.dimensions).toEqual({
       widthMm: 304.8,
@@ -204,30 +207,36 @@ describe("schema version 7", () => {
       { fromVersion: 4, toVersion: 5, migratedAt: NOW },
       { fromVersion: 5, toVersion: 6, migratedAt: NOW },
       { fromVersion: 6, toVersion: 7, migratedAt: NOW },
+      { fromVersion: 7, toVersion: 8, migratedAt: NOW },
     ]);
   });
 
-  it("migrates schema v3 through v7 and persists editable text geometry", () => {
+  it("migrates schema v3 through v8 and persists editable text geometry", () => {
     const v3 = JSON.parse(fixture("editing-v3.laserx")) as unknown;
     const migrated = parseProjectValue(v3);
-    expect(migrated.migrationHistory.at(-4)).toEqual({
+    expect(migrated.migrationHistory.at(-5)).toEqual({
       fromVersion: 3,
       toVersion: 4,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-3)).toEqual({
+    expect(migrated.migrationHistory.at(-4)).toEqual({
       fromVersion: 4,
       toVersion: 5,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-2)).toEqual({
+    expect(migrated.migrationHistory.at(-3)).toEqual({
       fromVersion: 5,
       toVersion: 6,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 6,
       toVersion: 7,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 7,
+      toVersion: 8,
       migratedAt: NOW,
     });
 
@@ -275,7 +284,7 @@ describe("schema version 7", () => {
       document: unknown;
     };
     const migrated = parseProjectValue(legacy);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     const { manufacturing, ...migratedSettings } = migrated.document.settings;
     const { templates, ...migratedDocument } = migrated.document;
     expect({ ...migratedDocument, settings: migratedSettings }).toEqual(
@@ -283,19 +292,24 @@ describe("schema version 7", () => {
     );
     expect(templates).toEqual([]);
     expect(manufacturing).toEqual(DEFAULT_MANUFACTURING_SETTINGS);
-    expect(migrated.migrationHistory.at(-3)).toEqual({
+    expect(migrated.migrationHistory.at(-4)).toEqual({
       fromVersion: 4,
       toVersion: 5,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-2)).toEqual({
+    expect(migrated.migrationHistory.at(-3)).toEqual({
       fromVersion: 5,
       toVersion: 6,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 6,
       toVersion: 7,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 7,
+      toVersion: 8,
       migratedAt: NOW,
     });
 
@@ -321,7 +335,7 @@ describe("schema version 7", () => {
     expectProjectError(() => serializeProject(project), "INVALID_PROJECT");
   });
 
-  it("persists accepted raster traces as ordinary editable schema-v7 paths", () => {
+  it("persists accepted raster traces as ordinary editable schema-v8 paths", () => {
     const project = createBlankProject({
       id: PROJECT_ID,
       documentId: DOCUMENT_ID,
@@ -434,18 +448,43 @@ describe("schema version 7", () => {
     expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
-  it("persists customized manufacturing settings and registers every migration through schema v7", () => {
+  it("persists manufacturing settings and layer metadata through schema v8", () => {
     const project = editingProject();
+    const registrationHoleId = "923e4567-e89b-42d3-a456-426614174090";
+    project.document.objects.push({
+      id: registrationHoleId,
+      type: "ellipse",
+      layerId: ARTWORK_LAYER,
+      transform: { a: 0, b: 2, c: -2, d: 0, eMm: 5, fMm: -2 },
+      center: { xMm: 80, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
     project.document.settings.manufacturing = {
       ...project.document.settings.manufacturing,
       kerfWidthMm: 0.35,
       minimumBridgeWidthMm: 2.5,
       customizedFields: ["kerfWidthMm", "minimumBridgeWidthMm"],
     };
+    project.document.layers[0] = {
+      ...(project.document.layers[0] as NonNullable<typeof project.document.layers[0]>),
+      manufacturing: {
+        role: "face",
+        material: "mild-steel",
+        thicknessMm: 3,
+        process: "laser",
+        notes: "Front face",
+        registrationGroup: "main-holes",
+        registrationHoleIds: [registrationHoleId],
+      },
+    };
     expect(parseProject(serializeProject(project)).document.settings.manufacturing).toEqual(
       project.document.settings.manufacturing,
     );
-    expect(projectMigrationRegistry).toHaveLength(6);
+    expect(parseProject(serializeProject(project)).document.layers[0]?.manufacturing).toEqual(
+      project.document.layers[0].manufacturing,
+    );
+    expect(projectMigrationRegistry).toHaveLength(7);
     expect(projectMigrationRegistry).toMatchObject([
       { fromVersion: 1, toVersion: 2 },
       { fromVersion: 2, toVersion: 3 },
@@ -453,7 +492,94 @@ describe("schema version 7", () => {
       { fromVersion: 4, toVersion: 5 },
       { fromVersion: 5, toVersion: 6 },
       { fromVersion: 6, toVersion: 7 },
+      { fromVersion: 7, toVersion: 8 },
     ]);
+
+    const earlySchemaV8 = JSON.parse(serializeProject(project)) as {
+      document: { layers: { manufacturing?: { registrationHoleIds?: string[] } }[] };
+    };
+    delete earlySchemaV8.document.layers[0]?.manufacturing?.registrationHoleIds;
+    expect(
+      parseProject(JSON.stringify(earlySchemaV8)).document.layers[0]?.manufacturing
+        ?.registrationHoleIds,
+    ).toEqual([]);
+  });
+
+  it("rejects duplicate, stale, nested, non-ellipse, and cross-layer registration references", () => {
+    const registrationHoleId = "923e4567-e89b-42d3-a456-426614174091";
+    const project = editingProject();
+    project.document.objects.push({
+      id: registrationHoleId,
+      type: "ellipse",
+      layerId: ARTWORK_LAYER,
+      transform: identityTransform(),
+      center: { xMm: 80, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+    project.document.layers[0] = {
+      ...(project.document.layers[0] as NonNullable<typeof project.document.layers[0]>),
+      manufacturing: {
+        role: "face",
+        material: "mild-steel",
+        thicknessMm: 3,
+        process: "laser",
+        notes: "",
+        registrationGroup: "main-holes",
+        registrationHoleIds: [registrationHoleId],
+      },
+    };
+    expect(parseProject(serializeProject(project))).toEqual(project);
+
+    for (const invalidIds of [
+      [registrationHoleId, registrationHoleId],
+      ["aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"],
+      ["123e4567-e89b-42d3-a456-426614174012"],
+      ["123e4567-e89b-42d3-a456-426614174010"],
+    ]) {
+      const invalid = structuredClone(project);
+      const metadata = invalid.document.layers[0]?.manufacturing;
+      if (metadata === undefined) throw new Error("Expected manufacturing metadata.");
+      metadata.registrationHoleIds = invalidIds;
+      expectProjectError(() => serializeProject(invalid), "INVALID_PROJECT");
+    }
+
+    const crossLayer = structuredClone(project);
+    const metadata = crossLayer.document.layers[0]?.manufacturing;
+    if (metadata === undefined) throw new Error("Expected manufacturing metadata.");
+    crossLayer.document.objects.push({
+      id: "a23e4567-e89b-42d3-a456-426614174092",
+      type: "ellipse",
+      layerId: NOTES_LAYER,
+      transform: identityTransform(),
+      center: { xMm: 100, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+    metadata.registrationHoleIds = ["a23e4567-e89b-42d3-a456-426614174092"];
+    expectProjectError(() => serializeProject(crossLayer), "INVALID_PROJECT");
+
+    for (const mutate of [
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.radiusXmm = 4;
+      },
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.transform = { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 };
+      },
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.transform = { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 };
+      },
+    ]) {
+      const invalid = structuredClone(project);
+      const object = invalid.document.objects.find(
+        (candidate) => candidate.id === registrationHoleId,
+      );
+      if (object?.type !== "ellipse") {
+        throw new Error("Expected registration circle geometry.");
+      }
+      mutate(object);
+      expectProjectError(() => serializeProject(invalid), "INVALID_PROJECT");
+    }
   });
 
   it("round trips a versioned saved sign template and migrates schema v6 with an empty library", () => {

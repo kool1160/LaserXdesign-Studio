@@ -45,6 +45,8 @@ import {
   editorActionRequestSchema,
   geometryOperationRequestSchema,
   cutabilityAnalysisRequestSchema,
+  manufacturingLayerAnalysisRequestSchema,
+  productionExportRequestSchema,
   focusCutabilityIssueRequestSchema,
   correctAiWordingRequestSchema,
   IPC_CHANNELS,
@@ -205,6 +207,19 @@ const dialogs: DesktopDialogs = {
     });
     return result.canceled ? null : result.filePath;
   },
+  async chooseProductionDirectory(suggestedName) {
+    const configured = process.env.LASERX_TEST_PRODUCTION_PATH;
+    if (configured !== undefined) return resolve(configured);
+    const result = await dialog.showOpenDialog(requireMainWindow(), {
+      title: "Choose production package location",
+      buttonLabel: "Export package here",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const parent = result.filePaths[0];
+    return result.canceled || parent === undefined
+      ? null
+      : join(parent, suggestedName);
+  },
 };
 
 function requireController(): DesktopController {
@@ -258,6 +273,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.exportVector, (_event, request: unknown) => {
     const validated = vectorExportRequestSchema.parse(request);
     return requireController().exportVector(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.exportProductionPackage, (_event, request: unknown) => {
+    const validated = productionExportRequestSchema.parse(request);
+    return requireController().exportProductionPackage(validated);
   });
   ipcMain.handle(IPC_CHANNELS.previewRasterTrace, (_event, request: unknown) => {
     const validated = rasterTraceRequestSchema.parse(request);
@@ -356,6 +375,13 @@ function registerIpc(): void {
     return requireController().runCutabilityAnalysis(
       validated.operationId,
       validated.objectIds,
+    );
+  });
+  ipcMain.handle(IPC_CHANNELS.runManufacturingLayerAnalysis, (_event, request: unknown) => {
+    const validated = manufacturingLayerAnalysisRequestSchema.parse(request);
+    return requireController().runManufacturingLayerAnalysis(
+      validated.operationId,
+      validated.layerId,
     );
   });
   ipcMain.handle(

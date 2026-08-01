@@ -89,6 +89,19 @@ describe("typed IPC validation", () => {
       ...analysisRequest,
       document: { objects: [] },
     }).success).toBe(false);
+    const analysisScopeSchema = desktopStateSchema.shape.analysis.shape.scope;
+    expect(analysisScopeSchema.safeParse({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: analysisRequest.objectIds,
+    }).success).toBe(true);
+    expect(analysisScopeSchema.safeParse({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: [],
+    }).success).toBe(false);
     const bridgeRequest = {
       issueId: "DISCONNECTED_ISLAND:1",
       widthMm: 2,
@@ -148,6 +161,39 @@ describe("typed IPC validation", () => {
         deltaXmm: 1,
         deltaYmm: 2,
         document: { arbitrary: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "layer.set-manufacturing",
+        layerId: "123e4567-e89b-42d3-a456-426614174002",
+        manufacturing: {
+          role: "non-cut-preview",
+          material: "other",
+          thicknessMm: 1,
+          process: "laser",
+          notes: "Invalid preview process",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "layer.set-manufacturing",
+        layerId: "123e4567-e89b-42d3-a456-426614174002",
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: "main",
+          registrationHoleIds: [
+            "223e4567-e89b-42d3-a456-426614174002",
+            "223e4567-e89b-42d3-a456-426614174002",
+          ],
+        },
       }).success,
     ).toBe(false);
     expect(
@@ -237,6 +283,7 @@ describe("typed IPC validation", () => {
       recentProjects: [],
       recovery: null,
       interchange: { exportSummary: null },
+      production: { preview: null, exportSummary: null },
       raster: { job: null, preview: null },
       ai: {
         connection: {
@@ -259,6 +306,7 @@ describe("typed IPC validation", () => {
         },
       },
       analysis: {
+        scope: null,
         job: null,
         focusedIssueId: null,
         bridgeProposal: null,

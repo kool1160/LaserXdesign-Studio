@@ -1,0 +1,21 @@
+{
+  "name": "@laserx/production-export",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@laserx/domain": "workspace:*",
+    "@laserx/io-dxf": "workspace:*",
+    "@laserx/io-svg": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -24,6 +24,7 @@ import {
 
 const OPERATION_ID = "a0000000-0000-4000-8000-000000000001";
 const SECOND_OPERATION_ID = "a0000000-0000-4000-8000-000000000002";
+const THIRD_OPERATION_ID = "a0000000-0000-4000-8000-000000000003";
 const LAYER_ID = "b0000000-0000-4000-8000-000000000001";
 const SECOND_LAYER_ID = "b0000000-0000-4000-8000-000000000002";
 const OUTER_ID = "c0000000-0000-4000-8000-000000000001";
@@ -81,8 +82,36 @@ function twoLayerNestedProject(): LaserxProject {
     width: 300,
     height: 120,
     layers: [
-      { id: LAYER_ID, name: "Front", visible: true, locked: false },
-      { id: SECOND_LAYER_ID, name: "Backing", visible: true, locked: false },
+      {
+        id: LAYER_ID,
+        name: "Front",
+        visible: true,
+        locked: false,
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      },
+      {
+        id: SECOND_LAYER_ID,
+        name: "Backing",
+        visible: true,
+        locked: false,
+        manufacturing: {
+          role: "backing",
+          material: "acrylic",
+          thicknessMm: 6,
+          process: "router",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      },
     ],
     activeLayerId: LAYER_ID,
     objects: [
@@ -204,14 +233,120 @@ describe("cutability worker coordination", () => {
       status: "complete",
       errorCount: 1,
     });
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "whole-design",
+      layerId: null,
+      layerName: null,
+    });
     expect(counter.calls).toBe(1);
     expect(await controller.runCutabilityAnalysis(SECOND_OPERATION_ID, [])).toMatchObject({ ok: true });
     expect(counter.calls).toBe(1);
 
     await controller.editorAction({ type: "objects.move", objectIds: [ISLAND_ID], deltaXmm: 1, deltaYmm: 0 });
     expect(controller.state.analysis.cutability).toBeNull();
+    expect(controller.state.analysis.scope).toBeNull();
     expect(await controller.runCutabilityAnalysis(SECOND_OPERATION_ID, [])).toMatchObject({ ok: true });
     expect(counter.calls).toBe(2);
+  });
+
+  it("publishes whole-design, selection, and physical-layer scopes atomically across cache reuse", async () => {
+    const counter = { calls: 0 };
+    const controller = await desktop(
+      immediateWorker(counter),
+      twoLayerNestedProject(),
+    );
+
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "whole-design",
+      layerId: null,
+      layerName: null,
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual([
+      ISLAND_ID,
+      SECOND_ISLAND_ID,
+      OUTER_ID,
+      SECOND_OUTER_ID,
+    ].sort());
+    expect(counter.calls).toBe(1);
+
+    await controller.runCutabilityAnalysis(
+      SECOND_OPERATION_ID,
+      [OUTER_ID, ISLAND_ID],
+    );
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: [ISLAND_ID, OUTER_ID].sort(),
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual([
+      ISLAND_ID,
+      OUTER_ID,
+    ].sort());
+    expect(counter.calls).toBe(2);
+
+    await controller.runManufacturingLayerAnalysis(THIRD_OPERATION_ID, LAYER_ID);
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "manufacturing-layer",
+      layerId: LAYER_ID,
+      layerName: "Front",
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual([
+      ISLAND_ID,
+      OUTER_ID,
+    ].sort());
+    expect(counter.calls).toBe(2);
+  });
+
+  it("preserves the previous result with its original scope on cancellation and failure", async () => {
+    let callCount = 0;
+    const worker: CutabilityWorkerPort = {
+      run: (request, signal) => {
+        callCount += 1;
+        if (callCount === 1) {
+          return Promise.resolve(analyzeDocumentCutability(request.document, {
+            operationId: request.operationId,
+            objectIds: request.objectIds,
+          }));
+        }
+        if (callCount === 2) {
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => reject(new CutabilityAnalysisCancelledError()),
+              { once: true },
+            );
+          });
+        }
+        return Promise.reject(new Error("Injected analysis failure."));
+      },
+    };
+    const controller = await desktop(worker);
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    const previousScope = controller.state.analysis.scope;
+    const previousAnalysis = controller.state.analysis.cutability;
+
+    const canceled = controller.runCutabilityAnalysis(
+      SECOND_OPERATION_ID,
+      [OUTER_ID, ISLAND_ID],
+    );
+    await Promise.resolve();
+    await controller.cancelCutabilityAnalysis(SECOND_OPERATION_ID);
+    expect(await canceled).toMatchObject({ ok: true });
+    expect(controller.state.analysis.scope).toEqual(previousScope);
+    expect(controller.state.analysis.cutability).toEqual(previousAnalysis);
+
+    const failed = await controller.runCutabilityAnalysis(
+      THIRD_OPERATION_ID,
+      [OUTER_ID, ISLAND_ID],
+    );
+    expect(failed).toMatchObject({
+      ok: false,
+      error: "Injected analysis failure.",
+    });
+    expect(controller.state.analysis.scope).toEqual(previousScope);
+    expect(controller.state.analysis.cutability).toEqual(previousAnalysis);
   });
 
   it("cancels without publishing and rejects a stale worker result", async () => {
@@ -258,7 +393,8 @@ describe("cutability worker coordination", () => {
   });
 
   it("previews manual and automatic bridges without mutation, accepts once, and undoes exactly", async () => {
-    const controller = await desktop(immediateWorker());
+    const counter = { calls: 0 };
+    const controller = await desktop(immediateWorker(counter));
     await controller.runCutabilityAnalysis(OPERATION_ID, []);
     const issue = controller.state.analysis.cutability?.issues.find(
       (candidate) => candidate.code === "DISCONNECTED_ISLAND",
@@ -287,6 +423,15 @@ describe("cutability worker coordination", () => {
     })).toMatchObject({ ok: true });
 
     expect(await controller.acceptBridge()).toMatchObject({ ok: true });
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "whole-design",
+      layerId: null,
+      layerName: null,
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual(
+      controller.state.project.document.objects.map((object) => object.id).sort(),
+    );
+    expect(counter.calls).toBe(2);
     expect(controller.state.editor.history.undoDepth).toBe(1);
     expect(JSON.stringify(controller.state.project.document)).not.toBe(before);
     await controller.editorAction({ type: "history.undo" });
@@ -352,6 +497,14 @@ describe("cutability worker coordination", () => {
 
     expect(await controller.acceptBridge()).toMatchObject({ ok: true });
     expect(counter.calls).toBe(3);
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "whole-design",
+      layerId: null,
+      layerName: null,
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual(
+      controller.state.project.document.objects.map((object) => object.id).sort(),
+    );
     expect(controller.state.project.document.objects
       .filter((object) => object.id === OUTER_ID || object.id === ISLAND_ID))
       .toEqual(untouchedBefore);
@@ -363,6 +516,73 @@ describe("cutability worker coordination", () => {
     expect(controller.state.analysis.cutability).toBeNull();
     await controller.runCutabilityAnalysis(OPERATION_ID, []);
     expect(counter.calls).toBe(4);
+  });
+
+  it("re-analyzes the mapped successful selection after bridge acceptance", async () => {
+    const controller = await desktop(immediateWorker());
+    await controller.runCutabilityAnalysis(
+      OPERATION_ID,
+      [OUTER_ID, ISLAND_ID],
+    );
+    const issue = controller.state.analysis.cutability?.issues.find(
+      (candidate) => candidate.code === "DISCONNECTED_ISLAND",
+    );
+    if (issue === undefined) throw new Error("Expected a disconnected island issue.");
+    await controller.previewBridge({
+      issueId: issue.id,
+      widthMm: 2,
+      mode: "automatic",
+    });
+
+    expect(await controller.acceptBridge()).toMatchObject({ ok: true });
+    const analyzedObjectIds = controller.state.analysis.cutability?.analyzedObjectIds;
+    expect(analyzedObjectIds).toEqual(
+      controller.state.project.document.objects.map((object) => object.id).sort(),
+    );
+    expect(analyzedObjectIds).not.toContain(ISLAND_ID);
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "selection",
+      layerId: null,
+      layerName: null,
+      objectIds: analyzedObjectIds,
+    });
+  });
+
+  it("re-analyzes current authoritative physical-layer IDs after bridge acceptance", async () => {
+    const controller = await desktop(
+      immediateWorker(),
+      twoLayerNestedProject(),
+    );
+    await controller.runManufacturingLayerAnalysis(
+      OPERATION_ID,
+      SECOND_LAYER_ID,
+    );
+    const issue = controller.state.analysis.cutability?.issues.find(
+      (candidate) => candidate.code === "DISCONNECTED_ISLAND",
+    );
+    if (issue === undefined) throw new Error("Expected a disconnected island issue.");
+    await controller.previewBridge({
+      issueId: issue.id,
+      widthMm: 2,
+      mode: "automatic",
+    });
+
+    expect(await controller.acceptBridge()).toMatchObject({ ok: true });
+    const currentLayerObjectIds = controller.state.project.document.objects
+      .filter((object) => object.layerId === SECOND_LAYER_ID)
+      .map((object) => object.id)
+      .sort();
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "manufacturing-layer",
+      layerId: SECOND_LAYER_ID,
+      layerName: "Backing",
+    });
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual(
+      currentLayerObjectIds,
+    );
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).not.toContain(
+      OUTER_ID,
+    );
   });
 
   it("rejects a worker response for a different operation", async () => {

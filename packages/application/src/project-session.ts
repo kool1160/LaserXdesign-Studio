@@ -7,6 +7,7 @@ import {
   createBlankProject,
   createDocument,
   getObjectsInRenderOrder,
+  getRegistrationHoleObjects,
   getSelectionBounds,
   hitTestDocument,
   identityTransform,
@@ -236,6 +237,16 @@ export type EditorActionRequest =
       objectType: "line" | "rectangle" | "ellipse";
     }
   | { type: "layer.create"; name: string }
+  | {
+      type: "layers.align-to-reference";
+      sourceLayerId: string;
+      targetLayerId: string;
+    }
+  | {
+      type: "layers.coordinate-registration";
+      sourceLayerId: string;
+      targetLayerId: string;
+    }
   | { type: "guide.create"; axis: "x" | "y"; positionMm: number };
 
 export interface ProjectCommandDispatcher {
@@ -718,6 +729,122 @@ export class ProjectSession implements ProjectCommandDispatcher {
             locked: false,
           },
         });
+      case "layers.align-to-reference": {
+        const sourceLayer = this.#project.document.layers.find(
+          (layer) => layer.id === request.sourceLayerId,
+        );
+        const targetLayer = this.#project.document.layers.find(
+          (layer) => layer.id === request.targetLayerId,
+        );
+        if (
+          request.sourceLayerId === request.targetLayerId ||
+          sourceLayer?.manufacturing === undefined ||
+          targetLayer?.manufacturing === undefined ||
+          sourceLayer.manufacturing.role === "non-cut-preview" ||
+          targetLayer.manufacturing.role === "non-cut-preview"
+        ) {
+          throw new RangeError("Alignment requires two different physical manufacturing layers.");
+        }
+        const sourceObjects = this.#project.document.objects.filter(
+          (object) => object.layerId === request.sourceLayerId,
+        );
+        const targetObjects = this.#project.document.objects.filter(
+          (object) => object.layerId === request.targetLayerId,
+        );
+        const sourceBounds = getSelectionBounds(
+          this.#project.document,
+          sourceObjects.map((object) => object.id),
+        );
+        const targetBounds = getSelectionBounds(
+          this.#project.document,
+          targetObjects.map((object) => object.id),
+        );
+        if (sourceBounds === null || targetBounds === null) {
+          throw new RangeError("Both manufacturing layers need geometry before alignment.");
+        }
+        if (!isLayerEditable(this.#project.document, request.targetLayerId)) {
+          throw new RangeError("Unlock and show the target manufacturing layer before alignment.");
+        }
+        return this.executeEditorCommand({
+          type: "objects.move",
+          objectIds: targetObjects.map((object) => object.id),
+          deltaXmm:
+            (sourceBounds.minXmm + sourceBounds.maxXmm -
+              targetBounds.minXmm - targetBounds.maxXmm) /
+            2,
+          deltaYmm:
+            (sourceBounds.minYmm + sourceBounds.maxYmm -
+              targetBounds.minYmm - targetBounds.maxYmm) /
+            2,
+        });
+      }
+      case "layers.coordinate-registration": {
+        const document = this.#project.document;
+        const sourceLayer = document.layers.find(
+          (layer) => layer.id === request.sourceLayerId,
+        );
+        const targetLayer = document.layers.find(
+          (layer) => layer.id === request.targetLayerId,
+        );
+        if (
+          sourceLayer?.manufacturing?.registrationGroup === undefined ||
+          sourceLayer.manufacturing.registrationGroup === null ||
+          sourceLayer.manufacturing.role === "non-cut-preview" ||
+          targetLayer?.manufacturing?.role === "non-cut-preview" ||
+          request.sourceLayerId === request.targetLayerId ||
+          targetLayer?.manufacturing?.registrationGroup !==
+            sourceLayer.manufacturing.registrationGroup
+        ) {
+          throw new RangeError("Registration coordination requires the same named registration group.");
+        }
+        if (!isLayerEditable(document, request.targetLayerId)) {
+          throw new RangeError("Unlock and show the target manufacturing layer before coordinating holes.");
+        }
+        const sourceHoles = getRegistrationHoleObjects(
+          document,
+          request.sourceLayerId,
+        );
+        if (sourceHoles.length === 0) {
+          throw new RangeError(
+            "The reference layer has no explicitly designated registration holes.",
+          );
+        }
+        const targetHoles = getRegistrationHoleObjects(
+          document,
+          request.targetLayerId,
+        );
+        const targetHoleIds = targetHoles.map((object) => object.id);
+        const coordinated = sourceHoles.map((object) => ({
+          ...copyDocumentObject(object),
+          id: this.#dependencies.createId(),
+          layerId: request.targetLayerId,
+        }));
+        this.beginTransaction("Coordinate registration holes");
+        try {
+          if (targetHoleIds.length > 0) {
+            this.executeEditorCommand({
+              type: "objects.delete",
+              objectIds: targetHoleIds,
+            });
+          }
+          this.executeEditorCommand({
+            type: "objects.insert",
+            objects: coordinated,
+          });
+          this.executeEditorCommand({
+            type: "layer.set-manufacturing",
+            layerId: request.targetLayerId,
+            manufacturing: {
+              ...targetLayer.manufacturing,
+              registrationHoleIds: coordinated.map((object) => object.id),
+            },
+          });
+          return this.commitTransaction();
+        } catch (error) {
+          this.cancelTransaction();
+          throw error;
+        }
+      }
       case "guide.create":
         return this.executeEditorCommand({
           type: "guide.add",

@@ -56,6 +56,9 @@ importers:
       '@laserx/io-svg':
         specifier: workspace:*
         version: link:../../packages/io-svg
+      '@laserx/production-export':
+        specifier: workspace:*
+        version: link:../../packages/production-export
       '@laserx/project-format':
         specifier: workspace:*
         version: link:../../packages/project-format
@@ -287,6 +290,28 @@ importers:
       saxes:
         specifier: 6.0.0
         version: 6.0.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.1.2
+        version: 26.1.2
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
+
+  packages/production-export:
+    dependencies:
+      '@laserx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@laserx/io-dxf':
+        specifier: workspace:*
+        version: link:../io-dxf
+      '@laserx/io-svg':
+        specifier: workspace:*
+        version: link:../io-svg
     devDependencies:
       '@types/node':
         specifier: 26.1.2

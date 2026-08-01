@@ -20,8 +20,9 @@ export type {
   PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 7 as const;
+export const PROJECT_SCHEMA_VERSION = 8 as const;
 export const MAX_SAVED_SIGN_TEMPLATES = 1_000;
+export const MAX_REGISTRATION_HOLES_PER_LAYER = 1_000;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -95,6 +96,28 @@ export interface ManufacturingSettings {
   customizedFields: ManufacturingSettingField[];
 }
 
+export type ManufacturingLayerRole =
+  | "face"
+  | "backing"
+  | "spacer-tab"
+  | "drill-reference"
+  | "non-cut-preview";
+
+export type ManufacturingLayerProcess =
+  | ManufacturingProcess
+  | "drill"
+  | "non-cut";
+
+export interface ManufacturingLayerMetadata {
+  role: ManufacturingLayerRole;
+  material: ManufacturingMaterial;
+  thicknessMm: number;
+  process: ManufacturingLayerProcess;
+  notes: string;
+  registrationGroup: string | null;
+  registrationHoleIds: string[];
+}
+
 export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
   presetId: "laser-mild-steel-3mm",
   process: "laser",
@@ -121,6 +144,7 @@ export interface Layer {
   name: string;
   visible: boolean;
   locked: boolean;
+  manufacturing?: ManufacturingLayerMetadata | undefined;
 }
 
 export interface Guide {
@@ -302,14 +326,14 @@ export interface MigrationRecord {
   migratedAt: string;
 }
 
-export interface LaserxProjectV5 {
+export interface LaserxProjectV8 {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: ProjectMetadata;
   document: LaserxDocument;
   migrationHistory: MigrationRecord[];
 }
 
-export type LaserxProject = LaserxProjectV5;
+export type LaserxProject = LaserxProjectV8;
 
 export interface CreateDocumentInput {
   id: string;
@@ -890,6 +914,117 @@ export function findLayer(
   return document.layers.find((layer) => layer.id === layerId);
 }
 
+export interface RegistrationCircleGeometry {
+  center: PointMm;
+  diameterMm: number;
+}
+
+const REGISTRATION_CIRCLE_RELATIVE_TOLERANCE = 1e-9;
+
+function registrationEllipseShapeMatrix(object: EllipseObject): {
+  xxMm2: number;
+  xyMm2: number;
+  yyMm2: number;
+} {
+  const xAxisXmm = object.transform.a * object.radiusXmm;
+  const xAxisYmm = object.transform.b * object.radiusXmm;
+  const yAxisXmm = object.transform.c * object.radiusYmm;
+  const yAxisYmm = object.transform.d * object.radiusYmm;
+  return {
+    xxMm2: xAxisXmm ** 2 + yAxisXmm ** 2,
+    xyMm2: xAxisXmm * xAxisYmm + yAxisXmm * yAxisYmm,
+    yyMm2: xAxisYmm ** 2 + yAxisYmm ** 2,
+  };
+}
+
+export function isRegistrationCircleObject(
+  object: DocumentObject,
+): object is EllipseObject {
+  if (
+    object.type !== "ellipse" ||
+    !Number.isFinite(object.radiusXmm) ||
+    !Number.isFinite(object.radiusYmm) ||
+    object.radiusXmm <= 0 ||
+    object.radiusYmm <= 0
+  ) {
+    return false;
+  }
+  const shape = registrationEllipseShapeMatrix(object);
+  const magnitude = Math.max(shape.xxMm2, shape.yyMm2);
+  if (!Number.isFinite(magnitude) || magnitude <= 0) return false;
+  const tolerance = magnitude * REGISTRATION_CIRCLE_RELATIVE_TOLERANCE;
+  return (
+    Math.abs(shape.xxMm2 - shape.yyMm2) <= tolerance &&
+    Math.abs(shape.xyMm2) <= tolerance
+  );
+}
+
+export function getRegistrationCircleGeometry(
+  object: EllipseObject,
+): RegistrationCircleGeometry {
+  if (!isRegistrationCircleObject(object)) {
+    throw new RangeError(
+      "Registration geometry must be a true circle in world space; ovals, skew, and non-uniform distortion are not supported.",
+    );
+  }
+  const shape = registrationEllipseShapeMatrix(object);
+  return {
+    center: applyAffineTransform(object.center, object.transform),
+    diameterMm: 2 * Math.sqrt((shape.xxMm2 + shape.yyMm2) / 2),
+  };
+}
+
+export function getRegistrationHoleObjects(
+  document: LaserxDocument,
+  layerId: string,
+): EllipseObject[] {
+  const layer = findLayer(document, layerId);
+  if (layer === undefined) {
+    throw new RangeError("The registration layer does not exist.");
+  }
+  const metadata = layer.manufacturing;
+  if (metadata === undefined) return [];
+  validateManufacturingLayerMetadata(metadata);
+  if (metadata.registrationHoleIds.length === 0) return [];
+  if (
+    metadata.role === "non-cut-preview" ||
+    metadata.registrationGroup === null
+  ) {
+    throw new RangeError(
+      "Registration holes require a named physical manufacturing layer.",
+    );
+  }
+  return metadata.registrationHoleIds.map((objectId) => {
+    const object = document.objects.find((candidate) => candidate.id === objectId);
+    if (object === undefined) {
+      throw new RangeError(
+        `Registration hole reference ${objectId} is stale.`,
+      );
+    }
+    if (object.layerId !== layerId || object.type !== "ellipse") {
+      throw new RangeError(
+        `Registration hole reference ${objectId} must identify a top-level ellipse on its manufacturing layer.`,
+      );
+    }
+    if (!isRegistrationCircleObject(object)) {
+      throw new RangeError(
+        `Registration hole reference ${objectId} must identify a true circle in world space; ovals, skew, and non-uniform distortion are not supported.`,
+      );
+    }
+    return object;
+  });
+}
+
+export function validateRegistrationHoleReferences(
+  document: LaserxDocument,
+): void {
+  for (const layer of document.layers) {
+    if (layer.manufacturing !== undefined) {
+      getRegistrationHoleObjects(document, layer.id);
+    }
+  }
+}
+
 export function isLayerEditable(
   document: LaserxDocument,
   layerId: string,
@@ -932,7 +1067,94 @@ export function objectUsesLayerRecursively(
 }
 
 export function copyLayer(layer: Layer): Layer {
-  return { ...layer };
+  return {
+    ...layer,
+    ...(layer.manufacturing === undefined
+      ? {}
+      : { manufacturing: copyManufacturingLayerMetadata(layer.manufacturing) }),
+  };
+}
+
+const MANUFACTURING_LAYER_ROLES: readonly ManufacturingLayerRole[] = [
+  "face",
+  "backing",
+  "spacer-tab",
+  "drill-reference",
+  "non-cut-preview",
+];
+const MANUFACTURING_LAYER_PROCESSES: readonly ManufacturingLayerProcess[] = [
+  ...MANUFACTURING_PROCESSES,
+  "drill",
+  "non-cut",
+];
+
+export function validateManufacturingLayerMetadata(
+  metadata: ManufacturingLayerMetadata,
+): void {
+  if (!MANUFACTURING_LAYER_ROLES.includes(metadata.role)) {
+    throw new RangeError("Manufacturing layer role is not supported.");
+  }
+  if (!MANUFACTURING_MATERIALS.includes(metadata.material)) {
+    throw new RangeError("Manufacturing layer material is not supported.");
+  }
+  if (!MANUFACTURING_LAYER_PROCESSES.includes(metadata.process)) {
+    throw new RangeError("Manufacturing layer process is not supported.");
+  }
+  assertPositiveFinite(metadata.thicknessMm, "Manufacturing layer thickness");
+  if (metadata.notes.length > 500) {
+    throw new RangeError("Manufacturing layer notes support at most 500 characters.");
+  }
+  if (
+    metadata.registrationGroup !== null &&
+    (metadata.registrationGroup.trim().length === 0 ||
+      metadata.registrationGroup.length > 100)
+  ) {
+    throw new RangeError("Registration group must contain 1 to 100 characters.");
+  }
+  if (
+    metadata.registrationHoleIds.length > MAX_REGISTRATION_HOLES_PER_LAYER
+  ) {
+    throw new RangeError("A layer supports at most 1,000 registration holes.");
+  }
+  if (
+    new Set(metadata.registrationHoleIds).size !==
+    metadata.registrationHoleIds.length
+  ) {
+    throw new RangeError("Registration hole references must be unique.");
+  }
+  if (
+    metadata.registrationHoleIds.some((objectId) => objectId.trim().length === 0)
+  ) {
+    throw new RangeError("Registration hole references cannot be empty.");
+  }
+  if (
+    metadata.registrationHoleIds.length > 0 &&
+    (metadata.role === "non-cut-preview" || metadata.registrationGroup === null)
+  ) {
+    throw new RangeError(
+      "Registration holes require a named physical manufacturing layer.",
+    );
+  }
+  if (
+    (metadata.role === "non-cut-preview") !==
+    (metadata.process === "non-cut")
+  ) {
+    throw new RangeError(
+      "Preview-only layers must use the non-cut process, and physical layers cannot use it.",
+    );
+  }
+}
+
+export function copyManufacturingLayerMetadata(
+  metadata: ManufacturingLayerMetadata,
+): ManufacturingLayerMetadata {
+  validateManufacturingLayerMetadata(metadata);
+  return {
+    ...metadata,
+    notes: metadata.notes.trim(),
+    registrationGroup: metadata.registrationGroup?.trim() ?? null,
+    registrationHoleIds: [...metadata.registrationHoleIds],
+  };
 }
 
 export function copyGuide(guide: Guide): Guide {

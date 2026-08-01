@@ -81,6 +81,12 @@ for (const fixture of cases) {
       expect(accepted.project.document.objects.every((object) =>
         ["line", "rectangle", "ellipse", "path", "text", "group"].includes(object.type),
       )).toBe(true);
+      expect(accepted.analysis.scope).toEqual({
+        kind: "selection",
+        layerId: null,
+        layerName: null,
+        objectIds: accepted.analysis.cutability?.analyzedObjectIds,
+      });
 
       if (fixture.model === "family-name") {
         const detailLayer = accepted.project.document.layers.find(
@@ -101,7 +107,7 @@ for (const fixture of cases) {
           detailObjectIds,
         );
         await expect(page.getByTestId("cutability-scope")).toContainText(
-          `${String(detailObjectIds.length)} object(s)`,
+          `Selection analysis · ${String(detailObjectIds.length)} object(s)`,
         );
 
         const wholeDesign = await page.evaluate(async () =>
@@ -116,6 +122,9 @@ for (const fixture of cases) {
             .map((object) => object.id)
             .sort(),
         });
+        await expect(page.getByTestId("cutability-scope")).toContainText(
+          "Whole-design analysis",
+        );
       }
 
       await page.getByTestId("export-svg").click();
@@ -132,7 +141,7 @@ for (const fixture of cases) {
       }).toBe(true);
 
       await clickAndWaitForCommand(page, "Save");
-      await waitForProjectSchema(launched.projectPath, 7);
+      await waitForProjectSchema(launched.projectPath, 8);
       const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
         document: { templates: unknown[] };
       };

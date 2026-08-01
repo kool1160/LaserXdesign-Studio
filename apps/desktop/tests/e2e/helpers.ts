@@ -74,6 +74,7 @@ export interface LaunchEnvironment {
   importPath?: string;
   exportPath?: string;
   rasterPath?: string;
+  productionPath?: string;
 }
 
 export async function launchPackaged(
@@ -120,6 +121,9 @@ export async function launchPackaged(
       ...(launchEnvironment.rasterPath === undefined
         ? {}
         : { LASERX_TEST_RASTER_PATH: launchEnvironment.rasterPath }),
+      ...(launchEnvironment.productionPath === undefined
+        ? {}
+        : { LASERX_TEST_PRODUCTION_PATH: launchEnvironment.productionPath }),
     },
   });
   return {

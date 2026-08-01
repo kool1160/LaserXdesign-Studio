@@ -277,7 +277,7 @@ the conservative analysis into a manufacturability guarantee.
 ## M09 executable layers
 
 - domain and project-format tests cover template validation/copying, strict
-  schema-v7 round trips, deterministic v6-to-v7 migration, template-ID
+  schema-v8 round trips, deterministic v6-to-v7-to-v8 migration, template-ID
   collisions, and ordinary template save/delete commands;
 - pure sign-tools tests cover every outer primitive, exact backing/border
   bounds, Clipper2 offsets, mounting-hole centers across display-unit changes,
@@ -301,7 +301,7 @@ the conservative analysis into a manufacturability guarantee.
 - three packaged Windows scenarios build the reviewed 24-inch badge, address,
   and layered family-name signs, inspect the noninteractive preview, accept and
   analyze ordinary objects, explicitly scope the family-name detail objects
-  before returning to whole-design analysis, export SVG, persist schema v7,
+  before returning to whole-design analysis, export SVG, persist schema v8,
   save/reopen the representative user template, and undo generation exactly;
 - `pnpm audit:templates` checks the machine-readable asset manifest against
   runtime presets, the bundled-font catalog, SPDX identity, and repository
@@ -328,7 +328,7 @@ the conservative analysis into a manufacturability guarantee.
   mismatch, accepts editable geometry, analyzes, verifies transient provenance,
   undoes exactly, disconnects, and confirms manual editing still works;
 - `pnpm audit:ai` checks provider pinning, request privacy controls, renderer
-  isolation, schema-v7 non-persistence, documentation, and production-source
+  isolation, schema-v8 non-persistence, documentation, and production-source
   secret patterns.
 
 Real-provider calls are never required in CI. The separate procedure in
@@ -353,6 +353,48 @@ secret or prompt content.
   workflow remain in the same 28-test serial packaged suite;
 - `pnpm --filter @laserx/desktop brand:assets` deterministically regenerates
   the Windows icon, and the M11 workflow fails if the committed output changes.
+
+## M12 executable layers
+
+- domain/application tests cover optional manufacturing metadata, explicit
+  same-layer top-level registration IDs, transformed world-circle recognition,
+  fail-closed oval/skew/non-uniform and ambiguous/stale references, one-command
+  layer alignment, non-destructive one-transaction registration-hole
+  synchronization, exact undo/redo, and fresh-ID materialization while
+  multiple decorative ellipses remain unchanged;
+- project-format tests prove strict schema-v8 round trips, persistence of
+  registration identity, safe normalization of early schema-v8 metadata, safe
+  rejection of duplicate/stale/nested/non-ellipse/cross-layer references and
+  invalid transformed ellipses, save/reopen retention of valid transformed
+  circles, and deterministic v7-to-v8 migration without silently classifying
+  any legacy layer;
+- `fixtures/production/m12-package-goldens.json` independently pins two- and
+  three-layer filenames, roles, shared millimeter origin/stock, and registration
+  coordinates;
+- production-export tests inspect deterministic SVG/DXF text, full-stock SVG
+  viewBoxes, document order, bounds, SHA-256/byte manifest records, designated-
+  only registration evidence amid multiple decorative ellipses, exact centers
+  and diameters for rotated/uniformly scaled circles, diameter-mismatch
+  warnings, rejection of same-minor/different-major ovals and distorted
+  transforms, and complete exclusion of non-cut preview layers;
+- storage tests prove complete folder commit, fail-closed conflicts, explicit
+  replacement, rollback-safe staging, and partial-file failure reporting with
+  no published success folder;
+- desktop integration tests persist/reopen semantic layers, switch visibly
+  between whole-design, explicit-selection, and physical-layer analysis,
+  preserve the prior result/scope pair on worker cancellation or failure,
+  replay bridge analysis from whole, mapped-selection, and authoritative-layer
+  scopes, export two real layers, and parse the actual manifest;
+- the packaged Windows scenario constructs face/backing/non-cut layers with
+  multiple decorative ellipses, disables designation for an oval, designates a
+  rotated true circle, coordinates only designated holes, proves unrelated
+  target geometry plus exact undo/redo and save/reopen identity, drives Analyze
+  all, Analyze selection, and Analyze this physical layer from the renderer
+  with distinct truthful labels and exact analyzed IDs, inspects designated-
+  only manifest evidence and exact-scale SVGs, and proves conflict and
+  replacement behavior;
+- `pnpm audit:production` enforces explicit physical scope, preview exclusion,
+  atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
 
 Run all milestone checks from the repository root:
 

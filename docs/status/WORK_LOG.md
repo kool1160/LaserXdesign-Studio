@@ -2,6 +2,138 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-01 - M12 world-space registration-circle review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking re-review finding on `140b5c7`
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Registration designation now accepts only top-level ellipses whose
+  emitted affine geometry is a true world-space circle. The domain derives a
+  transformed ellipse shape matrix, accepts rotation/reflection/uniform scale,
+  rejects ovals, skew, and non-uniform distortion, and exposes one shared
+  center/diameter calculation to validation and production export. The renderer
+  disables designation for invalid ellipses and describes the circle-only
+  contract. Manifest evidence and alignment warnings no longer reduce an oval
+  to its bounding-box minor axis.
+- Verification: Regressions cover transformed circle geometry, same-minor/
+  different-major ovals, skew and non-uniform transforms, invalid designation
+  without mutation, save/reopen, coordination, exact manifest geometry,
+  mismatch warnings, and packaged renderer behavior. Full `pnpm verify` passes
+  in 277 seconds with every policy/license audit, lint, typecheck, 270 unit/
+  integration tests, build/package, and all 29 serial packaged Windows Electron
+  E2E scenarios. The production dependency audit reports no known
+  vulnerabilities, Repository Guard passes 68 required files and 17
+  milestones, and patch checks are clean. Exact-head CI remains required before
+  re-review.
+- Decisions: A registration hole is a diameter-bearing circle in emitted world
+  geometry, independent of its local ellipse representation. All consumers use
+  that one domain contract; arbitrary ellipses remain ordinary manufacturing
+  geometry and cannot become registration evidence.
+- Known limitations: M12 does not model elliptical, slotted, or other
+  non-circular registration features. Existing no-CAM, no-3D,
+  no-machine-control, and no-M13-or-later boundaries are unchanged.
+- Next allowed work: Complete local and exact-head verification, publish the
+  repair to the existing draft PR #29, and stop for independent re-review. Do
+  not merge, close Issue #12, advance status, or begin M13+.
+
+## 2026-08-01 - M12 truthful analysis-scope review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking re-review finding on `e08a996`
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Replaced independently mutable cutability result/scope fields with
+  one atomic successful projection. Whole-design is now only an empty object-ID
+  request; Analyze selection publishes an explicit scope with exact IDs; cache
+  hits switch labels with their matching result; and cancellation or failure
+  leaves the previous result and its original scope unchanged. Bridge acceptance
+  reruns the original successful scope using the full document, current physical-
+  layer IDs, or selection IDs mapped through the topology replacement.
+- Verification: Controller regressions cover all-to-selection-to-physical-layer
+  switching, identical-ID cache reuse, cancellation/failure with a prior result,
+  and bridge acceptance from whole-design, selection, and physical-layer runs.
+  Packaged Windows coverage drives all three renderer actions and asserts their
+  distinct text plus exact analyzed IDs. Full `pnpm verify` passes in 262
+  seconds with all audits, lint, typecheck, 267 unit/integration tests, build/
+  package, and all 29 serial packaged Windows Electron E2E scenarios.
+  Production dependency audit reports no known vulnerabilities, Repository
+  Guard passes 68 required files and 17 milestones, and patch checks are clean.
+  Exact-head CI remains required before re-review.
+- Decisions: A pending request may publish job progress but cannot mutate the
+  last successful manufacturing evidence. A successful cache or worker result
+  replaces scope, summary, issue focus, and bridge proposal together.
+- Known limitations: Analysis remains advisory and does not certify machine
+  safety or part quality. Existing no-CAM, no-3D, no-machine-control, and no-
+  M13-or-later boundaries are unchanged.
+- Next allowed work: Complete exact-head verification and stop for independent
+  re-review. Do not merge, close Issue #12, advance status, or begin M13+.
+
+## 2026-08-01 - M12 explicit registration-hole review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking review finding 4835349348
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Synced the branch with current `main` through the owner-locked
+  M14-M16 roadmap and agent contract while retaining the complete M12 guard.
+  Replaced the destructive all-ellipses registration heuristic with explicit,
+  persisted same-layer top-level ellipse IDs; added a renderer designation
+  control; made duplicate, stale, nested, non-ellipse, cross-layer, unnamed-
+  group, and preview-only references fail closed; and limited coordination,
+  manifests, alignment warnings, and shared-registration helpers to those IDs.
+  Coordination now preserves every decorative target ellipse, gives copied
+  holes fresh IDs, updates target metadata in the same transaction, and undoes
+  and redoes exactly.
+- Verification: `pnpm verify` passes in 265 seconds with all policy/license
+  audits, lint, typecheck, 263 unit/integration tests, build/package, and all 29
+  serial packaged Windows Electron E2E scenarios. Focused regressions cover
+  multiple decorative ellipses on both layers, renderer designation, exact
+  target preservation, fresh-ID synchronization, exact undo/redo, early-v8
+  normalization, invalid-reference rejection, designated-only manifest and
+  alignment evidence, and save/reopen identity.
+- Decisions: Registration groups express coordination scope but classify no
+  geometry by themselves. `registrationHoleIds` is the authoritative identity;
+  early schema-v8 metadata defaults it to an empty list, and no migration or
+  object name infers a hole. Manifest registration records now include the
+  designated object ID with world-millimeter evidence.
+- Known limitations: Designation is limited to top-level ellipses that emit
+  true world-space circles in M12. Assembly preview remains presentation-only
+  2D. Existing no-CAM, no-3D, no-machine-control, and no-M13 boundaries are
+  unchanged.
+- Next allowed work: Publish the repair to the existing draft PR #29, wait for
+  all exact-head workflows, and stop for independent re-review. Do not merge,
+  close Issue #12, advance status, or begin M13 or later work.
+
+## 2026-08-01 - M12 layered production candidate
+
+- Date: 2026-08-01
+- Agent/task: Codex / Issue #12 implementation
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Strict optional schema-v8 manufacturing-layer metadata and a
+  no-classification v7 migration; explicit face/backing/spacer-tab/drill-
+  reference/non-cut roles; physical-layer analysis scope; center alignment;
+  one-transaction registration-hole coordination; a bounds-only 2D exploded
+  preview; deterministic per-layer SVG/DXF and schema-1 manifest generation;
+  SHA-256/byte/bounds/material/registration evidence; and atomic main-process
+  folder conflict, replacement, rollback, and partial-failure handling.
+- Verification: Reviewed two- and three-layer goldens pin exact origin, stock,
+  file order, roles, and registration coordinates. Storage and controller
+  injection prove a partial write returns a failed command and zero published
+  files. Full `pnpm verify` passes locally with all production/license/policy
+  audits, lint/typecheck, 260 unit/integration tests, build/package, and 29
+  serial packaged Windows Electron E2E scenarios. Production dependency audit,
+  Repository Guard, patch-format checks, and exact-head remote CI remain part
+  of publication.
+- Decisions: ADR 0022 keeps ordinary layers nonphysical by default, reuses the
+  existing exact-scale SVG/DXF adapters, records registration circles in
+  world millimeters, and keeps filesystem commits/rollback in Electron main.
+- Known limitations: Registration designation supports top-level ellipses only
+  when their emitted world geometry is circular. Assembly preview is
+  presentation-only 2D. No PDF/raster assembly export, 3D, bends, welds,
+  BOM/ERP, quoting, nesting, CAM, G-code, DWG, machine control, or M13
+  installer/release work is included.
+- Next allowed work: Publish the candidate to a draft M12 PR, wait for exact-
+  head Windows CI, and stop for review. Do not merge, close Issue #12, advance
+  `docs/status/CURRENT.md`, or begin M13.
+
 ## 2026-07-31 - M09 standard-analysis review repair
 
 - Date: 2026-07-31

@@ -1,0 +1,30 @@
+{
+  "twoLayer": {
+    "files": [
+      "01-face-face.svg",
+      "01-face-face.dxf",
+      "02-backing-backing.svg",
+      "02-backing-backing.dxf",
+      "manifest.json"
+    ],
+    "roles": ["face", "backing"],
+    "originMm": { "xMm": 0, "yMm": 0 },
+    "stockMm": { "widthMm": 300, "heightMm": 200 },
+    "registrationHoleKeys": ["40.000000:50.000000:6.000000"]
+  },
+  "threeLayer": {
+    "files": [
+      "01-face-face.svg",
+      "01-face-face.dxf",
+      "02-backing-backing.svg",
+      "02-backing-backing.dxf",
+      "03-spacer-tab-spacer-tabs.svg",
+      "03-spacer-tab-spacer-tabs.dxf",
+      "manifest.json"
+    ],
+    "roles": ["face", "backing", "spacer-tab"],
+    "originMm": { "xMm": 0, "yMm": 0 },
+    "stockMm": { "widthMm": 300, "heightMm": 200 },
+    "registrationHoleKeys": ["40.000000:50.000000:6.000000"]
+  }
+}

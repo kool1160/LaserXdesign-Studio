@@ -19,3 +19,9 @@ M03 project fixtures:
 - `projects/migrated-v2-to-v3.laserx` — deterministic reviewed migration of
   `projects/populated-v2.laserx`, retaining the schema-v2 source for
   compatibility coverage.
+
+M12 production fixtures:
+
+- `production/m12-package-goldens.json` — reviewed two- and three-layer
+  filenames, physical roles, shared millimeter origin/stock, and numerically
+  identical explicitly designated true-circle registration holes.

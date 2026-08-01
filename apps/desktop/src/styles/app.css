@@ -1980,6 +1980,51 @@ button:disabled {
   }
 }
 
+.production-layer-editor,
+.production-package {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle, #334155);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-raised, #172033) 86%, transparent);
+}
+
+.assembly-preview {
+  display: grid;
+  min-height: 90px;
+  padding: 20px 10px 8px;
+}
+
+.assembly-layer {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid #71c4ff;
+  border-radius: 6px;
+  background: rgb(15 35 54 / 84%);
+  box-shadow: 0 5px 12px rgb(0 0 0 / 24%);
+}
+
+.assembly-layer.role-backing {
+  border-color: #d6a85f;
+}
+
+.assembly-layer.role-spacer-tab,
+.assembly-layer.role-drill-reference {
+  border-style: dashed;
+}
+
+.production-layer-selection {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+}
+
 @media (max-width: 1180px) {
   .content-grid {
     grid-template-columns: 224px minmax(0, 1fr) 252px;
