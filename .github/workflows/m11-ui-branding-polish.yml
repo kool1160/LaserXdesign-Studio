@@ -1,0 +1,64 @@
+name: M11 UI Branding Polish
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/m11-ui-branding-polish"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+
+      - name: Run repository guard
+        run: py -3 scripts/repository_guard.py
+
+      - name: Verify clean patch formatting
+        run: git diff --check
+
+      - name: Verify branded asset generation
+        shell: pwsh
+        run: |
+          pnpm --filter @laserx/desktop brand:assets
+          if (-not (git diff --quiet -- apps/desktop/public/laserx-icon.png)) {
+            throw "Generated LaserX icon is out of date."
+          }
+
+      - name: Verify M11
+        run: pnpm verify
+
+      - name: Upload packaged M11 application and visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: laserx-m11-windows-polish
+          path: |
+            apps/desktop/dist-packaged/win-unpacked
+            apps/desktop/tests/e2e/m11-polish.spec.ts-snapshots
+          if-no-files-found: error
+          retention-days: 7
