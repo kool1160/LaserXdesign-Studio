@@ -4,6 +4,10 @@
 
 A dependable, branded Windows beta can be installed and launched like normal software, used on real sign jobs, recovered after common failures, cleanly uninstalled, and distributed through a controlled versioned release process.
 
+## Activation gate
+
+M13 remains blocked until M12 is reviewed on its exact final head, required CI is green, the M12 pull request is merged, Issue #12 is closed, and `docs/status/CURRENT.md` explicitly activates M13.
+
 ## Included
 
 - signed Windows `.exe` installer and documented code-signing process;
@@ -25,6 +29,10 @@ A dependable, branded Windows beta can be installed and launched like normal sof
 - migration tests from every shipped project schema;
 - beta feedback template and known-issues list;
 - release CI gates.
+
+## Release boundary
+
+M13 produces the signed, installable beta and release-hardening evidence. It does not declare the product stable Version 1.0. Real-world beta validation, representative user and machine coverage, final release-defect triage, and the Version 1.0 publication decision belong to M14.
 
 ## Explicitly excluded
 
@@ -51,4 +59,5 @@ No new major design, AI, layered-production, CAM, nesting, G-code, DWG, machine-
 - [ ] Release checklist and known issues published.
 - [ ] Security and license audits pass.
 - [ ] Performance, accessibility, recovery, and migration gates pass.
-- [ ] Version 1 beta tagged and status moved to maintenance/planning.
+- [ ] Version 1 beta is tagged and published for controlled validation.
+- [ ] Status advances to M14 only after exact-head review, green CI, merge, Issue #13 closure, and owner advancement.
