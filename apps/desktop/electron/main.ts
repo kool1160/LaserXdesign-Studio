@@ -23,15 +23,20 @@ import {
 } from "./desktop-controller.js";
 import {
   createDocumentRequestSchema,
+  bridgeProposalRequestSchema,
+  cancelCutabilityAnalysisRequestSchema,
   cancelGeometryOperationRequestSchema,
   cancelRasterTraceRequestSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
+  cutabilityAnalysisRequestSchema,
+  focusCutabilityIssueRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
+  setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
@@ -252,6 +257,41 @@ function registerIpc(): void {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);
   });
+  ipcMain.handle(
+    IPC_CHANNELS.setManufacturingSettings,
+    (_event, request: unknown) => {
+      const validated = setManufacturingSettingsRequestSchema.parse(request);
+      return requireController().setManufacturingSettings(validated.settings);
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.runCutabilityAnalysis, (_event, request: unknown) => {
+    const validated = cutabilityAnalysisRequestSchema.parse(request);
+    return requireController().runCutabilityAnalysis(
+      validated.operationId,
+      validated.objectIds,
+    );
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.cancelCutabilityAnalysis,
+    (_event, request: unknown) => {
+      const validated = cancelCutabilityAnalysisRequestSchema.parse(request);
+      return requireController().cancelCutabilityAnalysis(validated.operationId);
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.focusCutabilityIssue, (_event, request: unknown) => {
+    const validated = focusCutabilityIssueRequestSchema.parse(request);
+    return requireController().focusCutabilityIssue(validated.issueId);
+  });
+  ipcMain.handle(IPC_CHANNELS.previewBridge, (_event, request: unknown) => {
+    const validated = bridgeProposalRequestSchema.parse(request);
+    return requireController().previewBridge(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.acceptBridge, () =>
+    requireController().acceptBridge(),
+  );
+  ipcMain.handle(IPC_CHANNELS.rejectBridge, () =>
+    requireController().rejectBridge(),
+  );
   ipcMain.handle(
     IPC_CHANNELS.setViewportPreferences,
     (_event, request: unknown) => {

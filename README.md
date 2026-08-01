@@ -84,8 +84,16 @@ and bounds. The exact supported-entity and unit matrix is documented in
 M07 raster tracing keeps PNG/JPEG paths and pixels out of renderer requests,
 runs deterministic preprocessing and tracing in a cancellable bounded worker,
 and previews original, black/white, edge, trace, and aligned overlay views.
-Accepted candidates become ordinary editable schema-v5 paths through one
-undoable command and are explicitly marked as requiring cutability review.
+Accepted candidates become ordinary editable paths through one undoable
+command and immediately enter manufacturing review.
+
+M08 persists editable process/material/thickness and kerf/feature/bridge/gap/
+spacing settings in schema v6. A cancellable worker reports measured issues,
+classifies retained/removed regions under an explicit stock assumption, and
+keeps ambiguous topology visibly ambiguous. Manual and automatic bridge
+proposals leave the project untouched until acceptance through one undoable
+topology command. Presets are transparent starting points, and no result claims
+certified manufacturability or cut readiness.
 
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete development workflow.
 

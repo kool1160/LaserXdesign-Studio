@@ -18,8 +18,9 @@
     "audit:fonts": "node scripts/font-license-audit.mjs",
     "audit:geometry": "node scripts/geometry-license-audit.mjs",
     "audit:raster": "node scripts/raster-license-audit.mjs",
+    "audit:cutability": "node scripts/cutability-policy-audit.mjs",
     "generate:raster-fixtures": "pnpm --filter @laserx/desktop exec electron ../../scripts/generate-m07-raster-fixtures.cjs",
-    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm audit:raster && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm audit:raster && pnpm audit:cutability && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

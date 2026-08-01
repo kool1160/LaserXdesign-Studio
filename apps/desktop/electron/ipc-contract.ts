@@ -6,6 +6,7 @@ import {
   isInvertibleTransform,
   type AffineTransformMm,
   type DocumentObject,
+  type ManufacturingSettings,
 } from "@laserx/domain";
 import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
 import { z } from "zod";
@@ -28,6 +29,13 @@ export const IPC_CHANNELS = {
   rejectRasterTrace: "laserx:raster:reject-trace",
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
+  setManufacturingSettings: "laserx:manufacturing:set-settings",
+  runCutabilityAnalysis: "laserx:manufacturing:analyze",
+  cancelCutabilityAnalysis: "laserx:manufacturing:cancel-analysis",
+  focusCutabilityIssue: "laserx:manufacturing:focus-issue",
+  previewBridge: "laserx:manufacturing:preview-bridge",
+  acceptBridge: "laserx:manufacturing:accept-bridge",
+  rejectBridge: "laserx:manufacturing:reject-bridge",
   editorAction: "laserx:editor:action",
   geometryOperation: "laserx:geometry:operate",
   cancelGeometryOperation: "laserx:geometry:cancel",
@@ -161,6 +169,40 @@ const guideSchema = z.strictObject({
   positionMm: finiteNumber,
 });
 
+export const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
+  z.strictObject({
+    presetId: z.string().trim().min(1).max(100),
+    process: z.enum(["laser", "plasma", "waterjet", "router"]),
+    material: z.enum([
+      "mild-steel",
+      "stainless-steel",
+      "aluminum",
+      "wood",
+      "acrylic",
+      "other",
+    ]),
+    thicknessMm: positiveNumber,
+    kerfWidthMm: positiveNumber,
+    minimumFeatureWidthMm: positiveNumber,
+    minimumBridgeWidthMm: positiveNumber,
+    minimumGapMm: positiveNumber,
+    contourSpacingMm: positiveNumber,
+    heatDistortionSpacingMm: positiveNumber.nullable(),
+    tolerancePreset: z.enum(["fine", "balanced", "robust"]),
+    customizedFields: z.array(z.enum([
+      "process",
+      "material",
+      "thicknessMm",
+      "kerfWidthMm",
+      "minimumFeatureWidthMm",
+      "minimumBridgeWidthMm",
+      "minimumGapMm",
+      "contourSpacingMm",
+      "heatDistortionSpacingMm",
+      "tolerancePreset",
+    ])).refine((fields) => new Set(fields).size === fields.length),
+  });
+
 const documentSchema = z.strictObject({
   kind: z.literal("document"),
   id: z.uuid(),
@@ -186,6 +228,7 @@ const documentSchema = z.strictObject({
         snapToDocument: z.boolean(),
       }),
     }),
+    manufacturing: manufacturingSettingsSchema,
   }),
   layers: z.array(layerSchema).min(1),
   activeLayerId: z.uuid(),
@@ -216,6 +259,30 @@ export const setViewportPreferencesRequestSchema = z.strictObject({
   snapToGuides: z.boolean().optional(),
   snapToObjects: z.boolean().optional(),
   snapToDocument: z.boolean().optional(),
+});
+
+export const setManufacturingSettingsRequestSchema = z.strictObject({
+  settings: manufacturingSettingsSchema,
+});
+
+export const cutabilityAnalysisRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+  objectIds: z.array(z.uuid()),
+});
+
+export const cancelCutabilityAnalysisRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
+export const focusCutabilityIssueRequestSchema = z.strictObject({
+  issueId: z.string().min(1).nullable(),
+});
+
+export const bridgeProposalRequestSchema = z.strictObject({
+  issueId: z.string().min(1),
+  widthMm: positiveNumber,
+  mode: z.enum(["manual", "automatic"]),
+  direction: z.enum(["left", "right", "up", "down"]).optional(),
 });
 
 const textLayoutRequestShape = {
@@ -694,27 +761,91 @@ export const desktopStateSchema = z.strictObject({
       .nullable(),
   }),
   analysis: z.strictObject({
+    job: z
+      .strictObject({
+        operationId: z.uuid(),
+        percent: z.number().min(0).max(100),
+        stage: z.enum(["normalizing", "topology", "spacing", "classifying"]),
+      })
+      .nullable(),
+    focusedIssueId: z.string().nullable(),
+    bridgeProposal: z
+      .strictObject({
+        id: z.string().min(1),
+        issueId: z.string().min(1),
+        mode: z.enum(["manual", "automatic"]),
+        direction: z.enum(["left", "right", "up", "down"]),
+        sourceObjectIds: z.array(z.uuid()).min(2),
+        layerId: z.uuid(),
+        widthMm: positiveNumber,
+        lengthMm: nonnegativeNumber,
+        bridgePolygon: z.array(pointSchema).min(4),
+        replacementContours: z.array(z.strictObject({
+          closed: z.literal(true),
+          points: z.array(pointSchema).min(3),
+        })).min(1),
+        documentFingerprint: z.string().min(1),
+        summary: z.string().min(1),
+        warnings: z.array(z.string()),
+      })
+      .nullable(),
     cutability: z
       .strictObject({
-        status: z.literal("requires-settings"),
+        operationId: z.uuid().nullable(),
+        status: z.enum(["complete", "ambiguous"]),
+        documentFingerprint: z.string().min(1),
         analyzedObjectIds: z.array(z.uuid()),
+        settings: manufacturingSettingsSchema,
         pathCount: z.number().int().nonnegative(),
         closedPathCount: z.number().int().nonnegative(),
         openPathCount: z.number().int().nonnegative(),
+        segmentCount: z.number().int().nonnegative(),
         smallestSegmentMm: positiveNumber.nullable(),
-        issueCount: z.number().int().positive(),
+        issueCount: z.number().int().nonnegative(),
+        errorCount: z.number().int().nonnegative(),
+        warningCount: z.number().int().nonnegative(),
         issues: z.array(
           z.strictObject({
-            code: z.string().min(1),
+            id: z.string().min(1),
+            code: z.enum([
+              "OPEN_CONTOUR",
+              "DUPLICATE_SEGMENT",
+              "OVERLAPPING_SEGMENT",
+              "SELF_INTERSECTION",
+              "DISCONNECTED_ISLAND",
+              "ENCLOSED_DROPOUT",
+              "BRIDGE_TOO_NARROW",
+              "FEATURE_TOO_NARROW",
+              "GAP_TOO_SMALL",
+              "CONTOURS_TOO_CLOSE",
+              "KERF_COLLAPSE_RISK",
+              "UNSUPPORTED_GEOMETRY",
+            ]),
             severity: z.enum(["warning", "error"]),
+            objectIds: z.array(z.uuid()),
             objectId: z.uuid().nullable(),
+            segmentIndices: z.array(z.number().int().nonnegative()),
             segmentIndex: z.number().int().nonnegative().nullable(),
-            measuredValueMm: z.number().nonnegative().nullable(),
-            configuredLimitMm: z.number().nonnegative().nullable(),
+            measuredValueMm: z.number().nonnegative(),
+            configuredLimitMm: z.number().nonnegative(),
+            location: pointSchema,
             message: z.string().min(1),
             suggestion: z.string().min(1),
           }),
         ),
+        regions: z.array(z.strictObject({
+          id: z.string().min(1),
+          objectId: z.uuid(),
+          contourIndex: z.number().int().nonnegative(),
+          parentRegionId: z.string().nullable(),
+          depth: z.number().int().nonnegative(),
+          disposition: z.enum(["retained", "removed", "ambiguous"]),
+          areaMm2: positiveNumber,
+          bounds: boundsSchema,
+          points: z.array(pointSchema).min(3),
+        })),
+        previewAssumption: z.string().min(1),
+        disclaimer: z.string().min(1),
         cutReady: z.literal(false),
       })
       .nullable(),
@@ -744,6 +875,21 @@ export type SetDisplayUnitRequest = z.infer<
 >;
 export type SetViewportPreferencesRequest = z.infer<
   typeof setViewportPreferencesRequestSchema
+>;
+export type SetManufacturingSettingsRequest = z.infer<
+  typeof setManufacturingSettingsRequestSchema
+>;
+export type CutabilityAnalysisRequest = z.infer<
+  typeof cutabilityAnalysisRequestSchema
+>;
+export type CancelCutabilityAnalysisRequest = z.infer<
+  typeof cancelCutabilityAnalysisRequestSchema
+>;
+export type FocusCutabilityIssueRequest = z.infer<
+  typeof focusCutabilityIssueRequestSchema
+>;
+export type BridgeProposalRequestDto = z.infer<
+  typeof bridgeProposalRequestSchema
 >;
 export type ResolveRecoveryRequest = z.infer<
   typeof resolveRecoveryRequestSchema
@@ -789,6 +935,21 @@ export interface LaserxDesktopApi {
   setViewportPreferences(
     request: SetViewportPreferencesRequest,
   ): Promise<CommandResult>;
+  setManufacturingSettings(
+    request: SetManufacturingSettingsRequest,
+  ): Promise<CommandResult>;
+  runCutabilityAnalysis(
+    request: CutabilityAnalysisRequest,
+  ): Promise<CommandResult>;
+  cancelCutabilityAnalysis(
+    request: CancelCutabilityAnalysisRequest,
+  ): Promise<CommandResult>;
+  focusCutabilityIssue(
+    request: FocusCutabilityIssueRequest,
+  ): Promise<CommandResult>;
+  previewBridge(request: BridgeProposalRequestDto): Promise<CommandResult>;
+  acceptBridge(): Promise<CommandResult>;
+  rejectBridge(): Promise<CommandResult>;
   editorAction(request: EditorActionRequest): Promise<CommandResult>;
   geometryOperation(
     request: GeometryOperationRequestDto,

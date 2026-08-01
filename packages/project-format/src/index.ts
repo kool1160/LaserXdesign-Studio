@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MANUFACTURING_SETTINGS,
   DEFAULT_VIEWPORT_PREFERENCES,
   PROJECT_SCHEMA_VERSION,
   collectObjectIds,
@@ -9,6 +10,7 @@ import {
   type AffineTransformMm,
   type DocumentObject,
   type LaserxProject,
+  type ManufacturingSettings,
 } from "@laserx/domain";
 import { z } from "zod";
 
@@ -254,6 +256,47 @@ const guideSchema = z.strictObject({
   positionMm: finiteNumber,
 });
 
+const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
+  z.strictObject({
+    presetId: z.string().trim().min(1).max(100),
+    process: z.enum(["laser", "plasma", "waterjet", "router"]),
+    material: z.enum([
+      "mild-steel",
+      "stainless-steel",
+      "aluminum",
+      "wood",
+      "acrylic",
+      "other",
+    ]),
+    thicknessMm: positiveNumber,
+    kerfWidthMm: positiveNumber,
+    minimumFeatureWidthMm: positiveNumber,
+    minimumBridgeWidthMm: positiveNumber,
+    minimumGapMm: positiveNumber,
+    contourSpacingMm: positiveNumber,
+    heatDistortionSpacingMm: positiveNumber.nullable(),
+    tolerancePreset: z.enum(["fine", "balanced", "robust"]),
+    customizedFields: z
+      .array(
+        z.enum([
+          "process",
+          "material",
+          "thicknessMm",
+          "kerfWidthMm",
+          "minimumFeatureWidthMm",
+          "minimumBridgeWidthMm",
+          "minimumGapMm",
+          "contourSpacingMm",
+          "heatDistortionSpacingMm",
+          "tolerancePreset",
+        ]),
+      )
+      .refine(
+        (fields) => new Set(fields).size === fields.length,
+        "Customized manufacturing fields must be unique.",
+      ),
+  });
+
 export const laserxProjectV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   project: metadataSchema,
@@ -373,8 +416,8 @@ export const laserxProjectV4Schema = z.strictObject({
   migrationHistory: z.array(migrationRecordSchema),
 });
 
-export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
-  schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
+export const laserxProjectV5Schema = z.strictObject({
+  schemaVersion: z.literal(5),
   project: metadataSchema,
   document: z.strictObject({
     kind: z.literal("document"),
@@ -410,9 +453,48 @@ export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
   migrationHistory: z.array(migrationRecordSchema),
 });
 
+export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
+  schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
+  project: metadataSchema,
+  document: z.strictObject({
+    kind: z.literal("document"),
+    id: z.uuid(),
+    dimensions: z.strictObject({
+      widthMm: positiveNumber,
+      heightMm: positiveNumber,
+    }),
+    origin: z.strictObject({
+      xMm: z.literal(0),
+      yMm: z.literal(0),
+    }),
+    settings: z.strictObject({
+      displayUnit: z.enum(["millimeters", "inches"]),
+      viewport: z.strictObject({
+        rulersVisible: z.boolean(),
+        gridVisible: z.boolean(),
+        gridSpacingMm: positiveNumber,
+        snapping: z.strictObject({
+          enabled: z.boolean(),
+          snapToGrid: z.boolean(),
+          snapToGuides: z.boolean(),
+          snapToObjects: z.boolean(),
+          snapToDocument: z.boolean(),
+        }),
+      }),
+      manufacturing: manufacturingSettingsSchema,
+    }),
+    layers: z.array(layerSchema).min(1),
+    activeLayerId: z.uuid(),
+    guides: z.array(guideSchema),
+    objects: z.array(documentObjectSchema),
+  }),
+  migrationHistory: z.array(migrationRecordSchema),
+});
+
 type LaserxProjectV2 = z.infer<typeof laserxProjectV2Schema>;
 type LaserxProjectV3Format = z.infer<typeof laserxProjectV3Schema>;
 type LaserxProjectV4Format = z.infer<typeof laserxProjectV4Schema>;
+type LaserxProjectV5Format = z.infer<typeof laserxProjectV5Schema>;
 type DocumentObjectV2 = z.infer<typeof documentObjectV2Schema>;
 
 export type ProjectFormatErrorCode =
@@ -614,7 +696,7 @@ export function migrateProjectV3ToV4(value: unknown): LaserxProjectV4Format {
   };
 }
 
-export function migrateProjectV4ToV5(value: unknown): LaserxProject {
+export function migrateProjectV4ToV5(value: unknown): LaserxProjectV5Format {
   const legacy = laserxProjectV4Schema.safeParse(value);
   if (!legacy.success) {
     throw new ProjectFormatError(
@@ -624,11 +706,43 @@ export function migrateProjectV4ToV5(value: unknown): LaserxProject {
   }
   return {
     ...legacy.data,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: 5,
     migrationHistory: [
       ...legacy.data.migrationHistory.map((record) => ({ ...record })),
       {
         fromVersion: 4,
+        toVersion: 5,
+        migratedAt: legacy.data.project.updatedAt,
+      },
+    ],
+  };
+}
+
+export function migrateProjectV5ToV6(value: unknown): LaserxProject {
+  const legacy = laserxProjectV5Schema.safeParse(value);
+  if (!legacy.success) {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This schema-v5 project is damaged and cannot be migrated.",
+    );
+  }
+  return {
+    ...legacy.data,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    document: {
+      ...legacy.data.document,
+      settings: {
+        ...legacy.data.document.settings,
+        manufacturing: {
+          ...DEFAULT_MANUFACTURING_SETTINGS,
+          customizedFields: [],
+        },
+      },
+    },
+    migrationHistory: [
+      ...legacy.data.migrationHistory.map((record) => ({ ...record })),
+      {
+        fromVersion: 5,
         toVersion: PROJECT_SCHEMA_VERSION,
         migratedAt: legacy.data.project.updatedAt,
       },
@@ -637,9 +751,11 @@ export function migrateProjectV4ToV5(value: unknown): LaserxProject {
 }
 
 export function migrateProjectV1(value: unknown): LaserxProject {
-  return migrateProjectV4ToV5(
-    migrateProjectV3ToV4(
-      migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
+  return migrateProjectV5ToV6(
+    migrateProjectV4ToV5(
+      migrateProjectV3ToV4(
+        migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
+      ),
     ),
   );
 }
@@ -662,8 +778,13 @@ export const projectMigrationRegistry: readonly ProjectMigration[] = [
   },
   {
     fromVersion: 4,
-    toVersion: PROJECT_SCHEMA_VERSION,
+    toVersion: 5,
     migrate: migrateProjectV4ToV5,
+  },
+  {
+    fromVersion: 5,
+    toVersion: PROJECT_SCHEMA_VERSION,
+    migrate: migrateProjectV5ToV6,
   },
 ];
 

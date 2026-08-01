@@ -312,6 +312,37 @@ GitHub CI pass. Do not merge, close Issue #5, or advance to M05.
   and remotely green. Keep PR #20 draft; do not merge, close Issue #6, or
   advance to M06.
 
+## 2026-07-31 — M08 cutability analysis and bridge candidate
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #9 implementation
+- Milestone: M08 — Cutability Analysis, Bridges, and Manufacturing Preview
+- Delivered: Schema-v6 editable manufacturing settings and deterministic
+  migration; four transparent starting presets; a pure bounded world-mm rule
+  engine for all twelve required issue classes; geometry-derived nested region
+  classification; conservative ambiguous previews; measured issue navigation;
+  exact caching and command invalidation; cancellable/stale-safe worker
+  coordination; and non-mutating manual/automatic bridge proposals accepted as
+  one undoable ordinary-path topology command.
+- Verification: Repository-owned nested/open/safe/narrow goldens, all-code and
+  false-positive regressions, an ellipse-flattening regression, a
+  400-contour/1,600-segment gross performance boundary, schema persistence,
+  strict IPC, cache/cancellation/stale-result integration, and two packaged
+  Windows manual/automatic bridge journeys. Full `pnpm verify`, production
+  audit, Repository Guard, and patch-format checks pass locally with 213
+  unit/integration tests and 22 packaged Electron E2E scenarios. Remote
+  exact-head CI remains required before review handoff.
+- Decisions: ADR 0020 records schema-v6 settings, explicit retained-stock
+  parity, ambiguity policy, worker/cache ownership, candidate-only repairs, and
+  the top-level same-layer cardinal bridge limitation. Presets and analysis are
+  guidance, never authoritative machine values or cut-ready certification.
+- Known limitations: No G-code, lead-ins, cut order, heat simulation,
+  authoritative process tables, guaranteed manufacturability, arbitrary-angle
+  bridge routing, grouped/text repair, M09 sign tools, CAM, DWG, or machine
+  control.
+- Next allowed work: publish the fully verified draft M08 PR and stop for
+  exact-head review. Do not merge, close Issue #9, or begin M09.
+
 ## 2026-07-31 - M07 raster tracing
 
 - Date: 2026-07-31

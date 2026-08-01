@@ -14,6 +14,7 @@ import {
   marqueeHitTest,
   replaceProjectDocument,
   setProjectDisplayUnit,
+  setManufacturingSettings,
   setViewportPreferences,
   type BoundsMm,
   type DisplayUnit,
@@ -34,6 +35,7 @@ import {
   type RasterTraceCandidate,
   type RasterTraceSettings,
   type RasterTraceSummary,
+  type ManufacturingSettings,
 } from "@laserx/domain";
 import {
   applyAffineTransform,
@@ -132,6 +134,10 @@ export type ApplicationCommand =
       inputUnit: DisplayUnit;
     }
   | { type: "project.set-display-unit"; displayUnit: DisplayUnit }
+  | {
+      type: "project.set-manufacturing-settings";
+      settings: ManufacturingSettings;
+    }
   | {
       type: "project.set-viewport-preferences";
       updates: UpdateViewportPreferences;
@@ -513,6 +519,17 @@ export class ProjectSession implements ProjectCommandDispatcher {
           [],
         );
         break;
+      case "project.set-manufacturing-settings":
+        this.#commitProject(
+          setManufacturingSettings(
+            this.#project,
+            command.settings,
+            this.#dependencies.now(),
+          ),
+          "Set manufacturing settings",
+          [],
+        );
+        break;
       case "project.set-viewport-preferences":
         this.#commitProject(
           setViewportPreferences(
@@ -745,6 +762,15 @@ export class ProjectSession implements ProjectCommandDispatcher {
     }
     this.#recordTopologySummary(command, beforeDocument, nextDocument);
     this.#reconcilePathSelection();
+    return this.state;
+  }
+
+  public selectObjectIds(objectIds: readonly string[]): ProjectSessionState {
+    const available = new Set(
+      getObjectsInRenderOrder(this.#project.document).map((object) => object.id),
+    );
+    this.#selectionIds = [...new Set(objectIds)].filter((id) => available.has(id));
+    this.#pathSelection = null;
     return this.state;
   }
 

@@ -62,5 +62,21 @@ operation and preserves the previously visible preview and project state.
 React displays worker progress, preprocessing controls, original/black-white/
 edge/trace/overlay views, and candidate summaries. Reject and cancellation are
 non-mutating. Acceptance inserts ordinary editable paths as one command and
-immediately projects the standard cutability warning interface without a
-cut-ready claim.
+immediately runs the standard manufacturing analysis without a cut-ready
+claim.
+
+## M08 manufacturing-analysis boundary
+
+Electron main snapshots the authoritative schema-v6 document and executes the
+pure cutability task in a dedicated worker. Renderer requests carry only an
+operation ID, optional object IDs, settings intent, issue focus, or bridge
+intent; the renderer cannot submit analysis geometry or replacement paths.
+Worker termination handles cancellation, document fingerprints reject late
+results, and cache entries require an exact document and scope match.
+
+React edits transparent preset-derived settings, shows progress, filters and
+navigates measured issues, and overlays retained, removed, or ambiguous
+regions. Manual and automatic bridges are previews until explicit acceptance.
+Only main can materialize a validated proposal through one undoable topology
+command. The UI always displays the stock assumption and the non-certification
+disclaimer.

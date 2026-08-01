@@ -2,8 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { analyzeDocumentCutability } from "@laserx/cutability";
 import { afterEach, describe, expect, it } from "vitest";
 
+import type { CutabilityWorkerPort } from "../../electron/cutability-worker-service.js";
 import {
   DesktopController,
   type DesktopDialogs,
@@ -15,6 +17,12 @@ import type {
 
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
+const cutabilityWorker: CutabilityWorkerPort = {
+  run: (request) => Promise.resolve(analyzeDocumentCutability(
+    request.document,
+    { operationId: request.operationId, objectIds: request.objectIds },
+  )),
+};
 
 class MemoryVectorStorage implements VectorFileService {
   public readonly writes: Array<{
@@ -65,10 +73,16 @@ describe("desktop vector interchange", () => {
       userDataPath: join(directory, "user-data"),
       dialogs,
       vectorStorage: storage,
+      cutabilityWorker,
       onStateChanged: () => undefined,
     });
     controllers.push(controller);
     await controller.initialize();
+    await controller.runCutabilityAnalysis(
+      "60000000-0000-4000-8000-000000000070",
+      [],
+    );
+    expect(controller.state.analysis.cutability).not.toBeNull();
 
     const previewResult = await controller.previewVectorImport({ unitlessDxfUnit: "millimeters" });
     expect(previewResult.ok).toBe(true);
@@ -80,6 +94,7 @@ describe("desktop vector interchange", () => {
     expect(controller.state.editor.importPreview).toBeNull();
     expect(controller.state.project.document.objects).toHaveLength(1);
     expect(controller.state.editor.history.undoDepth).toBe(1);
+    expect(controller.state.analysis.cutability).toBeNull();
 
     await controller.editorAction({ type: "history.undo" });
     expect(controller.state.project.document.objects).toHaveLength(0);

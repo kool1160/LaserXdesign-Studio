@@ -31,7 +31,9 @@ test("packaged viewport launches with an isolated renderer", async () => {
     expect(rendererBoundary.hasNodeProcess).toBe(false);
     expect(rendererBoundary.hasRequire).toBe(false);
     expect(rendererBoundary.apiMethods).toEqual([
+      "acceptBridge",
       "acceptRasterTrace",
+      "cancelCutabilityAnalysis",
       "cancelGeometryOperation",
       "cancelRasterTrace",
       "cancelVectorImport",
@@ -40,6 +42,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "createText",
       "editorAction",
       "exportVector",
+      "focusCutabilityIssue",
       "geometryOperation",
       "getFontCatalog",
       "getState",
@@ -47,14 +50,18 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "onStateChanged",
       "openProject",
       "openRecent",
+      "previewBridge",
       "previewRasterTrace",
       "previewVectorImport",
+      "rejectBridge",
       "rejectRasterTrace",
       "resolveRecovery",
+      "runCutabilityAnalysis",
       "saveProject",
       "saveProjectAs",
       "security",
       "setDisplayUnit",
+      "setManufacturingSettings",
       "setViewportPreferences",
       "updateSelectedText",
     ]);

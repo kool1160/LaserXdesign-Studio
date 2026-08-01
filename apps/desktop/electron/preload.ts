@@ -4,18 +4,23 @@ import type { EditorActionRequest } from "@laserx/application";
 
 import {
   commandResultSchema,
+  bridgeProposalRequestSchema,
+  cancelCutabilityAnalysisRequestSchema,
   cancelGeometryOperationRequestSchema,
   cancelRasterTraceRequestSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
+  cutabilityAnalysisRequestSchema,
+  focusCutabilityIssueRequestSchema,
   IPC_CHANNELS,
   fontCatalogSchema,
   openRecentRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
+  setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
@@ -23,14 +28,19 @@ import {
   vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
   type CancelGeometryOperationRequest,
+  type CancelCutabilityAnalysisRequest,
   type CancelRasterTraceRequest,
   type DesktopState,
   type GeometryOperationRequestDto,
+  type CutabilityAnalysisRequest,
+  type FocusCutabilityIssueRequest,
+  type BridgeProposalRequestDto,
   type LaserxDesktopApi,
   type OpenRecentRequest,
   type RasterTraceRequest,
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
+  type SetManufacturingSettingsRequest,
   type SetViewportPreferencesRequest,
   type TextLayoutRequestDto,
   type TextUpdateRequestDto,
@@ -128,6 +138,46 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = setDisplayUnitRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.setDisplayUnit, validated),
+    );
+  },
+  async setManufacturingSettings(request: SetManufacturingSettingsRequest) {
+    const validated = setManufacturingSettingsRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.setManufacturingSettings, validated),
+    );
+  },
+  async runCutabilityAnalysis(request: CutabilityAnalysisRequest) {
+    const validated = cutabilityAnalysisRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.runCutabilityAnalysis, validated),
+    );
+  },
+  async cancelCutabilityAnalysis(request: CancelCutabilityAnalysisRequest) {
+    const validated = cancelCutabilityAnalysisRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelCutabilityAnalysis, validated),
+    );
+  },
+  async focusCutabilityIssue(request: FocusCutabilityIssueRequest) {
+    const validated = focusCutabilityIssueRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.focusCutabilityIssue, validated),
+    );
+  },
+  async previewBridge(request: BridgeProposalRequestDto) {
+    const validated = bridgeProposalRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.previewBridge, validated),
+    );
+  },
+  async acceptBridge() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.acceptBridge),
+    );
+  },
+  async rejectBridge() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.rejectBridge),
     );
   },
   async setViewportPreferences(request: SetViewportPreferencesRequest) {

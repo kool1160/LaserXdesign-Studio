@@ -10,6 +10,7 @@ import {
   identityTransform,
   nonnegativeLengthToMillimeters,
   setProjectDisplayUnit,
+  setManufacturingSettings,
   setViewportPreferences,
   toMillimeters,
   type DocumentObject,
@@ -172,5 +173,40 @@ describe("canonical document model", () => {
       gridSpacingMm: 12.7,
       snapping: { enabled: true },
     });
+  });
+
+  it("validates and copies editable manufacturing settings", () => {
+    const project = createBlankProject({ id: ID, now: NOW });
+    const original = project.document.settings.manufacturing;
+    const updated = setManufacturingSettings(
+      project,
+      {
+        ...original,
+        process: "plasma",
+        kerfWidthMm: 1.4,
+        customizedFields: ["process", "kerfWidthMm"],
+      },
+      NOW,
+    );
+    expect(updated.document.settings.manufacturing).toMatchObject({
+      process: "plasma",
+      kerfWidthMm: 1.4,
+      customizedFields: ["process", "kerfWidthMm"],
+    });
+    expect(project.document.settings.manufacturing).toEqual(original);
+    expect(() =>
+      setManufacturingSettings(
+        project,
+        { ...original, minimumGapMm: 0 },
+        NOW,
+      ),
+    ).toThrow("Minimum gap must be positive and finite");
+    expect(() =>
+      setManufacturingSettings(
+        project,
+        { ...original, process: "torch" as never },
+        NOW,
+      ),
+    ).toThrow("Manufacturing process is not supported");
   });
 });
