@@ -245,6 +245,18 @@ button:disabled {
   margin-top: 28px;
 }
 
+.sign-tools-panel .document-form + .document-form {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #283038;
+}
+
+.template-save-row {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .project-facts {
   display: grid;
   gap: 12px;

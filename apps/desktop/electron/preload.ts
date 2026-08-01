@@ -9,6 +9,7 @@ import {
   cancelGeometryOperationRequestSchema,
   cancelRasterTraceRequestSchema,
   createDocumentRequestSchema,
+  deleteSignTemplateRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
@@ -22,11 +23,14 @@ import {
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
+  saveSignTemplateRequestSchema,
+  signToolRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   vectorExportRequestSchema,
   vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
+  type DeleteSignTemplateRequest,
   type CancelGeometryOperationRequest,
   type CancelCutabilityAnalysisRequest,
   type CancelRasterTraceRequest,
@@ -38,12 +42,14 @@ import {
   type LaserxDesktopApi,
   type OpenRecentRequest,
   type RasterTraceRequest,
+  type SaveSignTemplateRequest,
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
   type SetManufacturingSettingsRequest,
   type SetViewportPreferencesRequest,
   type TextLayoutRequestDto,
   type TextUpdateRequestDto,
+  type SignToolRequestDto,
   type VectorExportRequest,
   type VectorImportPreviewRequest,
 } from "./ipc-contract.js";
@@ -132,6 +138,34 @@ const api: LaserxDesktopApi = Object.freeze({
   async rejectRasterTrace() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.rejectRasterTrace),
+    );
+  },
+  async previewSignTool(request: SignToolRequestDto) {
+    const validated = signToolRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.previewSignTool, validated),
+    );
+  },
+  async acceptSignTool() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.acceptSignTool),
+    );
+  },
+  async rejectSignTool() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.rejectSignTool),
+    );
+  },
+  async saveSignTemplate(request: SaveSignTemplateRequest) {
+    const validated = saveSignTemplateRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.saveSignTemplate, validated),
+    );
+  },
+  async deleteSignTemplate(request: DeleteSignTemplateRequest) {
+    const validated = deleteSignTemplateRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.deleteSignTemplate, validated),
     );
   },
   async setDisplayUnit(request: SetDisplayUnitRequest) {

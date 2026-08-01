@@ -23,6 +23,7 @@ import {
 } from "./desktop-controller.js";
 import {
   createDocumentRequestSchema,
+  deleteSignTemplateRequestSchema,
   bridgeProposalRequestSchema,
   cancelCutabilityAnalysisRequestSchema,
   cancelGeometryOperationRequestSchema,
@@ -38,6 +39,8 @@ import {
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
+  saveSignTemplateRequestSchema,
+  signToolRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   vectorExportRequestSchema,
@@ -253,6 +256,24 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.rejectRasterTrace, () =>
     requireController().rejectRasterTrace(),
   );
+  ipcMain.handle(IPC_CHANNELS.previewSignTool, (_event, request: unknown) => {
+    const validated = signToolRequestSchema.parse(request);
+    return requireController().previewSignTool(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.acceptSignTool, () =>
+    requireController().acceptSignTool(),
+  );
+  ipcMain.handle(IPC_CHANNELS.rejectSignTool, () =>
+    requireController().rejectSignTool(),
+  );
+  ipcMain.handle(IPC_CHANNELS.saveSignTemplate, (_event, request: unknown) => {
+    const validated = saveSignTemplateRequestSchema.parse(request);
+    return requireController().saveSignTemplate(validated.name);
+  });
+  ipcMain.handle(IPC_CHANNELS.deleteSignTemplate, (_event, request: unknown) => {
+    const validated = deleteSignTemplateRequestSchema.parse(request);
+    return requireController().deleteSignTemplate(validated.templateId);
+  });
   ipcMain.handle(IPC_CHANNELS.setDisplayUnit, (_event, request: unknown) => {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);

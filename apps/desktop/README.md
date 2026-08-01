@@ -80,3 +80,16 @@ regions. Manual and automatic bridges are previews until explicit acceptance.
 Only main can materialize a validated proposal through one undoable topology
 command. The UI always displays the stock assumption and the non-certification
 disclaimer.
+
+## M09 sign-generation boundary
+
+Electron main owns audited font loading and pure sign generation. Renderer IPC
+contains only bounded utility or versioned-template parameters; it cannot
+submit generated contours, object IDs, font paths, or provenance. Preview is
+ephemeral, rejection is non-mutating, and acceptance imports ordinary editable
+objects as one undoable command.
+
+Saved templates persist version-1 parameter intent in schema v7 rather than
+generated geometry. Each accepted material layer runs independently through
+the standard M08 cutability worker, while SVG/DXF export continues to flatten
+the same ordinary document objects.

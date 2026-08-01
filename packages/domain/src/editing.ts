@@ -26,9 +26,11 @@ import {
 } from "@laserx/geometry";
 
 import {
+  MAX_SAVED_SIGN_TEMPLATES,
   collectObjectIds,
   copyDocument,
   copyDocumentObject,
+  copySignTemplate,
   findLayer,
   getObjectBounds,
   getSelectionBounds,
@@ -39,6 +41,7 @@ import {
   type LaserxDocument,
   type Layer,
   type PathObject,
+  type SavedSignTemplate,
 } from "./model.js";
 
 export type AlignmentKind =
@@ -117,6 +120,14 @@ export type EditorCommand =
       type: "objects.replace-topology";
       sourceObjectIds: string[];
       replacements: PathObject[];
+    }
+  | {
+      type: "template.upsert";
+      template: SavedSignTemplate;
+    }
+  | {
+      type: "template.delete";
+      templateId: string;
     }
   | {
       type: "path.move-nodes";
@@ -948,6 +959,36 @@ export function applyEditorCommand(
       document.objects.push(...command.objects.map(copyDocumentObject));
       break;
     }
+    case "template.upsert": {
+      const template = copySignTemplate(command.template);
+      const existingIndex = document.templates.findIndex(
+        (candidate) => candidate.id === template.id,
+      );
+      if (
+        existingIndex < 0 &&
+        [
+          ...document.layers.map((layer) => layer.id),
+          ...document.guides.map((guide) => guide.id),
+          ...document.objects.flatMap(collectObjectIds),
+        ].includes(template.id)
+      ) {
+        throw new RangeError("Template IDs must be unique within the document.");
+      }
+      if (existingIndex < 0) {
+        if (document.templates.length >= MAX_SAVED_SIGN_TEMPLATES) {
+          throw new RangeError("A document supports at most 1,000 saved sign templates.");
+        }
+        document.templates.push(template);
+      } else {
+        document.templates[existingIndex] = template;
+      }
+      break;
+    }
+    case "template.delete":
+      document.templates = document.templates.filter(
+        (template) => template.id !== command.templateId,
+      );
+      break;
     case "objects.replace": {
       const index = document.objects.findIndex(
         (object) => object.id === command.object.id,
@@ -1422,6 +1463,9 @@ export function commandSelectionIds(
       return command.type === "objects.import"
         ? command.objects.map((object) => object.id)
         : command.objectIds;
+    case "template.upsert":
+    case "template.delete":
+      return [];
     case "objects.replace-topology":
       return command.sourceObjectIds;
     case "path.move-nodes":

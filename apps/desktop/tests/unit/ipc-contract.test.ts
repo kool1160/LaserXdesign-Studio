@@ -12,6 +12,7 @@ import {
   setManufacturingSettingsRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
+  signToolRequestSchema,
   textLayoutRequestSchema,
   vectorExportRequestSchema,
   vectorImportPreviewRequestSchema,
@@ -208,6 +209,7 @@ describe("typed IPC validation", () => {
           activeLayerId: "123e4567-e89b-42d3-a456-426614174002",
           guides: [],
           objects: [],
+          templates: [],
         },
       },
       editor: {
@@ -218,6 +220,7 @@ describe("typed IPC validation", () => {
         topologySummary: null,
         importPreview: null,
         rasterTracePreview: null,
+        signToolPreview: null,
         history: {
           undoDepth: 0,
           redoDepth: 0,
@@ -300,6 +303,40 @@ describe("typed IPC validation", () => {
         },
       ]).success,
     ).toBe(false);
+  });
+
+  it("keeps generated sign geometry, IDs, and font paths out of strict parameter requests", () => {
+    const request = {
+      kind: "template",
+      stylePresetId: "industrial-stencil",
+      parameters: {
+        kind: "address",
+        shape: "rounded-rectangle",
+        widthMm: 609.6,
+        heightMm: 304.8,
+        borderWidthMm: 12,
+        holeDiameterMm: 6,
+        holeInsetMm: 25.4,
+        fontId: "bundled:saira-stencil-one",
+        fontSizeMm: 42,
+        primaryText: "1042",
+        secondaryText: "OAK STREET",
+        arcRadiusMm: null,
+      },
+    };
+    expect(signToolRequestSchema.safeParse(request).success).toBe(true);
+    expect(signToolRequestSchema.safeParse({
+      ...request,
+      objects: [{ id: "123e4567-e89b-42d3-a456-426614174002" }],
+    }).success).toBe(false);
+    expect(signToolRequestSchema.safeParse({
+      ...request,
+      parameters: {
+        ...request.parameters,
+        contours: [{ points: [{ xMm: 0, yMm: 0 }] }],
+        fontPath: "C:\\Windows\\Fonts\\arial.ttf",
+      },
+    }).success).toBe(false);
   });
 
   it("accepts signed exact coordinates and zero line extents", () => {

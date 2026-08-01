@@ -20,7 +20,8 @@ export type {
   PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 6 as const;
+export const PROJECT_SCHEMA_VERSION = 7 as const;
+export const MAX_SAVED_SIGN_TEMPLATES = 1_000;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -126,6 +127,44 @@ export interface Guide {
   id: string;
   axis: "x" | "y";
   positionMm: number;
+}
+
+export type SignTemplateKind =
+  | "monogram"
+  | "address"
+  | "family-name"
+  | "badge";
+
+export type SignTemplateShape =
+  | "rectangle"
+  | "rounded-rectangle"
+  | "circle"
+  | "oval"
+  | "shield"
+  | "badge"
+  | "banner";
+
+export interface SignTemplateParameters {
+  kind: SignTemplateKind;
+  shape: SignTemplateShape;
+  widthMm: number;
+  heightMm: number;
+  borderWidthMm: number;
+  holeDiameterMm: number;
+  holeInsetMm: number;
+  fontId: string;
+  fontSizeMm: number;
+  primaryText: string;
+  secondaryText: string;
+  arcRadiusMm: number | null;
+}
+
+export interface SavedSignTemplate {
+  id: string;
+  name: string;
+  templateVersion: 1;
+  stylePresetId: string;
+  parameters: SignTemplateParameters;
 }
 
 export interface DocumentObjectBase {
@@ -247,6 +286,7 @@ export interface LaserxDocument {
   activeLayerId: string;
   guides: Guide[];
   objects: DocumentObject[];
+  templates: SavedSignTemplate[];
 }
 
 export interface ProjectMetadata {
@@ -281,6 +321,7 @@ export interface CreateDocumentInput {
   activeLayerId?: string;
   guides?: Guide[];
   objects?: DocumentObject[];
+  templates?: SavedSignTemplate[];
   manufacturing?: ManufacturingSettings;
 }
 
@@ -297,6 +338,7 @@ export interface CreateBlankProjectInput {
   activeLayerId?: string;
   guides?: Guide[];
   objects?: DocumentObject[];
+  templates?: SavedSignTemplate[];
   manufacturing?: ManufacturingSettings;
 }
 
@@ -470,6 +512,10 @@ export function createDocument(input: CreateDocumentInput): LaserxDocument {
   ) {
     throw new RangeError("The active layer must exist in the document.");
   }
+  const templates = input.templates ?? [];
+  if (templates.length > MAX_SAVED_SIGN_TEMPLATES) {
+    throw new RangeError("A document supports at most 1,000 saved sign templates.");
+  }
   return {
     kind: "document",
     id: input.id,
@@ -492,6 +538,7 @@ export function createDocument(input: CreateDocumentInput): LaserxDocument {
     activeLayerId,
     guides: (input.guides ?? []).map(copyGuide),
     objects: (input.objects ?? []).map(copyDocumentObject),
+    templates: templates.map(copySignTemplate),
   };
 }
 
@@ -513,6 +560,7 @@ export function createBlankProject(
       : { activeLayerId: input.activeLayerId }),
     ...(input.guides === undefined ? {} : { guides: input.guides }),
     ...(input.objects === undefined ? {} : { objects: input.objects }),
+    ...(input.templates === undefined ? {} : { templates: input.templates }),
     ...(input.manufacturing === undefined
       ? {}
       : { manufacturing: input.manufacturing }),
@@ -891,6 +939,67 @@ export function copyGuide(guide: Guide): Guide {
   return { ...guide };
 }
 
+export function validateSignTemplate(template: SavedSignTemplate): void {
+  if (template.name.trim().length === 0 || template.name.length > 100) {
+    throw new RangeError("Template names must contain 1 to 100 characters.");
+  }
+  if (
+    template.stylePresetId.trim().length === 0 ||
+    template.stylePresetId.length > 100
+  ) {
+    throw new RangeError("Template style preset IDs must contain 1 to 100 characters.");
+  }
+  const parameters = template.parameters;
+  for (const [name, value] of [
+    ["Template width", parameters.widthMm],
+    ["Template height", parameters.heightMm],
+    ["Template border width", parameters.borderWidthMm],
+    ["Template font size", parameters.fontSizeMm],
+  ] as const) {
+    assertPositiveFinite(value, name);
+  }
+  for (const [name, value] of [
+    ["Template hole diameter", parameters.holeDiameterMm],
+    ["Template hole inset", parameters.holeInsetMm],
+  ] as const) {
+    assertNonnegativeFinite(value, name);
+  }
+  if (parameters.arcRadiusMm !== null) {
+    assertPositiveFinite(parameters.arcRadiusMm, "Template arc radius");
+  }
+  if (
+    parameters.fontId.trim().length === 0 ||
+    parameters.fontId.length > 200
+  ) {
+    throw new RangeError("Template font IDs must contain 1 to 200 characters.");
+  }
+  if (
+    parameters.primaryText.length > 200 ||
+    parameters.secondaryText.length > 200
+  ) {
+    throw new RangeError("Template text fields must contain at most 200 characters.");
+  }
+  if (parameters.primaryText.trim().length === 0) {
+    throw new RangeError("Template primary text must contain a visible character.");
+  }
+  if (parameters.holeDiameterMm > 0 && parameters.holeInsetMm <= parameters.holeDiameterMm / 2) {
+    throw new RangeError("Template hole inset must exceed the hole radius.");
+  }
+}
+
+export function copySignTemplate(template: SavedSignTemplate): SavedSignTemplate {
+  validateSignTemplate(template);
+  return {
+    ...template,
+    name: template.name.trim(),
+    stylePresetId: template.stylePresetId.trim(),
+    parameters: {
+      ...template.parameters,
+      fontId: template.parameters.fontId.trim(),
+    },
+  };
+}
+
 export function copyViewportPreferences(
   preferences: ViewportPreferences,
 ): ViewportPreferences {
@@ -992,6 +1101,7 @@ export function copyDocument(document: LaserxDocument): LaserxDocument {
     layers: document.layers.map(copyLayer),
     guides: document.guides.map(copyGuide),
     objects: document.objects.map(copyDocumentObject),
+    templates: document.templates.map(copySignTemplate),
   };
 }
 

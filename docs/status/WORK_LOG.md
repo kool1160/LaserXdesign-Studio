@@ -2,6 +2,35 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-07-31 - M09 sign-building tools and templates candidate
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #10 implementation
+- Milestone: M09 - Sign-Building Tools and Templates
+- Delivered: Strict schema-v7 saved-template parameters and v6 migration; pure
+  bounded border, backing-plate, seven-shape, mounting-hole, tabs/slots, and
+  template generators; baseline and centered-arc text materialization; four
+  template models; three audited style presets; preview/reject/save/accept;
+  one-command ordinary-object insertion; and main-owned layer-aware standard
+  cutability analysis.
+- Verification: Domain, project-format, application, sign-tools, IPC, and
+  desktop suites cover exact geometry, migration, provenance, trust
+  boundaries, stale preview rejection, and undo. Three packaged Windows
+  workflows cover reviewed 24-inch badge, address, and family-name signs,
+  including cutability, SVG export, schema-v7 persistence, user-template
+  reopen, and exact undo. Full `pnpm verify`, production dependency audit,
+  Repository Guard, and patch-format checks pass locally with 230
+  unit/integration tests and 25 packaged Electron E2E scenarios. Remote
+  exact-head CI remains required before review handoff.
+- Decisions: ADR 0021 keeps template intent versioned separately from generated
+  editable geometry, keeps renderer requests parameter-only, and treats each
+  named material layer as a separate stock piece for standard analysis.
+- Known limitations: No marketplace or logo catalog, arbitrary mechanical
+  joints, advanced nesting, locked output, M10 AI generation, CAM, G-code,
+  DWG, or machine control.
+- Next allowed work: Finish the full local gate, publish the draft M09 PR, and
+  stop for exact-head review. Do not merge, close Issue #10, or begin M10.
+
 ## Entry template
 
 ```text

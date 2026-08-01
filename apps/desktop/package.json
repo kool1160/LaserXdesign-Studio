@@ -27,6 +27,7 @@
     "@laserx/io-svg": "workspace:*",
     "@laserx/import-raster": "workspace:*",
     "@laserx/project-format": "workspace:*",
+    "@laserx/sign-tools": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"

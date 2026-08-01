@@ -95,6 +95,14 @@ proposals leave the project untouched until acceptance through one undoable
 topology command. Presets are transparent starting points, and no result claims
 certified manufacturability or cut readiness.
 
+M09 adds preview-first sign utilities and reusable monogram, address,
+family-name, and badge templates. Exact borders, backing plates, seven outer
+shapes, mounting holes, limited assembly tabs/slots, and baseline/arc text
+materialize as ordinary editable objects through one undoable acceptance.
+Schema v7 saves versioned template parameters, while audited bundled presets
+carry explicit geometry/font provenance. Accepted results immediately enter
+the same advisory cutability worker and remain normal SVG/DXF export geometry.
+
 See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the complete development workflow.
 
 ## Licensing note

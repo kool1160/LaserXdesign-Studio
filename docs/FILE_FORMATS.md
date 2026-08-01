@@ -4,7 +4,7 @@
 
 Extension: `.laserx`.
 
-Schema version 6 is strict, deterministic UTF-8 JSON with a trailing newline.
+Schema version 7 is strict, deterministic UTF-8 JSON with a trailing newline.
 It contains project identity/timestamps; a stable document ID; canonical
 millimeter dimensions; the fixed Cartesian origin; display, viewport, and
 snapping preferences; editable manufacturing settings; ordered layers and
@@ -18,6 +18,12 @@ intent, and materialized contours carrying deterministic nonnegative glyph-
 compound indices. The indices preserve counter-versus-overlap fill semantics
 without changing outline conversion, which still emits every contour.
 Converted outline groups may preserve editable source metadata.
+Schema v7 additionally stores at most 1,000 strict version-1 saved sign
+template parameter records. Template intent includes a UUID, user name, kind,
+audited style preset, exact millimeter dimensions, border and mounting-hole
+parameters, font/text settings, and an optional arc radius. Generated geometry,
+preview state, and cutability results are not template data. See
+`docs/SIGN_TEMPLATES.md`.
 `fixtures/projects/editing-v4.laserx` remains the reviewed v4 compatibility
 fixture; schema-v5 curve persistence and schema-v6 manufacturing-setting
 persistence are exercised by the project-format round-trip suite.
@@ -27,25 +33,26 @@ name, and active-layer identity are persistent. Selection, clipboard, undo/redo
 history, transient camera position, and transform-handle state are not project
 data.
 
-Every descendant of a schema-v6 group must use the same `layerId` as the
+Every descendant of a schema-v7 group must use the same `layerId` as the
 group. Parsing, serialization, and internal insertion reject mixed-layer
 groups. Layer moves, grouping, duplicate/paste, ungrouping, and layer deletion
-preserve this recursive invariant; schema v6 does not define independent child
+preserve this recursive invariant; schema v7 does not define independent child
 layer semantics inside a group.
 
 The parser rejects unknown fields, invalid object geometry or matrices,
 dangling layer references, corrupt JSON, and schema versions newer than the
 application supports. Files remain limited to 10 MB.
 
-Schema versions 1 through 5 remain read-compatible through explicit
+Schema versions 1 through 6 remain read-compatible through explicit
 deterministic migrations:
 
 ```text
-v1 -> v2 -> v3 -> v4 -> v5 -> v6
-v2 -> v3 -> v4 -> v5 -> v6
-v3 -> v4 -> v5 -> v6
-v4 -> v5 -> v6
-v5 -> v6
+v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7
+v2 -> v3 -> v4 -> v5 -> v6 -> v7
+v3 -> v4 -> v5 -> v6 -> v7
+v4 -> v5 -> v6 -> v7
+v5 -> v6 -> v7
+v6 -> v7
 ```
 
 The v2-to-v3 migration derives one stable default-layer ID from the document
@@ -54,13 +61,14 @@ guides, and adds the reviewed snapping defaults. Migration history uses the
 source `updatedAt`, so repeated reads serialize identically. Opening does not
 rewrite the source file. The v3-to-v4 migration preserves the document and
 records the transition using the source `updatedAt`. A later explicit save
-writes schema v6. The v4-to-v5 migration also preserves the document byte
+writes schema v7. The v4-to-v5 migration also preserves the document byte
 shape, adds no empty handle arrays, and records the transition with the source
 `updatedAt`. The v5-to-v6 migration adds the documented editable manufacturing
 defaults and records the transition using the same source timestamp. Opening
-still does not rewrite the source file.
+still does not rewrite the source file. The v6-to-v7 migration adds an empty
+template library and records the transition using that same source timestamp.
 
-Schema-v6 paths retain the schema-v5 representation: ordered millimeter
+Schema-v7 paths retain the schema-v5 representation: ordered millimeter
 anchors may persist one handle
 record per anchor. Incoming and outgoing cubic controls are nullable absolute
 local-space points. Omission is the canonical all-line form. Handle count must

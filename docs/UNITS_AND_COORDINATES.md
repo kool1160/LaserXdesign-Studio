@@ -18,6 +18,13 @@ Unit switching reads the same canonical numbers through another formatter. It
 does not convert and rewrite stored geometry, so repeated switching cannot
 introduce drift.
 
+M09 sign-template dimensions, border widths, outline offsets, corner radii,
+hole diameters/insets/centers, assembly feature dimensions, font sizes, and arc
+radii follow the same rule. A 24-inch template stores `609.6` once. Changing
+the display preference never regenerates or rescales mounting holes. Clipper2
+border results use its documented `1e-6 mm` boundary grid; parameter records
+retain their original millimeter doubles.
+
 Grid spacing is also stored in millimeters. The UI converts a displayed grid
 spacing to millimeters before sending a validated command.
 

@@ -213,6 +213,22 @@ ordinary closed paths through the existing Clipper2 boundary, and dispatches
 one undoable topology replacement. Rejection is non-mutating. ADR 0020 records
 the settings, classification, worker/cache, ambiguity, and repair decisions.
 
+For M09, `packages/sign-tools` owns pure bounded sign generation. Parameter
+requests cover exact selection borders, backing plates, common outer shapes,
+mounting holes, sign-assembly tabs/slots, and versioned sign templates. The
+package reuses the established geometry and cutability-normalization boundaries
+and returns only candidate layers plus ordinary domain objects. Electron main
+adapts baseline/arc requests to the existing font engine; React never creates
+geometry, contours, IDs, or font paths.
+
+The application session owns sign candidate state and its source-project
+fingerprint. Preview is a pointer-inert overlay. Acceptance uses one
+`objects.import` history command and immediately sends the accepted IDs to the
+standard cutability worker. Saved template intent enters schema v7 separately
+from generated geometry. Runtime presets and
+`packages/sign-tools/sign-assets.json` must agree under the template asset
+audit. ADR 0021 records the schema, authority, history, and provenance policy.
+
 ## State flow
 
 ```text

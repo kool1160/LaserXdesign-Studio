@@ -1,6 +1,7 @@
 import {
   DEFAULT_MANUFACTURING_SETTINGS,
   DEFAULT_VIEWPORT_PREFERENCES,
+  MAX_SAVED_SIGN_TEMPLATES,
   PROJECT_SCHEMA_VERSION,
   collectObjectIds,
   deriveStableId,
@@ -11,6 +12,7 @@ import {
   type DocumentObject,
   type LaserxProject,
   type ManufacturingSettings,
+  type SavedSignTemplate,
 } from "@laserx/domain";
 import { z } from "zod";
 
@@ -297,6 +299,44 @@ const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
       ),
   });
 
+const signTemplateParametersSchema = z.strictObject({
+  kind: z.enum(["monogram", "address", "family-name", "badge"]),
+  shape: z.enum([
+    "rectangle",
+    "rounded-rectangle",
+    "circle",
+    "oval",
+    "shield",
+    "badge",
+    "banner",
+  ]),
+  widthMm: positiveNumber,
+  heightMm: positiveNumber,
+  borderWidthMm: positiveNumber,
+  holeDiameterMm: z.number().nonnegative(),
+  holeInsetMm: z.number().nonnegative(),
+  fontId: z.string().trim().min(1).max(200),
+  fontSizeMm: positiveNumber,
+  primaryText: z.string().trim().min(1).max(200),
+  secondaryText: z.string().max(200),
+  arcRadiusMm: positiveNumber.nullable(),
+});
+
+const savedSignTemplateSchema: z.ZodType<SavedSignTemplate> = z
+  .strictObject({
+    id: z.uuid(),
+    name: z.string().trim().min(1).max(100),
+    templateVersion: z.literal(1),
+    stylePresetId: z.string().trim().min(1).max(100),
+    parameters: signTemplateParametersSchema,
+  })
+  .refine(
+    (template) =>
+      template.parameters.holeDiameterMm === 0 ||
+      template.parameters.holeInsetMm > template.parameters.holeDiameterMm / 2,
+    "Template hole inset must exceed the hole radius.",
+  );
+
 export const laserxProjectV1Schema = z.strictObject({
   schemaVersion: z.literal(1),
   project: metadataSchema,
@@ -453,8 +493,8 @@ export const laserxProjectV5Schema = z.strictObject({
   migrationHistory: z.array(migrationRecordSchema),
 });
 
-export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
-  schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
+export const laserxProjectV6Schema = z.strictObject({
+  schemaVersion: z.literal(6),
   project: metadataSchema,
   document: z.strictObject({
     kind: z.literal("document"),
@@ -491,10 +531,50 @@ export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
   migrationHistory: z.array(migrationRecordSchema),
 });
 
+export const laserxProjectSchema: z.ZodType<LaserxProject> = z.strictObject({
+  schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
+  project: metadataSchema,
+  document: z.strictObject({
+    kind: z.literal("document"),
+    id: z.uuid(),
+    dimensions: z.strictObject({
+      widthMm: positiveNumber,
+      heightMm: positiveNumber,
+    }),
+    origin: z.strictObject({
+      xMm: z.literal(0),
+      yMm: z.literal(0),
+    }),
+    settings: z.strictObject({
+      displayUnit: z.enum(["millimeters", "inches"]),
+      viewport: z.strictObject({
+        rulersVisible: z.boolean(),
+        gridVisible: z.boolean(),
+        gridSpacingMm: positiveNumber,
+        snapping: z.strictObject({
+          enabled: z.boolean(),
+          snapToGrid: z.boolean(),
+          snapToGuides: z.boolean(),
+          snapToObjects: z.boolean(),
+          snapToDocument: z.boolean(),
+        }),
+      }),
+      manufacturing: manufacturingSettingsSchema,
+    }),
+    layers: z.array(layerSchema).min(1),
+    activeLayerId: z.uuid(),
+    guides: z.array(guideSchema),
+    objects: z.array(documentObjectSchema),
+    templates: z.array(savedSignTemplateSchema).max(MAX_SAVED_SIGN_TEMPLATES),
+  }),
+  migrationHistory: z.array(migrationRecordSchema),
+});
+
 type LaserxProjectV2 = z.infer<typeof laserxProjectV2Schema>;
 type LaserxProjectV3Format = z.infer<typeof laserxProjectV3Schema>;
 type LaserxProjectV4Format = z.infer<typeof laserxProjectV4Schema>;
 type LaserxProjectV5Format = z.infer<typeof laserxProjectV5Schema>;
+type LaserxProjectV6Format = z.infer<typeof laserxProjectV6Schema>;
 type DocumentObjectV2 = z.infer<typeof documentObjectV2Schema>;
 
 export type ProjectFormatErrorCode =
@@ -718,7 +798,7 @@ export function migrateProjectV4ToV5(value: unknown): LaserxProjectV5Format {
   };
 }
 
-export function migrateProjectV5ToV6(value: unknown): LaserxProject {
+export function migrateProjectV5ToV6(value: unknown): LaserxProjectV6Format {
   const legacy = laserxProjectV5Schema.safeParse(value);
   if (!legacy.success) {
     throw new ProjectFormatError(
@@ -728,7 +808,7 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProject {
   }
   return {
     ...legacy.data,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: 6,
     document: {
       ...legacy.data.document,
       settings: {
@@ -743,6 +823,32 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProject {
       ...legacy.data.migrationHistory.map((record) => ({ ...record })),
       {
         fromVersion: 5,
+        toVersion: 6,
+        migratedAt: legacy.data.project.updatedAt,
+      },
+    ],
+  };
+}
+
+export function migrateProjectV6ToV7(value: unknown): LaserxProject {
+  const legacy = laserxProjectV6Schema.safeParse(value);
+  if (!legacy.success) {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This schema-v6 project is damaged and cannot be migrated.",
+    );
+  }
+  return {
+    ...legacy.data,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    document: {
+      ...legacy.data.document,
+      templates: [],
+    },
+    migrationHistory: [
+      ...legacy.data.migrationHistory.map((record) => ({ ...record })),
+      {
+        fromVersion: 6,
         toVersion: PROJECT_SCHEMA_VERSION,
         migratedAt: legacy.data.project.updatedAt,
       },
@@ -751,10 +857,12 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProject {
 }
 
 export function migrateProjectV1(value: unknown): LaserxProject {
-  return migrateProjectV5ToV6(
-    migrateProjectV4ToV5(
-      migrateProjectV3ToV4(
-        migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
+  return migrateProjectV6ToV7(
+    migrateProjectV5ToV6(
+      migrateProjectV4ToV5(
+        migrateProjectV3ToV4(
+          migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
+        ),
       ),
     ),
   );
@@ -783,8 +891,13 @@ export const projectMigrationRegistry: readonly ProjectMigration[] = [
   },
   {
     fromVersion: 5,
-    toVersion: PROJECT_SCHEMA_VERSION,
+    toVersion: 6,
     migrate: migrateProjectV5ToV6,
+  },
+  {
+    fromVersion: 6,
+    toVersion: PROJECT_SCHEMA_VERSION,
+    migrate: migrateProjectV6ToV7,
   },
 ];
 
@@ -860,6 +973,7 @@ export function parseProjectValue(candidate: unknown): LaserxProject {
     ...result.data.document.objects.flatMap((object) =>
       collectObjectIds(object),
     ),
+    ...result.data.document.templates.map((template) => template.id),
   ];
   if (
     new Set(entityIds).size !== entityIds.length ||
