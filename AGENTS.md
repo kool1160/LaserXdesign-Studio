@@ -71,9 +71,11 @@ A design shown as 24 inches wide must export as 24 inches wide within the docume
 
 The application may analyze cutability and export geometry. It does not generate machine motion, lead-ins, pierce delays, consumable settings, THC parameters, or G-code in version 1.
 
+Post-Version-1 machine-platform work is allowed only through explicitly activated M15 and M16 gates. Those milestones must preserve the privileged-host, simulator, operator-review, and safety boundaries defined by ADR 0018 and their milestone contracts.
+
 ### 5.4 Safe defaults, visible warnings
 
-Never silently delete or alter user geometry during import, simplification, bridging, or export. Show proposed changes and preserve undoability.
+Never silently delete or alter user geometry during import, simplification, bridging, registration coordination, alignment, or export. Show proposed changes and preserve undoability.
 
 ### 5.5 Local-first projects
 
@@ -117,6 +119,7 @@ packages/io-svg/           SVG import/export
 packages/io-dxf/           DXF import/export
 packages/project-format/   native project serialization and migrations
 packages/ai/               prompt/image generation provider boundary
+packages/production-export/ deterministic in-memory layered production packages
 packages/ui/               reusable presentation components
 packages/test-fixtures/    fixture builders and golden comparison helpers
 apps/desktop/tests/        desktop integration and end-to-end tests
@@ -136,6 +139,8 @@ native/                    reserved for measured performance bottlenecks
 - Importers produce normalized domain objects plus warnings; they do not mutate an open document directly.
 - Exporters consume normalized snapshots and explicit export settings.
 - `packages/ai` returns concepts or candidate geometry; it cannot write project files or bypass validation.
+- `packages/production-export` consumes normalized project snapshots and explicit manufacturing-layer metadata, builds deterministic in-memory artifacts and manifests, and must not perform filesystem writes or treat ordinary layers as physical pieces.
+- Filesystem staging, overwrite policy, rollback, and privileged production-package writes belong in the Electron main boundary behind a typed service.
 
 ## 8. Canonical units and coordinate rules
 
@@ -206,6 +211,8 @@ Warnings must include severity, object/segment references, measured value, confi
 
 Automatic repair is always a proposed, previewable, undoable operation. Do not promise that a design is physically safe merely because automated checks pass.
 
+Whole-design analysis and explicitly scoped manufacturing-layer analysis are distinct. Ordinary editing layers must not silently become independent manufacturing scopes.
+
 ## 12. Fonts and intellectual property
 
 - Bundle only fonts with documented redistribution rights, such as compatible open-source licenses.
@@ -224,16 +231,19 @@ AI features are provider-isolated and optional.
 - Keep provider credentials out of source control and renderer code.
 - Route secret-bearing requests through a secure main-process or service boundary.
 - Validate all generated geometry like imported geometry.
-- Preserve prompt, provider, model identifier, generation settings, and transformation history in project metadata only when the user saves them.
+- Persist only the accepted ordinary geometry and schema-defined project data. Prompt text, reference media, concept alternatives, provider/model/request identifiers, token usage, and AI provenance remain transient under the accepted M10 privacy policy unless a future opt-in persistence design is separately approved through an ADR and project-format migration.
 - Generated images must pass through preprocessing, tracing, normalization, and cutability analysis before export.
 - Never send unrelated local project contents to an AI provider.
 - A project must remain openable when the provider is unavailable.
+- AI may never issue machine motion, process-enable, interlock, emergency-stop, or other safety-control commands.
 
 ## 14. File format rules
 
 ### Native project
 
-Use a versioned, documented native format. It must preserve editable text, layers, object IDs, transforms, machine presets, generation metadata, and migration history.
+Use a versioned, documented native format. It must preserve editable text, layers, object IDs, transforms, machine presets, explicitly defined manufacturing-layer metadata, and migration history. It must preserve only fields accepted by the current schema; transient AI prompts, references, alternatives, provider metadata, usage, and provenance are not implied project fields.
+
+Native projects must remain independent from future controller boards, firmware, transports, machine-host availability, and execution state.
 
 ### SVG
 
@@ -247,15 +257,20 @@ DXF is the primary manufacturing interchange format for version 1. Export docume
 
 Raster images are references or tracing inputs, never manufacturing export geometry.
 
+### Production packages
+
+Production packages are deterministic derived artifacts, not project files. Export only explicitly declared physical manufacturing layers, preserve a shared millimeter origin and scale, exclude non-cut preview layers, and ensure the manifest matches the actual files, bounds, units, hashes, material notes, registration evidence, and warnings. Partial failure must be explicit and may not claim full success.
+
 ## 15. Security rules
 
 - Electron renderer must not have unrestricted Node access.
 - Use context isolation and a narrow, typed preload API.
 - Validate file paths and IPC payloads.
-- Treat imported SVG, DXF, raster, and project files as untrusted.
+- Treat imported SVG, DXF, raster, project files, production folders, controller messages, and future machine profiles as untrusted.
 - Do not execute scripts embedded in imported content.
 - Do not load remote content into privileged renderer contexts.
-- Never log API keys, tokens, full private prompts, or user file contents in production telemetry.
+- Never log API keys, tokens, full private prompts, user file contents, or unnecessary machine-job geometry in production telemetry.
+- Future machine and controller access must remain in a privileged host or service, never the renderer.
 
 ## 16. Work protocol for Codex
 
@@ -318,6 +333,8 @@ An agent may not begin the next milestone until all of the following are true:
 
 Work from a later milestone may be considered only when it is required to complete the active vertical slice. Keep such work behind a narrow interface and do not expand it.
 
+M15 and M16 additionally require the owner authorization and hardware/safety prerequisites stated in their milestone contracts. Their presence in the roadmap does not authorize live machine work early.
+
 ## 18. Large milestone sequence
 
 Detailed specifications live in `docs/milestones/`.
@@ -333,10 +350,14 @@ Detailed specifications live in `docs/milestones/`.
 - M08 - Cutability analysis, bridges, and manufacturing preview.
 - M09 - Sign-building tools, borders, holes, templates, and backing plates.
 - M10 - Prompt/image-to-sign AI pipeline.
-- M11 - Layered-sign workflow and production export packages.
-- M12 - Packaging, performance, accessibility, and beta hardening.
+- M11 - UI, branding, and product polish.
+- M12 - Layered-sign workflow and production export packages.
+- M13 - Windows installer, packaging, and beta hardening.
+- M14 - Beta validation and Version 1.0 release.
+- M15 - Simulator-first machine platform foundation.
+- M16 - First explicitly approved LaserX controller vertical slice.
 
-Post-v1 ideas such as nesting, CAM, cloud collaboration, mobile editing, 3D visualization, and native DWG are deferred unless promoted through a new milestone and ADR.
+Other future ideas such as nesting, quoting, cloud collaboration, mobile editing, broad 3D visualization, native DWG, additional controllers, and a marketplace remain deferred unless promoted through a new milestone and ADR.
 
 ## 19. Testing expectations
 
@@ -344,10 +365,12 @@ Use the testing pyramid appropriate to geometry software:
 
 - unit tests for domain rules, conversions, geometry, and file parsing;
 - property-based tests where invariants matter;
-- golden fixtures for SVG/DXF/tracing results;
+- golden fixtures for SVG/DXF/tracing and production-package results;
 - integration tests for command history and import/export;
 - end-to-end tests for critical desktop workflows;
-- manual cut-file review fixtures for representative sign designs.
+- manual cut-file review fixtures for representative sign designs;
+- simulator and fault-injection tests for M15;
+- hardware-in-the-loop tests before any process-enabled M16 test.
 
 Every bug fix requires a regression test when technically feasible.
 
@@ -429,4 +452,4 @@ The PR description must still include delivered behavior, changed areas, tests, 
 
 ## 25. Final restraint
 
-The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep the geometry core trustworthy, the UI replaceable, the exported physical dimensions correct, and the owner out of the courier role.
+The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep the geometry core trustworthy, the UI replaceable, the exported physical dimensions correct, future machine control safety-isolated, and the owner out of the courier role.
