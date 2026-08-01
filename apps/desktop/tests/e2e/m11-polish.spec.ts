@@ -61,6 +61,39 @@ test("packaged M11 shell is discoverable and stable at common display sizes", as
     await expect(page.getByRole("button", { name: "New Design" })).toBeVisible();
     await expect(page.getByTestId("export-svg")).toBeVisible();
 
+    const brandIdentity = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const mark = document.querySelector<HTMLImageElement>(".brand-mark");
+      const name = document.querySelector<HTMLElement>(".brand-name");
+      const product = document.querySelector<HTMLElement>(".brand-product");
+      const primary = document.querySelector<HTMLElement>(".command-primary");
+      if (mark === null || name === null || product === null || primary === null) {
+        throw new Error("Expected LaserX brand elements were not rendered.");
+      }
+      return {
+        accent: root.getPropertyValue("--accent").trim(),
+        accentStrong: root.getPropertyValue("--accent-strong").trim(),
+        usesApprovedMark: new URL(mark.src).pathname.endsWith("/laserx-mark.svg"),
+        nameLetterSpacing: getComputedStyle(name).letterSpacing,
+        nameTransform: getComputedStyle(name).textTransform,
+        productDisplay: getComputedStyle(product).display,
+        radius: root.getPropertyValue("--radius-sm").trim(),
+        surface: root.getPropertyValue("--surface-app").trim(),
+        primaryBackground: getComputedStyle(primary).backgroundColor,
+      };
+    });
+    expect(brandIdentity).toEqual({
+      accent: "#49b9f2",
+      accentStrong: "#9bdcff",
+      usesApprovedMark: true,
+      nameLetterSpacing: "1.82px",
+      nameTransform: "uppercase",
+      productDisplay: "block",
+      radius: "1px",
+      surface: "#071019",
+      primaryBackground: "rgb(73, 185, 242)",
+    });
+
     const skipLink = page.getByRole("link", { name: "Skip to design workspace" });
     await skipLink.focus();
     await expect(skipLink).toBeFocused();

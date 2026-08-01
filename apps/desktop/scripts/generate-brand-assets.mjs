@@ -33,31 +33,26 @@ function blend(index, red, green, blue, alpha = 255) {
 for (let y = 0; y < size; y += 1) {
   for (let x = 0; x < size; x += 1) {
     const index = (y * size + x) * 4;
-    if (!roundedRectContains(x, y, 20, 112)) continue;
-    const border = !roundedRectContains(x, y, 34, 98);
-    const mix = (x + y) / (size * 2);
-    blend(
-      index,
-      border ? 57 : Math.round(24 - mix * 13),
-      border ? 122 : Math.round(49 - mix * 29),
-      border ? 120 : Math.round(57 - mix * 32),
-    );
+    if (!roundedRectContains(x, y, 20, 18)) continue;
 
-    if (segmentDistance(x, y, 120, 112, 392, 400) <= 29) {
-      blend(index, Math.round(139 - mix * 85), Math.round(232 - mix * 27), Math.round(213 - mix * 28));
+    const border = !roundedRectContains(x, y, 31, 9);
+    blend(index, border ? 58 : 7, border ? 110 : 16, border ? 140 : 25);
+
+    if (segmentDistance(x, y, 64, 256, 448, 256) <= 5) {
+      blend(index, 73, 185, 242);
     }
-    if (segmentDistance(x, y, 392, 112, 240, 272) <= 29) {
-      blend(index, 244, 187, 100);
+
+    const xDistance = Math.min(
+      segmentDistance(x, y, 132, 112, 380, 400),
+      segmentDistance(x, y, 380, 112, 132, 400),
+    );
+    if (xDistance <= 52) blend(index, 73, 185, 242);
+    if (xDistance <= 39) blend(index, 20, 38, 56);
+    if (xDistance <= 7) blend(index, 155, 220, 255);
+
+    if (Math.abs(x - 256) + Math.abs(y - 256) <= 18) {
+      blend(index, 246, 248, 251);
     }
-    if (segmentDistance(x, y, 240, 272, 128, 400) <= 29) {
-      blend(index, 83, 205, 185);
-    }
-    if (segmentDistance(x, y, 72, 272, 164, 272) <= 8) {
-      blend(index, 244, 187, 100);
-    }
-    const focusDistance = Math.hypot(x - 240, y - 272);
-    if (focusDistance <= 38) blend(index, 244, 187, 100);
-    if (focusDistance <= 24) blend(index, 255, 246, 223);
   }
 }
 

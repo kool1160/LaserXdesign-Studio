@@ -412,7 +412,7 @@ export function App() {
     if (startupError !== null) {
       return (
         <main className="startup-error" role="alert">
-          <img className="startup-mark" src="./laserx-icon.png" alt="" />
+          <img className="startup-mark" src="./laserx-mark.svg" alt="" />
           <span className="eyebrow">Startup problem</span>
           <h1>LaserX could not finish loading.</h1>
           <p data-testid="startup-error">{startupError}</p>
@@ -428,7 +428,7 @@ export function App() {
     }
     return (
       <main className="loading" role="status" aria-live="polite">
-        <img className="startup-mark" src="./laserx-icon.png" alt="" />
+        <img className="startup-mark" src="./laserx-mark.svg" alt="" />
         <span className="loading-spinner" aria-hidden="true" />
         <strong>Starting LaserX Design Studio</strong>
         <span>Preparing your precision design workspace.</span>
@@ -556,7 +556,7 @@ export function App() {
       </a>
       <header className="topbar">
         <div className="brand">
-          <img className="brand-mark" src="./laserx-icon.png" alt="" />
+          <img className="brand-mark" src="./laserx-mark.svg" alt="" />
           <div>
             <span className="brand-name">LaserX</span>
             <span className="brand-product">Design Studio</span>
@@ -1634,7 +1634,7 @@ export function App() {
           />
           {workspaceIsEmpty && (
             <section className="workspace-welcome" aria-labelledby="workspace-welcome-title" data-testid="workspace-welcome">
-              <img src="./laserx-icon.png" alt="" />
+              <img src="./laserx-mark.svg" alt="" />
               <span className="eyebrow">Ready to design</span>
               <h1 id="workspace-welcome-title">Start with a project or artwork</h1>
               <p>Open a LaserX project, import vector artwork, trace an image, or build directly on the stock.</p>

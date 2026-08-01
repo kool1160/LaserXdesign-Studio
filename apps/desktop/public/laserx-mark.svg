@@ -1,19 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">LaserX</title>
-  <defs>
-    <linearGradient id="surface" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#183139"/>
-      <stop offset="1" stop-color="#0b1419"/>
-    </linearGradient>
-    <linearGradient id="beam" x1="11" y1="13" x2="52" y2="52" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#8be8d5"/>
-      <stop offset="1" stop-color="#36bba9"/>
-    </linearGradient>
-  </defs>
-  <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#surface)" stroke="#397a78" stroke-width="2"/>
-  <path d="M15 14 49 50" fill="none" stroke="url(#beam)" stroke-width="7" stroke-linecap="round"/>
-  <path d="m49 14-19 20" fill="none" stroke="#f4bb64" stroke-width="7" stroke-linecap="round"/>
-  <path d="M30 34 16 50" fill="none" stroke="#53cdb9" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="30" cy="34" r="4" fill="#fff6df" stroke="#f4bb64" stroke-width="2"/>
-  <path d="M9 34h11" stroke="#f4bb64" stroke-width="2" stroke-linecap="round"/>
+  <title id="title">LaserX Design</title>
+  <rect x="3" y="3" width="58" height="58" rx="2" fill="#071019" stroke="#3a6e8c" stroke-width="2"/>
+  <path d="M7 32h13m24 0h13" fill="none" stroke="#49b9f2" stroke-width="2"/>
+  <path d="m15 13 17 15 17-15-12 19 12 19-17-15-17 15 12-19z" fill="#142638" stroke="#49b9f2" stroke-width="3" stroke-linejoin="miter"/>
+  <path d="m20 19 12 11 12-11M20 45l12-11 12 11" fill="none" stroke="#9bdcff" stroke-width="1.5" stroke-linecap="square"/>
+  <rect x="30" y="30" width="4" height="4" fill="#f6f8fb" transform="rotate(45 32 32)"/>
 </svg>
