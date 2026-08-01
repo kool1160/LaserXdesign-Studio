@@ -45,7 +45,8 @@ jobs:
         shell: pwsh
         run: |
           pnpm --filter @laserx/desktop brand:assets
-          if (-not (git diff --quiet -- apps/desktop/public/laserx-icon.png)) {
+          git diff --exit-code -- apps/desktop/public/laserx-icon.png
+          if ($LASTEXITCODE -ne 0) {
             throw "Generated LaserX icon is out of date."
           }
 
