@@ -28,6 +28,7 @@ import type { PathObject } from "@laserx/domain";
 import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
 import { SignToolsPanel } from "../components/SignToolsPanel.js";
+import { AiGenerationPanel } from "../components/AiGenerationPanel.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -1389,6 +1390,8 @@ export function App() {
 
           <SignToolsPanel state={state} busy={busy} run={run} />
 
+          <AiGenerationPanel state={state} busy={busy} run={run} />
+
           <section>
             <span className="section-label">New exact document</span>
             <form className="document-form" onSubmit={createExactDocument}>
@@ -1582,7 +1585,8 @@ export function App() {
             importPreview={
               state.editor.importPreview ??
               state.editor.rasterTracePreview ??
-              state.editor.signToolPreview
+              state.editor.signToolPreview ??
+              state.editor.aiConceptPreview
             }
             previewGeometryVisible={
               state.editor.rasterTracePreview === null ||

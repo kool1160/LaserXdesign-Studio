@@ -20,7 +20,18 @@ SVG, DXF, raster, and `.laserx` project files are untrusted input. Apply size li
 
 ## Secrets
 
-API keys live in platform-appropriate secure storage or user environment configuration. Never commit, echo, or send them to the renderer unnecessarily.
+AI API keys are acquired in a native password prompt and used only by Electron
+main. On Windows, Electron `safeStorage` encrypts the key before an envelope is
+written under application user data. Keys never belong in project files,
+renderer/preload state, IPC arguments, logs, crash reports, fixtures, source
+control, or provider request bodies. Connection tests and generation read the
+vault at call time; replace overwrites the encrypted envelope and disconnect
+deletes it.
+
+Reference images require explicit consent, strict byte/pixel limits, trusted-
+host decoding, and a second consent check at generation. Prompts and references
+are sent only on Generate. Mocked CI uses no real provider credential or
+network request.
 
 ## Reporting
 

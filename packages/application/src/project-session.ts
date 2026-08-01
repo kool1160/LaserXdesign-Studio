@@ -43,6 +43,7 @@ import {
   cleanupEditablePath,
   type EditablePathGeometry,
 } from "@laserx/geometry";
+import type { AiNormalizedConcept } from "@laserx/ai/concept";
 
 import { previewSelectedPathJoin } from "./path-preview.js";
 import type {
@@ -68,6 +69,7 @@ export interface EditorProjection {
   importPreview: VectorImportPreview | null;
   rasterTracePreview: RasterTracePreview | null;
   signToolPreview: SignToolPreview | null;
+  aiConceptPreview: AiConceptPreview | null;
   history: {
     undoDepth: number;
     redoDepth: number;
@@ -115,6 +117,12 @@ export interface SignToolPreview {
 }
 
 interface PendingSignTool extends SignToolPreview {
+  projectFingerprint: string;
+}
+
+export type AiConceptPreview = AiNormalizedConcept;
+
+interface PendingAiConcept extends AiConceptPreview {
   projectFingerprint: string;
 }
 
@@ -415,6 +423,27 @@ function copySignToolPreview(
       };
 }
 
+function copyAiConceptPreview(
+  preview: PendingAiConcept | null,
+): AiConceptPreview | null {
+  return preview === null
+    ? null
+    : {
+        summary: {
+          ...preview.summary,
+          warnings: [...preview.summary.warnings],
+        },
+        layers: preview.layers.map((item) => ({ ...item })),
+        objects: preview.objects.map(copyDocumentObject),
+        providerId: preview.providerId,
+        model: preview.model,
+        requestId: preview.requestId,
+        usage: { ...preview.usage },
+        analysis: { ...preview.analysis },
+        provenanceSaved: false,
+      };
+}
+
 function worldPathGeometry(object: PathObject): EditablePathGeometry {
   return {
     closed: object.closed,
@@ -474,6 +503,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
   #importPreview: PendingVectorImport | null = null;
   #rasterTracePreview: PendingRasterTrace | null = null;
   #signToolPreview: PendingSignTool | null = null;
+  #aiConceptPreview: PendingAiConcept | null = null;
 
   public constructor(
     dependencies: LifecycleDependencies,
@@ -509,6 +539,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
         importPreview: copyImportPreview(this.#importPreview),
         rasterTracePreview: copyRasterTracePreview(this.#rasterTracePreview),
         signToolPreview: copySignToolPreview(this.#signToolPreview),
+        aiConceptPreview: copyAiConceptPreview(this.#aiConceptPreview),
         history: {
           undoDepth: this.#past.length,
           redoDepth: this.#future.length,
@@ -829,6 +860,9 @@ export class ProjectSession implements ProjectCommandDispatcher {
     if (this.#rasterTracePreview !== null) {
       throw new Error("Accept or reject the active raster trace before importing a vector file.");
     }
+    if (this.#aiConceptPreview !== null) {
+      throw new Error("Accept or discard the active AI concept before importing a vector file.");
+    }
     if (candidate.paths.length === 0) {
       throw new RangeError("The selected file contains no supported 2D geometry to preview.");
     }
@@ -973,6 +1007,9 @@ export class ProjectSession implements ProjectCommandDispatcher {
     if (this.#importPreview !== null) {
       throw new Error("Commit or cancel the active vector import before tracing a raster file.");
     }
+    if (this.#aiConceptPreview !== null) {
+      throw new Error("Accept or discard the active AI concept before tracing a raster file.");
+    }
     if (candidate.paths.length === 0) {
       throw new RangeError("The raster trace contains no editable paths to preview.");
     }
@@ -1053,7 +1090,11 @@ export class ProjectSession implements ProjectCommandDispatcher {
     if (this.#transaction !== null) {
       throw new Error("Commit or cancel the active transaction before using sign tools.");
     }
-    if (this.#importPreview !== null || this.#rasterTracePreview !== null) {
+    if (
+      this.#importPreview !== null ||
+      this.#rasterTracePreview !== null ||
+      this.#aiConceptPreview !== null
+    ) {
       throw new Error("Accept or reject the active import preview before using sign tools.");
     }
     if (candidate.objects.length === 0 || candidate.objects.length > 10_000) {
@@ -1146,6 +1187,74 @@ export class ProjectSession implements ProjectCommandDispatcher {
 
   public deleteSignTemplate(templateId: string): ProjectSessionState {
     return this.executeEditorCommand({ type: "template.delete", templateId });
+  }
+
+  public previewAiConcept(candidate: AiNormalizedConcept): ProjectSessionState {
+    if (this.#transaction !== null) {
+      throw new Error("Commit or cancel the active transaction before previewing AI concepts.");
+    }
+    if (
+      this.#importPreview !== null ||
+      this.#rasterTracePreview !== null ||
+      this.#signToolPreview !== null
+    ) {
+      throw new Error("Accept or reject the active preview before previewing an AI concept.");
+    }
+    if (candidate.objects.length === 0 || candidate.objects.length > 10_000) {
+      throw new RangeError("AI concept previews require 1 to 10,000 editable objects.");
+    }
+    const document = this.#project.document;
+    const existingIds = new Set([
+      ...document.layers.map((item) => item.id),
+      ...document.guides.map((item) => item.id),
+      ...document.objects.flatMap(collectObjectIds),
+      ...document.templates.map((item) => item.id),
+    ]);
+    const incomingIds = [
+      ...candidate.layers.map((item) => item.id),
+      ...candidate.objects.flatMap(collectObjectIds),
+    ];
+    const incomingLayers = new Set(candidate.layers.map((item) => item.id));
+    if (
+      new Set(incomingIds).size !== incomingIds.length ||
+      incomingIds.some((id) => existingIds.has(id)) ||
+      candidate.objects.some((object) => !incomingLayers.has(object.layerId))
+    ) {
+      throw new RangeError("AI concept preview IDs and layer references must be unique.");
+    }
+    this.#aiConceptPreview = {
+      ...copyAiConceptPreview({
+        ...candidate,
+        projectFingerprint: fingerprint(this.#project),
+      }) as AiNormalizedConcept,
+      projectFingerprint: fingerprint(this.#project),
+    };
+    return this.state;
+  }
+
+  public cancelAiConceptPreview(): ProjectSessionState {
+    this.#aiConceptPreview = null;
+    return this.state;
+  }
+
+  public acceptAiConceptPreview(): ProjectSessionState {
+    const preview = this.#aiConceptPreview;
+    if (preview === null) {
+      throw new RangeError("There is no AI concept preview to accept.");
+    }
+    if (!preview.summary.wordingMatches) {
+      throw new Error("Verify or correct the generated wording before accepting this AI concept.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed after this AI concept was created. Generate or select it again before accepting.");
+    }
+    this.executeEditorCommand({
+      type: "objects.import",
+      layers: preview.layers,
+      objects: preview.objects,
+    });
+    this.#aiConceptPreview = null;
+    return this.state;
   }
 
   public cancelRasterTrace(): ProjectSessionState {
@@ -1885,5 +1994,6 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#importPreview = null;
     this.#rasterTracePreview = null;
     this.#signToolPreview = null;
+    this.#aiConceptPreview = null;
   }
 }

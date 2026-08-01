@@ -71,10 +71,10 @@ Exact replication of protected logos, autonomous export without user review, hid
 
 ## Exit checklist
 
-- [ ] Provider/security ADR 0017 remains satisfied by the implementation.
-- [ ] Privacy and provenance behavior documented.
-- [ ] Prompt-to-editable end-to-end test passes with mocked provider.
-- [ ] Real-provider validation procedure documented separately from CI.
-- [ ] Operating-system credential-vault behavior is tested without exposing a
+- [x] Provider/security ADR 0017 remains satisfied by the implementation.
+- [x] Privacy and provenance behavior documented.
+- [x] Prompt-to-editable end-to-end test passes with mocked provider.
+- [x] Real-provider validation procedure documented separately from CI.
+- [x] Operating-system credential-vault behavior is tested without exposing a
   real secret.
 - [ ] Status advances to M11.

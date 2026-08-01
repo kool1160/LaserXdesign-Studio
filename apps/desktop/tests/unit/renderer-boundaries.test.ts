@@ -20,4 +20,17 @@ describe("renderer editing boundaries", () => {
     );
     expect(combined).not.toContain("applyEditorCommand");
   });
+
+  it("routes AI work through typed preload commands without renderer network or credentials", async () => {
+    const source = await readFile(
+      resolve(process.cwd(), "src/components/AiGenerationPanel.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("window.laserx.generateAiConcepts");
+    expect(source).toContain("window.laserx.connectAi");
+    expect(source).not.toMatch(/\bfetch\s*\(/u);
+    expect(source).not.toContain("Authorization");
+    expect(source).not.toMatch(/apiKey\s*[:=]/u);
+    expect(source).not.toMatch(/credential\s*[:=]/u);
+  });
 });

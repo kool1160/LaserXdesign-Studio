@@ -1,31 +1,107 @@
 # AI Prompt and Image Pipeline
 
-## Goal
+## User flow
 
-Turn a prompt and optional reference image into candidate sign artwork that becomes editable, normalized geometry inside the standard editor.
+LaserX turns a bounded prompt and optional consented PNG/JPEG reference into
+two to four temporary concepts. The user reviews ordinary editable geometry,
+checks exact wording and the standard manufacturing analysis, then either
+accepts one concept or discards all of them. Nothing enters project history
+until acceptance.
 
-## Pipeline
+The explicit request controls are wording, millimeter dimensions, style,
+manufacturing process, detail, bridge preference, mounting-hole diameter and
+inset, one to three layers, backing plate, and concept count. Provider output
+cannot override these authoritative constraints.
 
-1. Collect prompt, wording, dimensions, process preset, style, layers, and constraints.
-2. Produce multiple concept previews or structured vector candidates.
-3. Let the user choose a candidate.
-4. Remove/normalize background as needed.
-5. Trace or parse into paths.
-6. Simplify using explicit tolerance.
-7. Separate obvious semantic groups when confidence is sufficient.
-8. Run geometry normalization.
-9. Run cutability analysis.
-10. Preview warnings and proposed repairs.
-11. Insert accepted objects through an application command.
+## Provider and credential boundary
 
-## Provider boundary
+`packages/ai` defines a provider-neutral request/result contract. The initial
+adapter uses OpenAI's Responses API with strict structured output, `store:
+false`, a bounded output-token budget, and the current configured model. Only
+Electron main can read a credential or make the provider request. Renderer IPC
+contains bounded intent parameters and concept summaries, never a credential,
+authorization header, provider endpoint, local path, source pixels, or
+provider-supplied geometry.
 
-Provider-specific code lives only in `packages/ai`. The rest of the application uses provider-neutral requests and results.
+On Windows, key entry uses a native password field outside the renderer. The
+main process tests the key before encrypting it with Electron `safeStorage`;
+only the encrypted envelope is written under Electron user data. Replace and
+disconnect update or delete that envelope without changing the open project.
+LaserX never embeds a shared key, resells credits, or requires AI for manual
+editing.
 
-## Failure behavior
+## Reference privacy
 
-Network/provider failure must not damage the project. Partial results are temporary until the user accepts them. Generated content never bypasses validation or directly writes DXF.
+A reference is read only after an explicit consent checkbox enables the
+native picker. Main validates its signature, dimensions, decoded form, eight-
+MiB byte ceiling, and twelve-million-pixel ceiling. A bounded preview may be
+shown in renderer state. The source data is included only in a generation
+request whose consent flag is still true. Removing the reference, replacing
+the project, or exiting drops the in-memory attachment.
 
-## Intellectual-property behavior
+Prompts and references are sent to OpenAI only when the user chooses Generate.
+They are not sent during connection testing and are not stored in `.laserx`.
+Users should not attach material they lack permission to share, and LaserX does
+not promise exact replication of protected logos.
 
-Do not ship copied trademark assets. Prefer general design-language prompts such as vintage motorcycle badge, shield emblem, winged garage sign, or racing-inspired crest rather than exact brand reproduction.
+## Normalization and acceptance
+
+Structured concepts are interpreted through the existing versioned M09 sign
+generator and bundled-font engine. Raster fallback data must pass the same M07
+header, decode, trace, size, cancellation, and object-count boundaries as a
+manual raster import. Each result becomes ordinary layers and domain objects;
+provider IDs and formats never become manufacturing geometry.
+
+Every concept receives standard M08 analysis before it is published. This is
+advisory: `cutReady` remains false, issues are visible, and the user remains
+responsible for process/material review. Exact wording is compared after
+canonical whitespace/case normalization. A mismatch disables acceptance;
+structured wording can be corrected locally and renormalized without another
+provider call. Raster wording requires a revised request.
+
+Acceptance rechecks the source-project fingerprint and dispatches one ordinary
+`objects.import` command. The accepted IDs immediately receive a fresh M08
+analysis. One Undo removes the whole accepted concept. Provider failure,
+refusal, malformed output, cancellation, stale work, or discard leaves the
+project, dirty state, and history unchanged.
+
+## Provenance, usage, and persistence
+
+Concept review shows provider/model, structured-versus-raster source, request
+usage when supplied, and a conservative cost note. OpenAI bills the connected
+account directly; LaserX cannot state an exact cost before the provider reports
+token usage.
+
+The current schema persists only accepted ordinary geometry. Prompt text,
+reference media, concept alternatives, provider/model/request IDs, usage, and
+AI provenance are intentionally transient (`provenanceSaved: false`). This is
+a privacy choice, not a claim that provider-side processing did not occur.
+
+## Failure and recovery
+
+The UI distinguishes disconnected, invalid-key, no-credit, rate-limited,
+offline, and unavailable states. Retry timing is retained when OpenAI supplies
+it. Key setup and billing buttons open official OpenAI Platform pages. Users
+can test, replace, or disconnect the credential; all manual commands remain
+available in every connection state.
+
+## Real-provider validation (manual, never CI)
+
+1. Use a dedicated, spending-limited OpenAI project and key entered through the
+   native LaserX prompt. Never place the key in the repository or terminal.
+2. Test the connection, then generate two concepts without a reference and two
+   with a small, non-sensitive reference after explicit consent.
+3. Confirm wording mismatch blocks acceptance, correction is local, selection
+   changes only the overlay, and accepted geometry is editable and undoable.
+4. Exercise invalid-key, no-credit/rate-limit where safely possible, offline,
+   cancellation, replace, and disconnect behavior; confirm project bytes and
+   history do not change on failure.
+5. Inspect the saved `.laserx`, application logs, renderer state, and packaged
+   renderer bundle for the key, prompt, image bytes, and provider metadata.
+6. Delete the test key in the OpenAI Platform after validation and disconnect
+   LaserX. Record only pass/fail evidence and provider request IDs that contain
+   no user content or credentials.
+
+CI and packaged Playwright tests use the deterministic main-process provider
+and in-memory credential ports. They never call OpenAI or consume account
+credit.
