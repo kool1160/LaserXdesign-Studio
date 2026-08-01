@@ -2,6 +2,37 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-01 - M12 layered production candidate
+
+- Date: 2026-08-01
+- Agent/task: Codex / Issue #12 implementation
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Strict optional schema-v8 manufacturing-layer metadata and a
+  no-classification v7 migration; explicit face/backing/spacer-tab/drill-
+  reference/non-cut roles; physical-layer analysis scope; center alignment;
+  one-transaction registration-hole coordination; a bounds-only 2D exploded
+  preview; deterministic per-layer SVG/DXF and schema-1 manifest generation;
+  SHA-256/byte/bounds/material/registration evidence; and atomic main-process
+  folder conflict, replacement, rollback, and partial-failure handling.
+- Verification: Reviewed two- and three-layer goldens pin exact origin, stock,
+  file order, roles, and registration coordinates. Storage and controller
+  injection prove a partial write returns a failed command and zero published
+  files. Full `pnpm verify` passes locally with all production/license/policy
+  audits, lint/typecheck, 260 unit/integration tests, build/package, and 29
+  serial packaged Windows Electron E2E scenarios. Production dependency audit,
+  Repository Guard, patch-format checks, and exact-head remote CI remain part
+  of publication.
+- Decisions: ADR 0022 keeps ordinary layers nonphysical by default, reuses the
+  existing exact-scale SVG/DXF adapters, records registration ellipses in
+  world millimeters, and keeps filesystem commits/rollback in Electron main.
+- Known limitations: Registration groups treat top-level ellipses as holes.
+  Assembly preview is presentation-only 2D. No PDF/raster assembly export, 3D,
+  bends, welds, BOM/ERP, quoting, nesting, CAM, G-code, DWG, machine control,
+  or M13 installer/release work is included.
+- Next allowed work: Publish the candidate to a draft M12 PR, wait for exact-
+  head Windows CI, and stop for review. Do not merge, close Issue #12, advance
+  `docs/status/CURRENT.md`, or begin M13.
+
 ## 2026-07-31 - M09 standard-analysis review repair
 
 - Date: 2026-07-31

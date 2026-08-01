@@ -40,6 +40,7 @@ import {
   type Guide,
   type LaserxDocument,
   type Layer,
+  type ManufacturingLayerMetadata,
   type PathObject,
   type SavedSignTemplate,
 } from "./model.js";
@@ -219,6 +220,11 @@ export type EditorCommand =
   | { type: "layer.rename"; layerId: string; name: string }
   | { type: "layer.set-visibility"; layerId: string; visible: boolean }
   | { type: "layer.set-locked"; layerId: string; locked: boolean }
+  | {
+      type: "layer.set-manufacturing";
+      layerId: string;
+      manufacturing: ManufacturingLayerMetadata | null;
+    }
   | { type: "layer.reorder"; layerId: string; toIndex: number }
   | {
       type: "layer.delete";
@@ -1375,6 +1381,18 @@ export function applyEditorCommand(
       document.layers = document.layers.map((layer) =>
         layer.id === command.layerId
           ? { ...layer, locked: command.locked }
+          : layer,
+      );
+      break;
+    case "layer.set-manufacturing":
+      document.layers = document.layers.map((layer) =>
+        layer.id === command.layerId
+          ? {
+              ...layer,
+              ...(command.manufacturing === null
+                ? { manufacturing: undefined }
+                : { manufacturing: { ...command.manufacturing } }),
+            }
           : layer,
       );
       break;

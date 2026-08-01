@@ -77,4 +77,4 @@ for (const term of [
   "They never call OpenAI",
 ]) requireText(pipeline, term, "AI pipeline documentation");
 
-console.log("AI boundary audit passed: main-only credentials/network, transient provenance, schema-v7 isolation, and documented mock/real-provider paths.");
+console.log("AI boundary audit passed: main-only credentials/network, transient provenance, schema-v8 isolation, and documented mock/real-provider paths.");

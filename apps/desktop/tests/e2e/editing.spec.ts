@@ -214,11 +214,11 @@ test("packaged editing workflow persists deterministic M03 state", async () => {
       async () => (await window.laserx.getState()).project.document,
     );
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 7);
+    await waitForProjectSchema(launched.projectPath, 8);
     const diskProject = JSON.parse(
       await readFile(launched.projectPath, "utf8"),
     ) as { schemaVersion: number; document: unknown };
-    expect(diskProject.schemaVersion).toBe(7);
+    expect(diskProject.schemaVersion).toBe(8);
     expect(diskProject.document).toEqual(beforeSave);
 
     await page.getByRole("button", { name: "New Design", exact: true }).click();
@@ -340,7 +340,7 @@ test("packaged exact inspector preserves signed horizontal-line geometry", async
       });
 
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 7);
+    await waitForProjectSchema(launched.projectPath, 8);
     const diskProject = JSON.parse(
       await readFile(launched.projectPath, "utf8"),
     ) as { document: { objects: DocumentObject[] } };

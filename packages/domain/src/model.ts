@@ -20,7 +20,7 @@ export type {
   PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 7 as const;
+export const PROJECT_SCHEMA_VERSION = 8 as const;
 export const MAX_SAVED_SIGN_TEMPLATES = 1_000;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
@@ -95,6 +95,27 @@ export interface ManufacturingSettings {
   customizedFields: ManufacturingSettingField[];
 }
 
+export type ManufacturingLayerRole =
+  | "face"
+  | "backing"
+  | "spacer-tab"
+  | "drill-reference"
+  | "non-cut-preview";
+
+export type ManufacturingLayerProcess =
+  | ManufacturingProcess
+  | "drill"
+  | "non-cut";
+
+export interface ManufacturingLayerMetadata {
+  role: ManufacturingLayerRole;
+  material: ManufacturingMaterial;
+  thicknessMm: number;
+  process: ManufacturingLayerProcess;
+  notes: string;
+  registrationGroup: string | null;
+}
+
 export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
   presetId: "laser-mild-steel-3mm",
   process: "laser",
@@ -121,6 +142,7 @@ export interface Layer {
   name: string;
   visible: boolean;
   locked: boolean;
+  manufacturing?: ManufacturingLayerMetadata | undefined;
 }
 
 export interface Guide {
@@ -302,14 +324,14 @@ export interface MigrationRecord {
   migratedAt: string;
 }
 
-export interface LaserxProjectV5 {
+export interface LaserxProjectV8 {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
   project: ProjectMetadata;
   document: LaserxDocument;
   migrationHistory: MigrationRecord[];
 }
 
-export type LaserxProject = LaserxProjectV5;
+export type LaserxProject = LaserxProjectV8;
 
 export interface CreateDocumentInput {
   id: string;
@@ -932,7 +954,69 @@ export function objectUsesLayerRecursively(
 }
 
 export function copyLayer(layer: Layer): Layer {
-  return { ...layer };
+  return {
+    ...layer,
+    ...(layer.manufacturing === undefined
+      ? {}
+      : { manufacturing: copyManufacturingLayerMetadata(layer.manufacturing) }),
+  };
+}
+
+const MANUFACTURING_LAYER_ROLES: readonly ManufacturingLayerRole[] = [
+  "face",
+  "backing",
+  "spacer-tab",
+  "drill-reference",
+  "non-cut-preview",
+];
+const MANUFACTURING_LAYER_PROCESSES: readonly ManufacturingLayerProcess[] = [
+  ...MANUFACTURING_PROCESSES,
+  "drill",
+  "non-cut",
+];
+
+export function validateManufacturingLayerMetadata(
+  metadata: ManufacturingLayerMetadata,
+): void {
+  if (!MANUFACTURING_LAYER_ROLES.includes(metadata.role)) {
+    throw new RangeError("Manufacturing layer role is not supported.");
+  }
+  if (!MANUFACTURING_MATERIALS.includes(metadata.material)) {
+    throw new RangeError("Manufacturing layer material is not supported.");
+  }
+  if (!MANUFACTURING_LAYER_PROCESSES.includes(metadata.process)) {
+    throw new RangeError("Manufacturing layer process is not supported.");
+  }
+  assertPositiveFinite(metadata.thicknessMm, "Manufacturing layer thickness");
+  if (metadata.notes.length > 500) {
+    throw new RangeError("Manufacturing layer notes support at most 500 characters.");
+  }
+  if (
+    metadata.registrationGroup !== null &&
+    (metadata.registrationGroup.trim().length === 0 ||
+      metadata.registrationGroup.length > 100)
+  ) {
+    throw new RangeError("Registration group must contain 1 to 100 characters.");
+  }
+  if (
+    (metadata.role === "non-cut-preview") !==
+    (metadata.process === "non-cut")
+  ) {
+    throw new RangeError(
+      "Preview-only layers must use the non-cut process, and physical layers cannot use it.",
+    );
+  }
+}
+
+export function copyManufacturingLayerMetadata(
+  metadata: ManufacturingLayerMetadata,
+): ManufacturingLayerMetadata {
+  validateManufacturingLayerMetadata(metadata);
+  return {
+    ...metadata,
+    notes: metadata.notes.trim(),
+    registrationGroup: metadata.registrationGroup?.trim() ?? null,
+  };
 }
 
 export function copyGuide(guide: Guide): Guide {

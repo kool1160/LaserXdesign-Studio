@@ -27,7 +27,7 @@ afterEach(async () => {
 });
 
 describe("ProjectStorage", () => {
-  it("atomically saves and reopens a schema-v7 project", async () => {
+  it("atomically saves and reopens a schema-v8 project", async () => {
     const directory = await temporaryDirectory();
     const filePath = join(directory, "blank.laserx");
     const project = createBlankProject({
@@ -39,7 +39,7 @@ describe("ProjectStorage", () => {
     await storage.write(filePath, project);
 
     await expect(storage.read(filePath)).resolves.toEqual(project);
-    expect(await readFile(filePath, "utf8")).toContain('"schemaVersion": 7');
+    expect(await readFile(filePath, "utf8")).toContain('"schemaVersion": 8');
   });
 
   it("replaces an existing project and reopens the replacement", async () => {

@@ -1,6 +1,7 @@
 import {
   createBlankProject,
   getObjectBounds,
+  getSelectionBounds,
   identityTransform,
   type DocumentObject,
   type EditorCommand,
@@ -130,6 +131,94 @@ function expectUndoRedo(
 }
 
 describe("editing ProjectSession", () => {
+  it("aligns physical layers and coordinates registration holes as one undoable action", () => {
+    const session = sessionWithFixture();
+    session.performEditorAction({
+      type: "layer.set-visibility",
+      layerId: HIDDEN_LAYER_ID,
+      visible: true,
+    });
+    for (const [layerId, role] of [
+      [LAYER_ID, "face"],
+      [HIDDEN_LAYER_ID, "backing"],
+    ] as const) {
+      session.performEditorAction({
+        type: "layer.set-manufacturing",
+        layerId,
+        manufacturing: {
+          role,
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: "main",
+        },
+      });
+    }
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: [
+        {
+          id: "b0000000-0000-4000-8000-000000000000",
+          type: "ellipse",
+          layerId: LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 25, yMm: 25 },
+          radiusXmm: 3,
+          radiusYmm: 3,
+        },
+        {
+          id: "c0000000-0000-4000-8000-000000000000",
+          type: "ellipse",
+          layerId: HIDDEN_LAYER_ID,
+          transform: identityTransform(),
+          center: { xMm: 180, yMm: 60 },
+          radiusXmm: 5,
+          radiusYmm: 5,
+        },
+      ],
+    });
+
+    session.performEditorAction({
+      type: "layers.coordinate-registration",
+      sourceLayerId: LAYER_ID,
+      targetLayerId: HIDDEN_LAYER_ID,
+    });
+    expect(
+      session.state.project.document.objects.find(
+        (object) => object.layerId === HIDDEN_LAYER_ID && object.type === "ellipse",
+      ),
+    ).toMatchObject({
+      type: "ellipse",
+      center: { xMm: 25, yMm: 25 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+
+    session.performEditorAction({
+      type: "layers.align-to-reference",
+      sourceLayerId: LAYER_ID,
+      targetLayerId: HIDDEN_LAYER_ID,
+    });
+    const document = session.state.project.document;
+    const sourceBounds = getSelectionBounds(
+      document,
+      document.objects
+        .filter((object) => object.layerId === LAYER_ID)
+        .map((object) => object.id),
+    );
+    const targetBounds = getSelectionBounds(
+      document,
+      document.objects
+        .filter((object) => object.layerId === HIDDEN_LAYER_ID)
+        .map((object) => object.id),
+    );
+    expect(sourceBounds).not.toBeNull();
+    expect(targetBounds).not.toBeNull();
+    expect(boundsCenter(sourceBounds as NonNullable<typeof sourceBounds>)).toEqual(
+      boundsCenter(targetBounds as NonNullable<typeof targetBounds>),
+    );
+  });
   it("owns single, modifier, and marquee selection outside the document", () => {
     const session = sessionWithFixture();
     session.performEditorAction({

@@ -99,7 +99,7 @@ M09 adds preview-first sign utilities and reusable monogram, address,
 family-name, and badge templates. Exact borders, backing plates, seven outer
 shapes, mounting holes, limited assembly tabs/slots, and baseline/arc text
 materialize as ordinary editable objects through one undoable acceptance.
-Schema v7 saves versioned template parameters, while audited bundled presets
+Schema v8 retains versioned template parameters and adds explicit manufacturing-layer metadata, while audited bundled presets
 carry explicit geometry/font provenance. Accepted results immediately enter
 the same advisory cutability worker and remain normal SVG/DXF export geometry.
 

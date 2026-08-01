@@ -26,6 +26,12 @@ Owns points, curves, paths, bounding boxes, transforms, topology helpers, boolea
 
 Owns process presets, limits, issue detection, retained/drop-out region classification, bridge proposals, and repair summaries.
 
+### Production package — `packages/production-export`
+
+Owns deterministic physical-layer filtering, per-layer SVG/DXF artifacts,
+schema-1 manifests, registration comparison, hashes, and the simple 2D assembly
+projection. It never writes the filesystem or changes authoritative geometry.
+
 ### Adapters
 
 - `packages/fonts`
@@ -36,6 +42,14 @@ Owns process presets, limits, issue detection, retained/drop-out region classifi
 - `packages/ai`
 
 Adapters translate external data into or out of normalized domain types. They do not own editor state.
+
+For M12, schema v8 adds optional manufacturing metadata to ordinary layers.
+Only explicitly tagged physical layers enter `packages/production-export` or
+the per-layer analysis action; whole-design M08 analysis remains independent.
+Electron main owns an atomic production-folder storage adapter and exposes only
+layer IDs, output formats, and conflict intent through strict IPC. React owns
+metadata forms, selection, status, and a presentation-only exploded stack.
+ADR 0022 and `docs/PRODUCTION_PACKAGES.md` define the full contract.
 
 ## Process boundary
 
@@ -224,7 +238,7 @@ geometry, contours, IDs, or font paths.
 The application session owns sign candidate state and its source-project
 fingerprint. Preview is a pointer-inert overlay. Acceptance uses one
 `objects.import` history command and immediately sends the accepted IDs to the
-standard cutability worker. Saved template intent enters schema v7 separately
+standard cutability worker. Saved template intent was introduced in schema v7 and remains separately persisted
 from generated geometry. Runtime presets and
 `packages/sign-tools/sign-assets.json` must agree under the template asset
 audit. ADR 0021 records the schema, authority, history, and provenance policy.
@@ -248,7 +262,7 @@ owns the preview and source-project fingerprint. Wording mismatch or stale
 project state blocks acceptance; a successful acceptance is exactly one
 `objects.import` command followed by a fresh analysis of the accepted IDs.
 Prompts, references, alternatives, provider metadata, usage, and AI provenance
-remain transient and do not change schema v7.
+remain transient and do not change schema v8.
 
 ## State flow
 

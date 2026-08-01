@@ -38,6 +38,7 @@ import {
   copyDocumentObject,
   type DocumentObject,
   type Layer,
+  type LaserxProject,
   type PathObject,
   type TextObject,
   type UpdateViewportPreferences,
@@ -60,6 +61,12 @@ import {
 import { exportDxf, importDxf } from "@laserx/io-dxf";
 import { exportSvg, importSvg } from "@laserx/io-svg";
 import {
+  buildProductionPackage,
+  buildProductionAssemblyPreview,
+  manufacturingLayerObjectIds,
+  type ProductionAssemblyPreview,
+} from "@laserx/production-export";
+import {
   generateSignToolCandidate,
   type SignGenerationCandidate,
   type SignToolRequest,
@@ -77,6 +84,7 @@ import type {
   BridgeProposalRequestDto,
   VectorExportRequest,
   VectorImportPreviewRequest,
+  ProductionExportRequest,
 } from "./ipc-contract.js";
 import type {
   CredentialAcquisitionPort,
@@ -118,6 +126,10 @@ import {
   type VectorFileFormat,
   type VectorFileService,
 } from "./vector-storage.js";
+import {
+  ProductionStorage,
+  type ProductionPackageFileService,
+} from "./production-storage.js";
 
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
@@ -131,6 +143,7 @@ export interface DesktopDialogs {
     format: VectorFileFormat,
     suggestedName: string,
   ): Promise<string | null>;
+  chooseProductionDirectory?(suggestedName: string): Promise<string | null>;
 }
 
 export interface DesktopControllerOptions {
@@ -144,6 +157,7 @@ export interface DesktopControllerOptions {
   fontEngine?: FontEngine;
   geometryWorker?: GeometryWorkerPort;
   vectorStorage?: VectorFileService;
+  productionStorage?: ProductionPackageFileService;
   rasterStorage?: RasterFileService;
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
@@ -266,6 +280,7 @@ export class DesktopController {
   readonly #fontEngine: FontEngine;
   readonly #geometryWorker: GeometryWorkerPort;
   readonly #vectorStorage: VectorFileService;
+  readonly #productionStorage: ProductionPackageFileService;
   readonly #rasterStorage: RasterFileService;
   readonly #rasterCodec: RasterCodecPort | null;
   readonly #rasterWorker: RasterWorkerPort;
@@ -285,6 +300,16 @@ export class DesktopController {
   #stopAutosave: (() => void) | null = null;
   #autosaveInFlight: Promise<void> | null = null;
   #lastExportSummary: VectorExportSummary | null = null;
+  #productionExportSummary: {
+    status: "success" | "failed";
+    packageName: string;
+    targetDirectory: string;
+    layerCount: number;
+    fileCount: number;
+    warnings: string[];
+    failedFile: string | null;
+    error: string | null;
+  } | null = null;
   #rasterJob: {
     operationId: string;
     percent: number;
@@ -292,6 +317,10 @@ export class DesktopController {
   } | null = null;
   #rasterPreview: (RasterPreviewDataUrls & { operationId: string }) | null = null;
   #cutabilityAnalysis: CutabilityAnalysisSummary | null = null;
+  #cutabilityScope:
+    | { kind: "whole-design"; layerId: null; layerName: null }
+    | { kind: "manufacturing-layer"; layerId: string; layerName: string }
+    | null = null;
   #cutabilityJob: {
     operationId: string;
     percent: number;
@@ -328,6 +357,7 @@ export class DesktopController {
     this.#geometryWorker =
       options.geometryWorker ?? new NodeGeometryWorkerService();
     this.#vectorStorage = options.vectorStorage ?? new VectorStorage();
+    this.#productionStorage = options.productionStorage ?? new ProductionStorage();
     this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
     this.#rasterCodec = options.rasterCodec ?? null;
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
@@ -374,6 +404,7 @@ export class DesktopController {
 
   public get state(): DesktopState {
     const session = this.#session.state;
+    const productionPreview = this.#productionPreview(session.project);
     return {
       project: {
         id: session.project.project.id,
@@ -398,6 +429,13 @@ export class DesktopController {
           this.#lastExportSummary === null
             ? null
             : structuredClone(this.#lastExportSummary),
+      },
+      production: {
+        preview: productionPreview,
+        exportSummary:
+          this.#productionExportSummary === null
+            ? null
+            : structuredClone(this.#productionExportSummary),
       },
       raster: {
         job: this.#rasterJob === null ? null : { ...this.#rasterJob },
@@ -432,6 +470,10 @@ export class DesktopController {
         },
       },
       analysis: {
+        scope:
+          this.#cutabilityScope === null
+            ? null
+            : structuredClone(this.#cutabilityScope),
         job: this.#cutabilityJob === null ? null : { ...this.#cutabilityJob },
         focusedIssueId: this.#focusedCutabilityIssueId,
         bridgeProposal:
@@ -1142,6 +1184,42 @@ export class DesktopController {
     });
   }
 
+  public async exportProductionPackage(
+    request: ProductionExportRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#dialogs.chooseProductionDirectory === undefined) {
+        throw new Error("Production package export is not available in this desktop host.");
+      }
+      const productionPackage = buildProductionPackage(this.#session.state.project, {
+        layerIds: request.layerIds,
+        formats: request.formats,
+      });
+      const targetDirectory = await this.#dialogs.chooseProductionDirectory(
+        productionPackage.name,
+      );
+      if (targetDirectory === null) return;
+      const result = await this.#productionStorage.write(
+        targetDirectory,
+        productionPackage,
+        request.conflictPolicy,
+      );
+      this.#productionExportSummary = {
+        status: result.ok ? "success" : "failed",
+        packageName: productionPackage.name,
+        targetDirectory: result.targetDirectory,
+        layerCount: productionPackage.manifest.layers.length,
+        fileCount: result.ok ? result.writtenFiles.length : 0,
+        warnings: [...productionPackage.manifest.warnings],
+        failedFile: result.failedFile,
+        error: result.error,
+      };
+      if (!result.ok) {
+        throw new Error(result.error ?? "The production package could not be written.");
+      }
+    });
+  }
+
   public async setDisplayUnit(
     displayUnit: "millimeters" | "inches",
   ): Promise<CommandResult> {
@@ -1211,6 +1289,34 @@ export class DesktopController {
     objectIds: readonly string[],
   ): Promise<CommandResult> {
     return this.#run(async () => {
+      this.#cutabilityScope = {
+        kind: "whole-design",
+        layerId: null,
+        layerName: null,
+      };
+      await this.#analyzeCutability(operationId, objectIds);
+    });
+  }
+
+  public async runManufacturingLayerAnalysis(
+    operationId: string,
+    layerId: string,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      const document = this.#session.state.project.document;
+      const layer = document.layers.find((candidate) => candidate.id === layerId);
+      if (layer === undefined) {
+        throw new RangeError("That manufacturing layer is unavailable.");
+      }
+      const objectIds = manufacturingLayerObjectIds(document, layerId);
+      if (objectIds.length === 0) {
+        throw new RangeError("Add geometry to the manufacturing layer before analyzing it.");
+      }
+      this.#cutabilityScope = {
+        kind: "manufacturing-layer",
+        layerId,
+        layerName: layer.name,
+      };
       await this.#analyzeCutability(operationId, objectIds);
     });
   }
@@ -1272,6 +1378,7 @@ export class DesktopController {
       if (fingerprintCutabilityDocument(before) !== proposal.documentFingerprint) {
         throw new Error("The document changed after this bridge preview; preview it again.");
       }
+      const analysisScope = this.#cutabilityScope;
       const replacements = materializeBridgeProposal(proposal, randomUUID);
       const beforeNodeCount = before.objects.reduce(
         (count, object) =>
@@ -1300,7 +1407,23 @@ export class DesktopController {
       );
       this.#invalidateCutability();
       const state = this.#session.state;
-      await this.#analyzeCutability(randomUUID(), state.editor.selectionIds);
+      if (analysisScope?.kind === "manufacturing-layer") {
+        this.#cutabilityScope = analysisScope;
+        await this.#analyzeCutability(
+          randomUUID(),
+          manufacturingLayerObjectIds(
+            state.project.document,
+            analysisScope.layerId,
+          ),
+        );
+      } else {
+        this.#cutabilityScope = {
+          kind: "whole-design",
+          layerId: null,
+          layerName: null,
+        };
+        await this.#analyzeCutability(randomUUID(), state.editor.selectionIds);
+      }
     });
   }
 
@@ -1869,6 +1992,8 @@ export class DesktopController {
     this.#rasterJob = null;
     this.#rasterPreview = null;
     this.#cutabilityAnalysis = null;
+    this.#cutabilityScope = null;
+    this.#productionExportSummary = null;
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
@@ -1899,6 +2024,8 @@ export class DesktopController {
     this.#cutabilityAbortControllers.clear();
     this.#cutabilityCache.invalidate();
     this.#cutabilityAnalysis = null;
+    this.#cutabilityScope = null;
+    this.#productionExportSummary = null;
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
@@ -1978,6 +2105,13 @@ export class DesktopController {
 
   #emit(): void {
     this.#onStateChanged(this.state);
+  }
+
+  #productionPreview(project: LaserxProject): {
+    packageName: string;
+    layers: ProductionAssemblyPreview["layers"];
+  } | null {
+    return buildProductionAssemblyPreview(project);
   }
 
   #startAutosave(): void {

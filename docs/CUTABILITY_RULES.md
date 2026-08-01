@@ -94,6 +94,13 @@ not. The exact analysis-input fingerprint plus normalized object scope is the
 cache key. Display units, viewport preferences, guides, and layer names are not
 analysis inputs and do not discard a valid result.
 
+M12 keeps the standard whole-design run unchanged and adds an explicit
+manufacturing-layer action. That action is available only for a tagged physical
+layer and passes exactly its top-level object IDs through the same worker and
+cache. The desktop projection labels the returned scope with layer ID/name;
+switching back to whole-design analysis replaces that label. A preview-only or
+ordinary layer cannot claim an independent physical analysis.
+
 ## Explicit limitations
 
 The preview does not generate G-code, lead-ins, cut order, heat simulation, or

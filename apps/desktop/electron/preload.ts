@@ -34,6 +34,8 @@ import {
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   vectorExportRequestSchema,
+  productionExportRequestSchema,
+  manufacturingLayerAnalysisRequestSchema,
   vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
   type AiGenerateRequest,
@@ -63,6 +65,8 @@ import {
   type TextUpdateRequestDto,
   type SignToolRequestDto,
   type VectorExportRequest,
+  type ProductionExportRequest,
+  type ManufacturingLayerAnalysisRequest,
   type VectorImportPreviewRequest,
 } from "./ipc-contract.js";
 
@@ -128,6 +132,12 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = vectorExportRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.exportVector, validated),
+    );
+  },
+  async exportProductionPackage(request: ProductionExportRequest) {
+    const validated = productionExportRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.exportProductionPackage, validated),
     );
   },
   async previewRasterTrace(request: RasterTraceRequest) {
@@ -267,6 +277,12 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = cutabilityAnalysisRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.runCutabilityAnalysis, validated),
+    );
+  },
+  async runManufacturingLayerAnalysis(request: ManufacturingLayerAnalysisRequest) {
+    const validated = manufacturingLayerAnalysisRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.runManufacturingLayerAnalysis, validated),
     );
   },
   async cancelCutabilityAnalysis(request: CancelCutabilityAnalysisRequest) {

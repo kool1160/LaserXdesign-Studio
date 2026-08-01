@@ -246,11 +246,49 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
   ]),
 );
 
-const layerSchema = z.strictObject({
+const legacyLayerSchema = z.strictObject({
   id: z.uuid(),
   name: z.string().trim().min(1).max(100),
   visible: z.boolean(),
   locked: z.boolean(),
+});
+const manufacturingLayerMetadataSchema = z
+  .strictObject({
+    role: z.enum([
+      "face",
+      "backing",
+      "spacer-tab",
+      "drill-reference",
+      "non-cut-preview",
+    ]),
+    material: z.enum([
+      "mild-steel",
+      "stainless-steel",
+      "aluminum",
+      "wood",
+      "acrylic",
+      "other",
+    ]),
+    thicknessMm: positiveNumber,
+    process: z.enum([
+      "laser",
+      "plasma",
+      "waterjet",
+      "router",
+      "drill",
+      "non-cut",
+    ]),
+    notes: z.string().trim().max(500),
+    registrationGroup: z.string().trim().min(1).max(100).nullable(),
+  })
+  .refine(
+    (metadata) =>
+      (metadata.role === "non-cut-preview") ===
+      (metadata.process === "non-cut"),
+    "Preview-only layers must use the non-cut process, and physical layers cannot use it.",
+  );
+const layerSchema = legacyLayerSchema.extend({
+  manufacturing: manufacturingLayerMetadataSchema.optional(),
 });
 const guideSchema = z.strictObject({
   id: z.uuid(),
@@ -411,7 +449,7 @@ export const laserxProjectV3Schema = z.strictObject({
         }),
       }),
     }),
-    layers: z.array(layerSchema).min(1),
+    layers: z.array(legacyLayerSchema).min(1),
     activeLayerId: z.uuid(),
     guides: z.array(guideSchema),
     objects: z.array(documentObjectV3Schema),
@@ -448,7 +486,7 @@ export const laserxProjectV4Schema = z.strictObject({
         }),
       }),
     }),
-    layers: z.array(layerSchema).min(1),
+    layers: z.array(legacyLayerSchema).min(1),
     activeLayerId: z.uuid(),
     guides: z.array(guideSchema),
     objects: z.array(documentObjectV4Schema),
@@ -485,7 +523,7 @@ export const laserxProjectV5Schema = z.strictObject({
         }),
       }),
     }),
-    layers: z.array(layerSchema).min(1),
+    layers: z.array(legacyLayerSchema).min(1),
     activeLayerId: z.uuid(),
     guides: z.array(guideSchema),
     objects: z.array(documentObjectSchema),
@@ -523,10 +561,49 @@ export const laserxProjectV6Schema = z.strictObject({
       }),
       manufacturing: manufacturingSettingsSchema,
     }),
-    layers: z.array(layerSchema).min(1),
+    layers: z.array(legacyLayerSchema).min(1),
     activeLayerId: z.uuid(),
     guides: z.array(guideSchema),
     objects: z.array(documentObjectSchema),
+  }),
+  migrationHistory: z.array(migrationRecordSchema),
+});
+
+export const laserxProjectV7Schema = z.strictObject({
+  schemaVersion: z.literal(7),
+  project: metadataSchema,
+  document: z.strictObject({
+    kind: z.literal("document"),
+    id: z.uuid(),
+    dimensions: z.strictObject({
+      widthMm: positiveNumber,
+      heightMm: positiveNumber,
+    }),
+    origin: z.strictObject({
+      xMm: z.literal(0),
+      yMm: z.literal(0),
+    }),
+    settings: z.strictObject({
+      displayUnit: z.enum(["millimeters", "inches"]),
+      viewport: z.strictObject({
+        rulersVisible: z.boolean(),
+        gridVisible: z.boolean(),
+        gridSpacingMm: positiveNumber,
+        snapping: z.strictObject({
+          enabled: z.boolean(),
+          snapToGrid: z.boolean(),
+          snapToGuides: z.boolean(),
+          snapToObjects: z.boolean(),
+          snapToDocument: z.boolean(),
+        }),
+      }),
+      manufacturing: manufacturingSettingsSchema,
+    }),
+    layers: z.array(legacyLayerSchema).min(1),
+    activeLayerId: z.uuid(),
+    guides: z.array(guideSchema),
+    objects: z.array(documentObjectSchema),
+    templates: z.array(savedSignTemplateSchema).max(MAX_SAVED_SIGN_TEMPLATES),
   }),
   migrationHistory: z.array(migrationRecordSchema),
 });
@@ -575,6 +652,7 @@ type LaserxProjectV3Format = z.infer<typeof laserxProjectV3Schema>;
 type LaserxProjectV4Format = z.infer<typeof laserxProjectV4Schema>;
 type LaserxProjectV5Format = z.infer<typeof laserxProjectV5Schema>;
 type LaserxProjectV6Format = z.infer<typeof laserxProjectV6Schema>;
+type LaserxProjectV7Format = z.infer<typeof laserxProjectV7Schema>;
 type DocumentObjectV2 = z.infer<typeof documentObjectV2Schema>;
 
 export type ProjectFormatErrorCode =
@@ -830,7 +908,7 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProjectV6Format {
   };
 }
 
-export function migrateProjectV6ToV7(value: unknown): LaserxProject {
+export function migrateProjectV6ToV7(value: unknown): LaserxProjectV7Format {
   const legacy = laserxProjectV6Schema.safeParse(value);
   if (!legacy.success) {
     throw new ProjectFormatError(
@@ -840,7 +918,7 @@ export function migrateProjectV6ToV7(value: unknown): LaserxProject {
   }
   return {
     ...legacy.data,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: 7,
     document: {
       ...legacy.data.document,
       templates: [],
@@ -849,6 +927,28 @@ export function migrateProjectV6ToV7(value: unknown): LaserxProject {
       ...legacy.data.migrationHistory.map((record) => ({ ...record })),
       {
         fromVersion: 6,
+        toVersion: 7,
+        migratedAt: legacy.data.project.updatedAt,
+      },
+    ],
+  };
+}
+
+export function migrateProjectV7ToV8(value: unknown): LaserxProject {
+  const legacy = laserxProjectV7Schema.safeParse(value);
+  if (!legacy.success) {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This schema-v7 project is damaged and cannot be migrated.",
+    );
+  }
+  return {
+    ...legacy.data,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    migrationHistory: [
+      ...legacy.data.migrationHistory.map((record) => ({ ...record })),
+      {
+        fromVersion: 7,
         toVersion: PROJECT_SCHEMA_VERSION,
         migratedAt: legacy.data.project.updatedAt,
       },
@@ -857,13 +957,15 @@ export function migrateProjectV6ToV7(value: unknown): LaserxProject {
 }
 
 export function migrateProjectV1(value: unknown): LaserxProject {
-  return migrateProjectV6ToV7(
-    migrateProjectV5ToV6(
+  return migrateProjectV7ToV8(
+    migrateProjectV6ToV7(
+      migrateProjectV5ToV6(
       migrateProjectV4ToV5(
         migrateProjectV3ToV4(
           migrateProjectV2ToV3(migrateProjectV1ToV2(value)),
         ),
       ),
+    ),
     ),
   );
 }
@@ -896,8 +998,13 @@ export const projectMigrationRegistry: readonly ProjectMigration[] = [
   },
   {
     fromVersion: 6,
-    toVersion: PROJECT_SCHEMA_VERSION,
+    toVersion: 7,
     migrate: migrateProjectV6ToV7,
+  },
+  {
+    fromVersion: 7,
+    toVersion: PROJECT_SCHEMA_VERSION,
+    migrate: migrateProjectV7ToV8,
   },
 ];
 

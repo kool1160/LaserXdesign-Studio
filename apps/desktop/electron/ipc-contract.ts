@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   commitVectorImport: "laserx:vector:commit-import",
   cancelVectorImport: "laserx:vector:cancel-import",
   exportVector: "laserx:vector:export",
+  exportProductionPackage: "laserx:production:export",
   previewRasterTrace: "laserx:raster:preview-trace",
   cancelRasterTrace: "laserx:raster:cancel-trace",
   acceptRasterTrace: "laserx:raster:accept-trace",
@@ -51,6 +52,7 @@ export const IPC_CHANNELS = {
   setViewportPreferences: "laserx:viewport:set-preferences",
   setManufacturingSettings: "laserx:manufacturing:set-settings",
   runCutabilityAnalysis: "laserx:manufacturing:analyze",
+  runManufacturingLayerAnalysis: "laserx:manufacturing:analyze-layer",
   cancelCutabilityAnalysis: "laserx:manufacturing:cancel-analysis",
   focusCutabilityIssue: "laserx:manufacturing:focus-issue",
   previewBridge: "laserx:manufacturing:preview-bridge",
@@ -178,11 +180,24 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
   ]),
 );
 
+const manufacturingLayerMetadataSchema = z.strictObject({
+    role: z.enum(["face", "backing", "spacer-tab", "drill-reference", "non-cut-preview"]),
+    material: z.enum(["mild-steel", "stainless-steel", "aluminum", "wood", "acrylic", "other"]),
+    thicknessMm: positiveNumber,
+    process: z.enum(["laser", "plasma", "waterjet", "router", "drill", "non-cut"]),
+    notes: z.string().max(500),
+    registrationGroup: z.string().min(1).max(100).nullable(),
+  }).refine(
+    (metadata) =>
+      (metadata.role === "non-cut-preview") ===
+      (metadata.process === "non-cut"),
+  );
 const layerSchema = z.strictObject({
   id: z.uuid(),
   name: z.string().min(1).max(100),
   visible: z.boolean(),
   locked: z.boolean(),
+  manufacturing: manufacturingLayerMetadataSchema.optional(),
 });
 const guideSchema = z.strictObject({
   id: z.uuid(),
@@ -410,6 +425,17 @@ export const setManufacturingSettingsRequestSchema = z.strictObject({
 export const cutabilityAnalysisRequestSchema = z.strictObject({
   operationId: z.uuid(),
   objectIds: z.array(z.uuid()),
+});
+
+export const manufacturingLayerAnalysisRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+  layerId: z.uuid(),
+});
+
+export const productionExportRequestSchema = z.strictObject({
+  layerIds: z.array(z.uuid()).min(1),
+  formats: z.array(z.enum(["svg", "dxf"])).min(1),
+  conflictPolicy: z.enum(["fail", "replace"]),
 });
 
 export const cancelCutabilityAnalysisRequestSchema = z.strictObject({
@@ -649,6 +675,16 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
       name: z.string().trim().min(1).max(100),
     }),
     z.strictObject({
+      type: z.literal("layers.align-to-reference"),
+      sourceLayerId: z.uuid(),
+      targetLayerId: z.uuid(),
+    }),
+    z.strictObject({
+      type: z.literal("layers.coordinate-registration"),
+      sourceLayerId: z.uuid(),
+      targetLayerId: z.uuid(),
+    }),
+    z.strictObject({
       type: z.literal("layer.activate"),
       layerId: z.uuid(),
     }),
@@ -666,6 +702,11 @@ export const editorActionRequestSchema: z.ZodType<EditorActionRequest> =
       type: z.literal("layer.set-locked"),
       layerId: z.uuid(),
       locked: z.boolean(),
+    }),
+    z.strictObject({
+      type: z.literal("layer.set-manufacturing"),
+      layerId: z.uuid(),
+      manufacturing: manufacturingLayerMetadataSchema.nullable(),
     }),
     z.strictObject({
       type: z.literal("layer.reorder"),
@@ -937,6 +978,28 @@ export const desktopStateSchema = z.strictObject({
   interchange: z.strictObject({
     exportSummary: vectorExportSummarySchema.nullable(),
   }),
+  production: z.strictObject({
+    preview: z.strictObject({
+      packageName: z.string().min(1),
+      layers: z.array(z.strictObject({
+        layerId: z.uuid(),
+        name: z.string().min(1),
+        role: z.enum(["face", "backing", "spacer-tab", "drill-reference"]),
+        offsetMm: z.strictObject({ xMm: finiteNumber, yMm: finiteNumber }),
+        boundsMm: boundsSchema.nullable(),
+      })),
+    }).nullable(),
+    exportSummary: z.strictObject({
+      status: z.enum(["success", "failed"]),
+      packageName: z.string().min(1),
+      targetDirectory: z.string(),
+      layerCount: z.number().int().positive(),
+      fileCount: z.number().int().nonnegative(),
+      warnings: z.array(z.string()),
+      failedFile: z.string().nullable(),
+      error: z.string().nullable(),
+    }).nullable(),
+  }),
   raster: z.strictObject({
     job: z
       .strictObject({
@@ -1014,6 +1077,10 @@ export const desktopStateSchema = z.strictObject({
     }),
   }),
   analysis: z.strictObject({
+    scope: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("whole-design"), layerId: z.null(), layerName: z.null() }),
+      z.strictObject({ kind: z.literal("manufacturing-layer"), layerId: z.uuid(), layerName: z.string().min(1) }),
+    ]).nullable(),
     job: z
       .strictObject({
         operationId: z.uuid(),
@@ -1135,6 +1202,12 @@ export type SetManufacturingSettingsRequest = z.infer<
 export type CutabilityAnalysisRequest = z.infer<
   typeof cutabilityAnalysisRequestSchema
 >;
+export type ManufacturingLayerAnalysisRequest = z.infer<
+  typeof manufacturingLayerAnalysisRequestSchema
+>;
+export type ProductionExportRequest = z.infer<
+  typeof productionExportRequestSchema
+>;
 export type CancelCutabilityAnalysisRequest = z.infer<
   typeof cancelCutabilityAnalysisRequestSchema
 >;
@@ -1189,6 +1262,7 @@ export interface LaserxDesktopApi {
   commitVectorImport(): Promise<CommandResult>;
   cancelVectorImport(): Promise<CommandResult>;
   exportVector(request: VectorExportRequest): Promise<CommandResult>;
+  exportProductionPackage(request: ProductionExportRequest): Promise<CommandResult>;
   previewRasterTrace(request: RasterTraceRequest): Promise<CommandResult>;
   cancelRasterTrace(request: CancelRasterTraceRequest): Promise<CommandResult>;
   acceptRasterTrace(): Promise<CommandResult>;
@@ -1220,6 +1294,9 @@ export interface LaserxDesktopApi {
   ): Promise<CommandResult>;
   runCutabilityAnalysis(
     request: CutabilityAnalysisRequest,
+  ): Promise<CommandResult>;
+  runManufacturingLayerAnalysis(
+    request: ManufacturingLayerAnalysisRequest,
   ): Promise<CommandResult>;
   cancelCutabilityAnalysis(
     request: CancelCutabilityAnalysisRequest,

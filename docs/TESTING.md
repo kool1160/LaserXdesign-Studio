@@ -277,7 +277,7 @@ the conservative analysis into a manufacturability guarantee.
 ## M09 executable layers
 
 - domain and project-format tests cover template validation/copying, strict
-  schema-v7 round trips, deterministic v6-to-v7 migration, template-ID
+  schema-v8 round trips, deterministic v6-to-v7-to-v8 migration, template-ID
   collisions, and ordinary template save/delete commands;
 - pure sign-tools tests cover every outer primitive, exact backing/border
   bounds, Clipper2 offsets, mounting-hole centers across display-unit changes,
@@ -301,7 +301,7 @@ the conservative analysis into a manufacturability guarantee.
 - three packaged Windows scenarios build the reviewed 24-inch badge, address,
   and layered family-name signs, inspect the noninteractive preview, accept and
   analyze ordinary objects, explicitly scope the family-name detail objects
-  before returning to whole-design analysis, export SVG, persist schema v7,
+  before returning to whole-design analysis, export SVG, persist schema v8,
   save/reopen the representative user template, and undo generation exactly;
 - `pnpm audit:templates` checks the machine-readable asset manifest against
   runtime presets, the bundled-font catalog, SPDX identity, and repository
@@ -328,7 +328,7 @@ the conservative analysis into a manufacturability guarantee.
   mismatch, accepts editable geometry, analyzes, verifies transient provenance,
   undoes exactly, disconnects, and confirms manual editing still works;
 - `pnpm audit:ai` checks provider pinning, request privacy controls, renderer
-  isolation, schema-v7 non-persistence, documentation, and production-source
+  isolation, schema-v8 non-persistence, documentation, and production-source
   secret patterns.
 
 Real-provider calls are never required in CI. The separate procedure in
@@ -353,6 +353,32 @@ secret or prompt content.
   workflow remain in the same 28-test serial packaged suite;
 - `pnpm --filter @laserx/desktop brand:assets` deterministically regenerates
   the Windows icon, and the M11 workflow fails if the committed output changes.
+
+## M12 executable layers
+
+- domain/application tests cover optional manufacturing metadata, one-command
+  layer alignment, one-transaction registration-hole synchronization, and
+  undoable fresh-ID materialization;
+- project-format tests prove strict schema-v8 round trips and deterministic
+  v7-to-v8 migration without silently classifying any legacy layer;
+- `fixtures/production/m12-package-goldens.json` independently pins two- and
+  three-layer filenames, roles, shared millimeter origin/stock, and registration
+  coordinates;
+- production-export tests inspect deterministic SVG/DXF text, full-stock SVG
+  viewBoxes, document order, bounds, SHA-256/byte manifest records, and complete
+  exclusion of non-cut preview layers;
+- storage tests prove complete folder commit, fail-closed conflicts, explicit
+  replacement, rollback-safe staging, and partial-file failure reporting with
+  no published success folder;
+- desktop integration tests persist/reopen semantic layers, switch visibly
+  between whole-design and physical-layer analysis, export two real layers,
+  and parse the actual manifest;
+- the packaged Windows scenario constructs face/backing/non-cut layers,
+  coordinates holes, runs scoped analysis, inspects exact-scale SVGs and the
+  real folder/manifest, proves conflict and replacement behavior, and saves
+  schema v8 metadata;
+- `pnpm audit:production` enforces explicit physical scope, preview exclusion,
+  atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
 
 Run all milestone checks from the repository root:
 

@@ -89,7 +89,7 @@ submit generated contours, object IDs, font paths, or provenance. Preview is
 ephemeral, rejection is non-mutating, and acceptance imports ordinary editable
 objects as one undoable command.
 
-Saved templates persist version-1 parameter intent in schema v7 rather than
+Saved templates persist version-1 parameter intent in schema v8 rather than
 generated geometry. Acceptance and Analyze all send one complete geometry
 scope through the standard M08 worker; ordinary layer membership never implies
 a separate physical sheet. Analyze selection is the explicit scoped workflow

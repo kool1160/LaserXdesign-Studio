@@ -5,6 +5,7 @@ import {
 import type {
   ManufacturingSettingField,
   ManufacturingSettings,
+  ManufacturingLayerMetadata,
   RasterTracePreset,
   RasterTraceSettings,
 } from "@laserx/domain";
@@ -88,6 +89,10 @@ export function App() {
     );
   const [manufacturingPreviewVisible, setManufacturingPreviewVisible] =
     useState(true);
+  const [excludedProductionLayerIds, setExcludedProductionLayerIds] =
+    useState<string[]>([]);
+  const [replaceProductionPackage, setReplaceProductionPackage] =
+    useState(false);
   const [issueSeverityFilter, setIssueSeverityFilter] = useState<
     "all" | "error" | "warning"
   >("all");
@@ -437,6 +442,17 @@ export function App() {
   }
 
   const document = state.project.document;
+  const activeLayer = document.layers.find(
+    (layer) => layer.id === document.activeLayerId,
+  );
+  const physicalProductionLayers = document.layers.filter(
+    (layer) =>
+      layer.manufacturing !== undefined &&
+      layer.manufacturing.role !== "non-cut-preview",
+  );
+  const selectedProductionLayerIds = physicalProductionLayers
+    .filter((layer) => !excludedProductionLayerIds.includes(layer.id))
+    .map((layer) => layer.id);
   const viewportPreferences = document.settings.viewport;
   const selectionIds = state.editor.selectionIds;
   const selectionBounds = state.editor.selectionBounds;
@@ -468,6 +484,17 @@ export function App() {
     state.editor.rasterTracePreview === null &&
     state.editor.signToolPreview === null &&
     state.editor.aiConceptPreview === null;
+
+  const updateActiveLayerManufacturing = (
+    updates: Partial<ManufacturingLayerMetadata>,
+  ) => {
+    if (activeLayer?.manufacturing === undefined) return;
+    dispatchEditorAction({
+      type: "layer.set-manufacturing",
+      layerId: activeLayer.id,
+      manufacturing: { ...activeLayer.manufacturing, ...updates },
+    });
+  };
 
   const createExactDocument = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1226,7 +1253,10 @@ export function App() {
                   {cutability.errorCount} error(s) · {cutability.warningCount} warning(s) · cut-ready claim: no
                 </span>
                 <span data-testid="cutability-scope">
-                  One standard geometry scope: {cutability.analyzedObjectIds.length} object(s)
+                  {state.analysis.scope?.kind === "manufacturing-layer"
+                    ? `Physical layer: ${state.analysis.scope.layerName}`
+                    : "Whole-design analysis"}
+                  {" · "}{cutability.analyzedObjectIds.length} object(s)
                 </span>
                 <label className="toggle-row">
                   <input
@@ -2354,6 +2384,261 @@ export function App() {
                 </li>
               ))}
             </ol>
+            {activeLayer !== undefined && (
+              <div className="production-layer-editor" data-testid="production-layer-editor">
+                <label>
+                  Manufacturing role
+                  <select
+                    aria-label="Manufacturing layer role"
+                    value={activeLayer.manufacturing?.role ?? "ordinary"}
+                    onChange={(event) => {
+                      const role = event.target.value;
+                      if (role === "ordinary") {
+                        dispatchEditorAction({
+                          type: "layer.set-manufacturing",
+                          layerId: activeLayer.id,
+                          manufacturing: null,
+                        });
+                        return;
+                      }
+                      const isPreview = role === "non-cut-preview";
+                      dispatchEditorAction({
+                        type: "layer.set-manufacturing",
+                        layerId: activeLayer.id,
+                        manufacturing: {
+                          role: role as ManufacturingLayerMetadata["role"],
+                          material: document.settings.manufacturing.material,
+                          thicknessMm: document.settings.manufacturing.thicknessMm,
+                          process: isPreview
+                            ? "non-cut"
+                            : document.settings.manufacturing.process,
+                          notes: "",
+                          registrationGroup: null,
+                        },
+                      });
+                    }}
+                  >
+                    <option value="ordinary">Ordinary editing layer</option>
+                    <option value="face">Face</option>
+                    <option value="backing">Backing</option>
+                    <option value="spacer-tab">Spacer / tab</option>
+                    <option value="drill-reference">Drill / reference</option>
+                    <option value="non-cut-preview">Non-cut preview</option>
+                  </select>
+                </label>
+                {activeLayer.manufacturing !== undefined && (
+                  <>
+                    <div className="manufacturing-settings-grid">
+                      <label>
+                        Material
+                        <select
+                          aria-label="Layer material"
+                          value={activeLayer.manufacturing.material}
+                          onChange={(event) =>
+                            updateActiveLayerManufacturing({
+                              material: event.target.value as ManufacturingLayerMetadata["material"],
+                            })
+                          }
+                        >
+                          <option value="mild-steel">Mild steel</option>
+                          <option value="stainless-steel">Stainless steel</option>
+                          <option value="aluminum">Aluminum</option>
+                          <option value="wood">Wood</option>
+                          <option value="acrylic">Acrylic</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </label>
+                      <label>
+                        Thickness (mm)
+                        <input
+                          aria-label="Layer thickness millimeters"
+                          type="number"
+                          min="0.001"
+                          step="0.1"
+                          value={activeLayer.manufacturing.thicknessMm}
+                          onChange={(event) =>
+                            updateActiveLayerManufacturing({
+                              thicknessMm: Number(event.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <label>
+                        Process
+                        <select
+                          aria-label="Layer process"
+                          disabled={activeLayer.manufacturing.role === "non-cut-preview"}
+                          value={activeLayer.manufacturing.process}
+                          onChange={(event) =>
+                            updateActiveLayerManufacturing({
+                              process: event.target.value as ManufacturingLayerMetadata["process"],
+                            })
+                          }
+                        >
+                          <option value="laser">Laser</option>
+                          <option value="plasma">Plasma</option>
+                          <option value="waterjet">Waterjet</option>
+                          <option value="router">Router</option>
+                          <option value="drill">Drill</option>
+                          {activeLayer.manufacturing.role === "non-cut-preview" && (
+                            <option value="non-cut">Non-cut</option>
+                          )}
+                        </select>
+                      </label>
+                    </div>
+                    <label>
+                      Registration group
+                      <input
+                        aria-label="Registration group"
+                        key={`${activeLayer.id}-${activeLayer.manufacturing.registrationGroup ?? ""}-registration`}
+                        defaultValue={activeLayer.manufacturing.registrationGroup ?? ""}
+                        placeholder="Optional shared group"
+                        onBlur={(event) =>
+                          updateActiveLayerManufacturing({
+                            registrationGroup: event.target.value.trim() || null,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Material notes
+                      <input
+                        aria-label="Layer material notes"
+                        key={`${activeLayer.id}-${activeLayer.manufacturing.notes}-notes`}
+                        defaultValue={activeLayer.manufacturing.notes}
+                        onBlur={(event) =>
+                          updateActiveLayerManufacturing({ notes: event.target.value })
+                        }
+                      />
+                    </label>
+                    {physicalProductionLayers
+                      .filter((layer) => layer.id !== activeLayer.id)
+                      .map((referenceLayer) => (
+                        <div className="button-grid compact" key={referenceLayer.id}>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              dispatchEditorAction({
+                                type: "layers.align-to-reference",
+                                sourceLayerId: referenceLayer.id,
+                                targetLayerId: activeLayer.id,
+                              })
+                            }
+                          >
+                            Align center to {referenceLayer.name}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              busy ||
+                              activeLayer.manufacturing?.registrationGroup === null ||
+                              activeLayer.manufacturing?.registrationGroup !==
+                                referenceLayer.manufacturing?.registrationGroup
+                            }
+                            onClick={() =>
+                              dispatchEditorAction({
+                                type: "layers.coordinate-registration",
+                                sourceLayerId: referenceLayer.id,
+                                targetLayerId: activeLayer.id,
+                              })
+                            }
+                          >
+                            Sync holes from {referenceLayer.name}
+                          </button>
+                        </div>
+                      ))}
+                    {activeLayer.manufacturing.role !== "non-cut-preview" && (
+                      <button
+                        type="button"
+                        data-testid="analyze-manufacturing-layer"
+                        disabled={busy || !document.objects.some((object) => object.layerId === activeLayer.id)}
+                        onClick={() =>
+                          void run(() =>
+                            window.laserx.runManufacturingLayerAnalysis({
+                              operationId: window.crypto.randomUUID(),
+                              layerId: activeLayer.id,
+                            }),
+                          )
+                        }
+                      >
+                        Analyze this physical layer
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {state.production.preview !== null && (
+              <div className="production-package" data-testid="production-package">
+                <span className="section-label">Production package</span>
+                <div className="assembly-preview" aria-label="Exploded two-dimensional assembly preview">
+                  {state.production.preview.layers.map((layer, index) => (
+                    <div
+                      key={layer.layerId}
+                      className={`assembly-layer role-${layer.role}`}
+                      style={{ transform: `translate(${String(index * 8)}px, ${String(index * -8)}px)` }}
+                    >
+                      <strong>{layer.name}</strong>
+                      <span>{layer.role}</span>
+                    </div>
+                  ))}
+                </div>
+                <fieldset className="production-layer-selection">
+                  <legend>Manufacturing layers</legend>
+                  {physicalProductionLayers.map((layer) => (
+                    <label key={layer.id} className="toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={!excludedProductionLayerIds.includes(layer.id)}
+                        onChange={(event) =>
+                          setExcludedProductionLayerIds((current) =>
+                            event.target.checked
+                              ? current.filter((id) => id !== layer.id)
+                              : [...current, layer.id],
+                          )
+                        }
+                      />
+                      {layer.name} ({layer.manufacturing?.role})
+                    </label>
+                  ))}
+                </fieldset>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={replaceProductionPackage}
+                    onChange={(event) => setReplaceProductionPackage(event.target.checked)}
+                  />
+                  Replace an existing package folder
+                </label>
+                <button
+                  type="button"
+                  data-testid="export-production-package"
+                  disabled={busy || selectedProductionLayerIds.length === 0}
+                  onClick={() =>
+                    void run(() =>
+                      window.laserx.exportProductionPackage({
+                        layerIds: selectedProductionLayerIds,
+                        formats: ["svg", "dxf"],
+                        conflictPolicy: replaceProductionPackage ? "replace" : "fail",
+                      }),
+                    )
+                  }
+                >
+                  Export DXF + SVG package
+                </button>
+                {state.production.exportSummary !== null && (
+                  <div
+                    className={state.production.exportSummary.status === "success" ? "status-success" : "status-warning"}
+                    data-testid="production-export-summary"
+                  >
+                    {state.production.exportSummary.status === "success"
+                      ? `Exported ${String(state.production.exportSummary.layerCount)} layer(s) and ${String(state.production.exportSummary.fileCount)} file(s).`
+                      : state.production.exportSummary.error}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
 
           <section>
@@ -2412,7 +2697,7 @@ export function App() {
         <span>
           {selectionIds.length} selected · undo {state.editor.history.undoDepth} · redo {state.editor.history.redoDepth}
         </span>
-        <span>Cartesian · +X right · +Y up · schema v7</span>
+        <span>Cartesian · +X right · +Y up · schema v8</span>
       </footer>
     </div>
   );
