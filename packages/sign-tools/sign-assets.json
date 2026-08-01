@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "provenance": [
+    {
+      "id": "laserx:algorithmic-sign-primitives-v1",
+      "kind": "algorithmic-geometry",
+      "source": "LaserX deterministic primitive generators",
+      "license": "LaserX-original",
+      "licenseFile": null
+    },
+    {
+      "id": "bundled:saira-stencil-one",
+      "kind": "bundled-font",
+      "source": "Fontsource / Saira Stencil One",
+      "license": "OFL-1.1",
+      "licenseFile": "packages/fonts/licenses/OFL-1.1.txt"
+    },
+    {
+      "id": "bundled:roboto-slab",
+      "kind": "bundled-font",
+      "source": "Fontsource / Roboto Slab",
+      "license": "Apache-2.0",
+      "licenseFile": "packages/fonts/licenses/Apache-2.0.txt"
+    },
+    {
+      "id": "bundled:rye",
+      "kind": "bundled-font",
+      "source": "Fontsource / Rye",
+      "license": "OFL-1.1",
+      "licenseFile": "packages/fonts/licenses/OFL-1.1.txt"
+    }
+  ],
+  "presets": [
+    {
+      "id": "industrial-stencil",
+      "fontId": "bundled:saira-stencil-one",
+      "provenanceIds": ["laserx:algorithmic-sign-primitives-v1", "bundled:saira-stencil-one"]
+    },
+    {
+      "id": "classic-slab",
+      "fontId": "bundled:roboto-slab",
+      "provenanceIds": ["laserx:algorithmic-sign-primitives-v1", "bundled:roboto-slab"]
+    },
+    {
+      "id": "western-badge",
+      "fontId": "bundled:rye",
+      "provenanceIds": ["laserx:algorithmic-sign-primitives-v1", "bundled:rye"]
+    }
+  ]
+}

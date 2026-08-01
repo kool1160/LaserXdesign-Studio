@@ -27,6 +27,7 @@ import type {
 import type { PathObject } from "@laserx/domain";
 import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
+import { SignToolsPanel } from "../components/SignToolsPanel.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -653,7 +654,7 @@ export function App() {
         >
           DXF
         </button>
-        <span className="shell-badge">M08 Manufacturing review</span>
+        <span className="shell-badge">M09 Sign tools</span>
       </nav>
 
       {state.recovery !== null && (
@@ -709,7 +710,7 @@ export function App() {
             <dl className="project-facts">
               <div>
                 <dt>Format</dt>
-                <dd>.laserx v6</dd>
+                <dd>.laserx v7</dd>
               </div>
               <div>
                 <dt>Stock</dt>
@@ -1192,6 +1193,14 @@ export function App() {
               >
                 Analyze all
               </button>
+              <button
+                type="button"
+                data-testid="run-selection-cutability-analysis"
+                disabled={busy || state.editor.selectionIds.length === 0}
+                onClick={() => void runCutability(state.editor.selectionIds)}
+              >
+                Analyze selection
+              </button>
             </div>
             {state.analysis.job !== null && (
               <div className="analysis-progress" data-testid="cutability-progress">
@@ -1221,6 +1230,9 @@ export function App() {
                 </strong>
                 <span data-testid="cutability-summary">
                   {cutability.errorCount} error(s) · {cutability.warningCount} warning(s) · cut-ready claim: no
+                </span>
+                <span data-testid="cutability-scope">
+                  One standard geometry scope: {cutability.analyzedObjectIds.length} object(s)
                 </span>
                 <label className="toggle-row">
                   <input
@@ -1374,6 +1386,8 @@ export function App() {
           </section>
 
           <TextPanel state={state} busy={busy} run={run} />
+
+          <SignToolsPanel state={state} busy={busy} run={run} />
 
           <section>
             <span className="section-label">New exact document</span>
@@ -1566,7 +1580,9 @@ export function App() {
             selectionBounds={selectionBounds}
             pathSelection={pathSelection}
             importPreview={
-              state.editor.importPreview ?? state.editor.rasterTracePreview
+              state.editor.importPreview ??
+              state.editor.rasterTracePreview ??
+              state.editor.signToolPreview
             }
             previewGeometryVisible={
               state.editor.rasterTracePreview === null ||
@@ -2367,7 +2383,7 @@ export function App() {
           {selectionIds.length} selected · undo {state.editor.history.undoDepth} ·
           redo {state.editor.history.redoDepth}
         </span>
-        <span>Cartesian · +X right · +Y up · schema v6</span>
+        <span>Cartesian · +X right · +Y up · schema v7</span>
       </footer>
     </div>
   );

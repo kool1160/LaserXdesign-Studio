@@ -1,21 +1,21 @@
 {
-  "name": "@laserx/application",
+  "name": "@laserx/sign-tools",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./src/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@laserx/cutability": "workspace:*",
     "@laserx/domain": "workspace:*",
-    "@laserx/geometry": "workspace:*",
-    "@laserx/project-format": "workspace:*",
-    "@laserx/sign-tools": "workspace:*"
+    "@laserx/geometry": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "26.1.2",
+    "@laserx/fonts": "workspace:*",
     "typescript": "6.0.3",
     "vitest": "4.1.10"
   }

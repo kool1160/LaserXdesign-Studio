@@ -2,6 +2,64 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-07-31 - M09 standard-analysis review repair
+
+- Date: 2026-07-31
+- Agent/task: Codex / PR #25 blocking review findings
+- Milestone: M09 - Sign-Building Tools and Templates
+- Delivered: Removed the inferred per-layer analysis adapter and synthetic
+  combined summaries. Sign acceptance and Analyze all again use one standard
+  M08 geometry scope; Analyze selection is the distinct explicit object-ID
+  scope. Layers remain editing/export organization, not material declarations.
+- Verification: Cross-layer duplicate, overlap, intersection, minimum-gap, and
+  nested-containment regressions exercise the unchanged M08 engine. A
+  two-layer/two-island controller case proves deterministic unique issue IDs,
+  full fingerprint and exact scope, issue focus, targeted bridge preview and
+  acceptance, exact untouched geometry, cache reuse/invalidation, and undo.
+  The layered family-name packaged flow explicitly analyzes detail objects and
+  then returns to whole-design analysis. Full `pnpm verify`, production
+  dependency audit, Repository Guard, and patch-format checks pass locally
+  with 232 unit/integration tests and 25 packaged Electron E2E scenarios.
+- Decisions: No combined cutability summary is published. Native M08 issue and
+  region identities remain globally sequenced inside the one authoritative
+  summary, and every scoped summary retains its full document fingerprint plus
+  exact analyzed IDs.
+- Known limitations: Explicit selection scoping is advisory and does not mark
+  selected layers as physical sheets. M11 remains responsible for layered
+  production packages and independent inspection.
+- Next allowed work: Publish the repair to draft PR #25, run exact-head gates,
+  and stop for re-review. Do not merge, close Issue #10, or begin M10.
+
+## 2026-07-31 - M09 sign-building tools and templates candidate
+
+- Date: 2026-07-31
+- Agent/task: Codex / Issue #10 implementation
+- Milestone: M09 - Sign-Building Tools and Templates
+- Delivered: Strict schema-v7 saved-template parameters and v6 migration; pure
+  bounded border, backing-plate, seven-shape, mounting-hole, tabs/slots, and
+  template generators; baseline and centered-arc text materialization; four
+  template models; three audited style presets; preview/reject/save/accept;
+  one-command ordinary-object insertion; and main-owned standard cutability
+  analysis over the complete accepted geometry scope.
+- Verification: Domain, project-format, application, sign-tools, IPC, and
+  desktop suites cover exact geometry, migration, provenance, trust
+  boundaries, stale preview rejection, and undo. Three packaged Windows
+  workflows cover reviewed 24-inch badge, address, and family-name signs,
+  including cutability, SVG export, schema-v7 persistence, user-template
+  reopen, and exact undo. Full `pnpm verify`, production dependency audit,
+  Repository Guard, and patch-format checks pass locally with 232
+  unit/integration tests and 25 packaged Electron E2E scenarios. Remote
+  exact-head CI remains required before review handoff.
+- Decisions: ADR 0021 keeps template intent versioned separately from generated
+  editable geometry, keeps renderer requests parameter-only, and preserves
+  ordinary layers as editing/export organization rather than material-piece
+  declarations.
+- Known limitations: No marketplace or logo catalog, arbitrary mechanical
+  joints, advanced nesting, locked output, M10 AI generation, CAM, G-code,
+  DWG, or machine control.
+- Next allowed work: Finish the full local gate, publish the draft M09 PR, and
+  stop for exact-head review. Do not merge, close Issue #10, or begin M10.
+
 ## Entry template
 
 ```text

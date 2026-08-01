@@ -36,6 +36,7 @@ import {
   type RasterTraceSettings,
   type RasterTraceSummary,
   type ManufacturingSettings,
+  type SavedSignTemplate,
 } from "@laserx/domain";
 import {
   applyAffineTransform,
@@ -44,6 +45,10 @@ import {
 } from "@laserx/geometry";
 
 import { previewSelectedPathJoin } from "./path-preview.js";
+import type {
+  SignGenerationCandidate,
+  SignGenerationSummary,
+} from "@laserx/sign-tools";
 
 export const DEFAULT_HISTORY_LIMIT = 100;
 export const DEFAULT_DUPLICATE_OFFSET_MM = 10;
@@ -62,6 +67,7 @@ export interface EditorProjection {
   topologySummary: TopologyChangeSummary | null;
   importPreview: VectorImportPreview | null;
   rasterTracePreview: RasterTracePreview | null;
+  signToolPreview: SignToolPreview | null;
   history: {
     undoDepth: number;
     redoDepth: number;
@@ -98,6 +104,17 @@ export interface RasterTracePreview {
 }
 
 interface PendingRasterTrace extends RasterTracePreview {
+  projectFingerprint: string;
+}
+
+export interface SignToolPreview {
+  layers: Layer[];
+  objects: DocumentObject[];
+  summary: SignGenerationSummary;
+  template: Omit<SavedSignTemplate, "id" | "name"> | null;
+}
+
+interface PendingSignTool extends SignToolPreview {
   projectFingerprint: string;
 }
 
@@ -154,7 +171,9 @@ type GeneratedEditorCommand =
   | Extract<EditorCommand, { type: "layer.add" }>
   | Extract<EditorCommand, { type: "guide.add" }>
   | Extract<EditorCommand, { type: "path.split" }>
-  | Extract<EditorCommand, { type: "paths.join" }>;
+  | Extract<EditorCommand, { type: "paths.join" }>
+  | Extract<EditorCommand, { type: "template.upsert" }>
+  | Extract<EditorCommand, { type: "template.delete" }>;
 
 export type DirectEditorCommand = Exclude<
   EditorCommand,
@@ -372,6 +391,30 @@ function copyRasterTracePreview(
       };
 }
 
+function copySignToolPreview(
+  preview: PendingSignTool | null,
+): SignToolPreview | null {
+  return preview === null
+    ? null
+    : {
+        layers: preview.layers.map((item) => ({ ...item })),
+        objects: preview.objects.map(copyDocumentObject),
+        summary: {
+          ...preview.summary,
+          warnings: [...preview.summary.warnings],
+          assumptions: [...preview.summary.assumptions],
+          provenanceIds: [...preview.summary.provenanceIds],
+        },
+        template:
+          preview.template === null
+            ? null
+            : {
+                ...preview.template,
+                parameters: { ...preview.template.parameters },
+              },
+      };
+}
+
 function worldPathGeometry(object: PathObject): EditablePathGeometry {
   return {
     closed: object.closed,
@@ -430,6 +473,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
   #topologySummary: TopologyChangeSummary | null = null;
   #importPreview: PendingVectorImport | null = null;
   #rasterTracePreview: PendingRasterTrace | null = null;
+  #signToolPreview: PendingSignTool | null = null;
 
   public constructor(
     dependencies: LifecycleDependencies,
@@ -464,6 +508,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
         topologySummary: copyTopologySummary(this.#topologySummary),
         importPreview: copyImportPreview(this.#importPreview),
         rasterTracePreview: copyRasterTracePreview(this.#rasterTracePreview),
+        signToolPreview: copySignToolPreview(this.#signToolPreview),
         history: {
           undoDepth: this.#past.length,
           redoDepth: this.#future.length,
@@ -1002,6 +1047,105 @@ export class ProjectSession implements ProjectCommandDispatcher {
       projectFingerprint: fingerprint(this.#project),
     };
     return this.state;
+  }
+
+  public previewSignTool(candidate: SignGenerationCandidate): ProjectSessionState {
+    if (this.#transaction !== null) {
+      throw new Error("Commit or cancel the active transaction before using sign tools.");
+    }
+    if (this.#importPreview !== null || this.#rasterTracePreview !== null) {
+      throw new Error("Accept or reject the active import preview before using sign tools.");
+    }
+    if (candidate.objects.length === 0 || candidate.objects.length > 10_000) {
+      throw new RangeError("Sign-tool previews require 1 to 10,000 editable objects.");
+    }
+    const document = this.#project.document;
+    const existingIds = new Set([
+      ...document.layers.map((item) => item.id),
+      ...document.guides.map((item) => item.id),
+      ...document.objects.flatMap(collectObjectIds),
+      ...document.templates.map((item) => item.id),
+    ]);
+    const incomingIds = [
+      ...candidate.layers.map((item) => item.id),
+      ...candidate.objects.flatMap(collectObjectIds),
+    ];
+    const incomingLayers = new Set(candidate.layers.map((item) => item.id));
+    if (
+      new Set(incomingIds).size !== incomingIds.length ||
+      incomingIds.some((id) => existingIds.has(id)) ||
+      candidate.objects.some((object) => !incomingLayers.has(object.layerId))
+    ) {
+      throw new RangeError("Sign-tool preview IDs and layer references must be unique.");
+    }
+    this.#signToolPreview = {
+      layers: candidate.layers.map((item) => ({ ...item })),
+      objects: candidate.objects.map(copyDocumentObject),
+      summary: {
+        ...candidate.summary,
+        warnings: [...candidate.summary.warnings],
+        assumptions: [...candidate.summary.assumptions],
+        provenanceIds: [...candidate.summary.provenanceIds],
+      },
+      template:
+        candidate.template === null
+          ? null
+          : {
+              ...candidate.template,
+              parameters: { ...candidate.template.parameters },
+            },
+      projectFingerprint: fingerprint(this.#project),
+    };
+    return this.state;
+  }
+
+  public cancelSignToolPreview(): ProjectSessionState {
+    this.#signToolPreview = null;
+    return this.state;
+  }
+
+  public acceptSignToolPreview(): ProjectSessionState {
+    const preview = this.#signToolPreview;
+    if (preview === null) {
+      throw new RangeError("There is no sign-tool preview to accept.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed after this sign-tool preview was created. Preview it again before accepting.");
+    }
+    this.executeEditorCommand({
+      type: "objects.import",
+      layers: preview.layers,
+      objects: preview.objects,
+    });
+    this.#signToolPreview = null;
+    return this.state;
+  }
+
+  public saveSignToolPreviewTemplate(name: string): ProjectSessionState {
+    const preview = this.#signToolPreview;
+    if (preview === null || preview.template === null) {
+      throw new RangeError("Only a template preview can be saved as a reusable template.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed after this template preview was created. Preview it again before saving.");
+    }
+    this.executeEditorCommand({
+      type: "template.upsert",
+      template: {
+        id: this.#dependencies.createId(),
+        name,
+        ...preview.template,
+        parameters: { ...preview.template.parameters },
+      },
+    });
+    if (this.#signToolPreview !== null) {
+      this.#signToolPreview.projectFingerprint = fingerprint(this.#project);
+    }
+    return this.state;
+  }
+
+  public deleteSignTemplate(templateId: string): ProjectSessionState {
+    return this.executeEditorCommand({ type: "template.delete", templateId });
   }
 
   public cancelRasterTrace(): ProjectSessionState {
@@ -1740,5 +1884,6 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#topologySummary = null;
     this.#importPreview = null;
     this.#rasterTracePreview = null;
+    this.#signToolPreview = null;
   }
 }

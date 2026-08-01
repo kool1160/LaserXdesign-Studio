@@ -274,6 +274,39 @@ Heavy work remains off the renderer thread, cancellation terminates the worker,
 and analysis-input fingerprints prevent stale publication. These limits do not turn
 the conservative analysis into a manufacturability guarantee.
 
+## M09 executable layers
+
+- domain and project-format tests cover template validation/copying, strict
+  schema-v7 round trips, deterministic v6-to-v7 migration, template-ID
+  collisions, and ordinary template save/delete commands;
+- pure sign-tools tests cover every outer primitive, exact backing/border
+  bounds, Clipper2 offsets, mounting-hole centers across display-unit changes,
+  exact selected-edge tabs/slots, baseline/arc layout requests, and bounded
+  invalid inputs;
+- `fixtures/sign-tools/m09-template-goldens.json` pins a 24-inch badge,
+  address sign, and layered family-name sign to reviewed preset shape/font,
+  object/layer counts, exact 609.6 mm width, complete standard cutability
+  classification, and provenance records;
+- application tests prove preview is non-mutating, a saved parameter template
+  survives its own undo/redo history entry, acceptance is one
+  `objects.import`, one undo removes all generated geometry, and stale
+  candidates are rejected;
+- strict IPC and desktop integration tests keep renderer requests limited to
+  bounded parameters, keep font paths/contours/IDs out of requests, and run
+  accepted IDs through the real M08 worker before returning the final state;
+- cross-layer regressions prove duplicate, overlapping, intersecting,
+  too-close, and nested contours remain in one standard M08 scope. A two-layer
+  two-island coordination case proves globally unique issue IDs, exact focus
+  selection, targeted bridge preview/acceptance, and cache invalidation;
+- three packaged Windows scenarios build the reviewed 24-inch badge, address,
+  and layered family-name signs, inspect the noninteractive preview, accept and
+  analyze ordinary objects, explicitly scope the family-name detail objects
+  before returning to whole-design analysis, export SVG, persist schema v7,
+  save/reopen the representative user template, and undo generation exactly;
+- `pnpm audit:templates` checks the machine-readable asset manifest against
+  runtime presets, the bundled-font catalog, SPDX identity, and repository
+  license texts.
+
 Run all milestone checks from the repository root:
 
 ```bash

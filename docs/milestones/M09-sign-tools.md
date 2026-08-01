@@ -34,7 +34,7 @@ Marketplace, copyrighted logo library, full mechanical joint design, advanced ne
 
 ## Exit checklist
 
-- [ ] Template schema documented.
-- [ ] Asset/font licensing audit passes.
-- [ ] Three representative sign workflows pass end-to-end.
+- [x] Template schema documented.
+- [x] Asset/font licensing audit passes.
+- [x] Three representative sign workflows pass end-to-end.
 - [ ] Status advances to M10.

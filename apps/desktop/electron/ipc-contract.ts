@@ -7,8 +7,10 @@ import {
   type AffineTransformMm,
   type DocumentObject,
   type ManufacturingSettings,
+  type SavedSignTemplate,
 } from "@laserx/domain";
 import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
+import type { SignToolRequest } from "@laserx/sign-tools";
 import { z } from "zod";
 
 export const IPC_CHANNELS = {
@@ -27,6 +29,11 @@ export const IPC_CHANNELS = {
   cancelRasterTrace: "laserx:raster:cancel-trace",
   acceptRasterTrace: "laserx:raster:accept-trace",
   rejectRasterTrace: "laserx:raster:reject-trace",
+  previewSignTool: "laserx:sign-tools:preview",
+  acceptSignTool: "laserx:sign-tools:accept",
+  rejectSignTool: "laserx:sign-tools:reject",
+  saveSignTemplate: "laserx:sign-tools:save-template",
+  deleteSignTemplate: "laserx:sign-tools:delete-template",
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   setManufacturingSettings: "laserx:manufacturing:set-settings",
@@ -203,6 +210,82 @@ export const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
     ])).refine((fields) => new Set(fields).size === fields.length),
   });
 
+const signTemplateShapeSchema = z.enum(["rectangle", "rounded-rectangle", "circle", "oval", "shield", "badge", "banner"]);
+
+const signTemplateParametersSchema = z.strictObject({
+  kind: z.enum(["monogram", "address", "family-name", "badge"]),
+  shape: signTemplateShapeSchema,
+  widthMm: positiveNumber.max(100_000),
+  heightMm: positiveNumber.max(100_000),
+  borderWidthMm: positiveNumber.max(10_000),
+  holeDiameterMm: nonnegativeNumber.max(10_000),
+  holeInsetMm: nonnegativeNumber.max(100_000),
+  fontId: z.string().trim().min(1).max(200),
+  fontSizeMm: positiveNumber.max(10_000),
+  primaryText: z.string().trim().min(1).max(200),
+  secondaryText: z.string().max(200),
+  arcRadiusMm: positiveNumber.max(100_000).nullable(),
+});
+
+const savedSignTemplateSchema: z.ZodType<SavedSignTemplate> = z.strictObject({
+  id: z.uuid(),
+  name: z.string().trim().min(1).max(100),
+  templateVersion: z.literal(1),
+  stylePresetId: z.string().trim().min(1).max(100),
+  parameters: signTemplateParametersSchema,
+});
+
+export const signToolRequestSchema: z.ZodType<SignToolRequest> = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("border"),
+    offsetMm: nonnegativeNumber.max(10_000),
+    widthMm: positiveNumber.max(10_000),
+    join: z.enum(["miter", "round", "square"]),
+  }),
+  z.strictObject({
+    kind: z.literal("backing-plate"),
+    shape: signTemplateShapeSchema,
+    marginMm: nonnegativeNumber.max(10_000),
+    cornerRadiusMm: nonnegativeNumber.max(10_000),
+  }),
+  z.strictObject({
+    kind: z.literal("outer-shape"),
+    shape: signTemplateShapeSchema,
+    widthMm: positiveNumber.max(100_000),
+    heightMm: positiveNumber.max(100_000),
+    cornerRadiusMm: nonnegativeNumber.max(10_000),
+  }),
+  z.strictObject({
+    kind: z.literal("mounting-holes"),
+    columns: z.number().int().min(1).max(10),
+    rows: z.number().int().min(1).max(10),
+    diameterMm: positiveNumber.max(10_000),
+    insetXmm: nonnegativeNumber.max(100_000),
+    insetYmm: nonnegativeNumber.max(100_000),
+  }),
+  z.strictObject({
+    kind: z.literal("assembly"),
+    feature: z.enum(["tabs", "slots"]),
+    edge: z.enum(["top", "right", "bottom", "left"]),
+    count: z.number().int().min(1).max(20),
+    widthMm: positiveNumber.max(10_000),
+    depthMm: positiveNumber.max(10_000),
+  }),
+  z.strictObject({
+    kind: z.literal("template"),
+    stylePresetId: z.string().trim().min(1).max(100),
+    parameters: signTemplateParametersSchema,
+  }),
+]);
+
+export const saveSignTemplateRequestSchema = z.strictObject({
+  name: z.string().trim().min(1).max(100),
+});
+
+export const deleteSignTemplateRequestSchema = z.strictObject({
+  templateId: z.uuid(),
+});
+
 const documentSchema = z.strictObject({
   kind: z.literal("document"),
   id: z.uuid(),
@@ -234,6 +317,7 @@ const documentSchema = z.strictObject({
   activeLayerId: z.uuid(),
   guides: z.array(guideSchema),
   objects: z.array(documentObjectSchema),
+  templates: z.array(savedSignTemplateSchema).max(1_000),
 });
 
 export const openRecentRequestSchema = z.strictObject({
@@ -720,6 +804,25 @@ export const desktopStateSchema = z.strictObject({
         }),
       })
       .nullable(),
+    signToolPreview: z
+      .strictObject({
+        layers: z.array(layerSchema).min(1),
+        objects: z.array(documentObjectSchema).min(1).max(10_000),
+        summary: z.strictObject({
+          operation: z.enum(["border", "backing-plate", "outer-shape", "mounting-holes", "assembly", "template"]),
+          objectCount: z.number().int().positive(),
+          layerCount: z.number().int().positive(),
+          warnings: z.array(z.string()),
+          assumptions: z.array(z.string()),
+          provenanceIds: z.array(z.string().min(1)),
+        }),
+        template: z.strictObject({
+          templateVersion: z.literal(1),
+          stylePresetId: z.string().trim().min(1).max(100),
+          parameters: signTemplateParametersSchema,
+        }).nullable(),
+      })
+      .nullable(),
     history: z.strictObject({
       undoDepth: z.number().int().nonnegative(),
       redoDepth: z.number().int().nonnegative(),
@@ -910,6 +1013,9 @@ export type RasterTraceRequest = z.infer<typeof rasterTraceRequestSchema>;
 export type CancelRasterTraceRequest = z.infer<
   typeof cancelRasterTraceRequestSchema
 >;
+export type SignToolRequestDto = z.infer<typeof signToolRequestSchema>;
+export type SaveSignTemplateRequest = z.infer<typeof saveSignTemplateRequestSchema>;
+export type DeleteSignTemplateRequest = z.infer<typeof deleteSignTemplateRequestSchema>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -931,6 +1037,11 @@ export interface LaserxDesktopApi {
   cancelRasterTrace(request: CancelRasterTraceRequest): Promise<CommandResult>;
   acceptRasterTrace(): Promise<CommandResult>;
   rejectRasterTrace(): Promise<CommandResult>;
+  previewSignTool(request: SignToolRequestDto): Promise<CommandResult>;
+  acceptSignTool(): Promise<CommandResult>;
+  rejectSignTool(): Promise<CommandResult>;
+  saveSignTemplate(request: SaveSignTemplateRequest): Promise<CommandResult>;
+  deleteSignTemplate(request: DeleteSignTemplateRequest): Promise<CommandResult>;
   setDisplayUnit(request: SetDisplayUnitRequest): Promise<CommandResult>;
   setViewportPreferences(
     request: SetViewportPreferencesRequest,

@@ -10,8 +10,11 @@ head `c3068c2591cae93ef00434bd05e7b16850e32121`. Issue #9 is closed as completed
 M09 is now the only active implementation milestone; Issue #10 is the active
 delivery gate.
 
-Start M09 from current `main` in a new working directory and branch
-`feat/m09-sign-tools`. Do not reuse the M08 feature branch or worktree.
+The M09 implementation candidate is isolated on `feat/m09-sign-tools`, based
+on current `main`. The repaired complete local gate passes with 232 unit/integration
+tests and 25 packaged Windows E2E scenarios. Keep the candidate on that branch;
+do not merge, close Issue #10, or advance status to M10 before independent
+review and required exact-head Windows CI pass.
 
 Before implementation, read:
 
@@ -49,6 +52,22 @@ Before implementation, read:
 ## M09 user-visible outcome
 
 Common signs can be built quickly without drawing every helper feature manually.
+
+## M09 implementation candidate
+
+- [x] Pure bounded border, backing-plate, seven-shape, mounting-hole, and
+  sign-assembly generators emit ordinary editable document objects.
+- [x] Baseline/arc text helpers and four parameterized template models use
+  audited bundled style/font provenance.
+- [x] Preview/reject is non-mutating; acceptance is one undoable import; saved
+  version-1 template parameters persist through strict schema v7 and v6-to-v7
+  migration.
+- [x] Main-owned font layout and generation accept only strict renderer
+  parameters. Acceptance and Analyze all run one standard whole-design M08
+  scope; only explicit selected object IDs narrow analysis.
+- [x] Representative packaged 24-inch badge, address, and family-name flows
+  validate, export, persist/reopen a user template, and undo exactly.
+- [ ] PR #25 requires exact-head re-review and Windows CI on the repair.
 
 ## Allowed M09 work
 

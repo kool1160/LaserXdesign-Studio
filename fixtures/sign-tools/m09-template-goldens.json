@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "name": "24-inch badge",
+      "kind": "badge",
+      "stylePresetId": "western-badge",
+      "primaryText": "RANCH",
+      "secondaryText": "EST 2026",
+      "arcRadiusMm": 210,
+      "expectedShape": "badge",
+      "expectedFontId": "bundled:rye",
+      "expectedObjectCount": 6
+    },
+    {
+      "name": "24-inch address",
+      "kind": "address",
+      "stylePresetId": "industrial-stencil",
+      "primaryText": "1042",
+      "secondaryText": "OAK STREET",
+      "arcRadiusMm": null,
+      "expectedShape": "rounded-rectangle",
+      "expectedFontId": "bundled:saira-stencil-one",
+      "expectedObjectCount": 6
+    },
+    {
+      "name": "24-inch layered family name",
+      "kind": "family-name",
+      "stylePresetId": "classic-slab",
+      "primaryText": "MARTINEZ",
+      "secondaryText": "FAMILY",
+      "arcRadiusMm": null,
+      "expectedShape": "oval",
+      "expectedFontId": "bundled:roboto-slab",
+      "expectedObjectCount": 6
+    }
+  ]
+}

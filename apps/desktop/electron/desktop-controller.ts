@@ -40,6 +40,10 @@ import {
 } from "@laserx/import-raster";
 import { exportDxf, importDxf } from "@laserx/io-dxf";
 import { exportSvg, importSvg } from "@laserx/io-svg";
+import {
+  generateSignToolCandidate,
+  type SignToolRequest,
+} from "@laserx/sign-tools";
 
 import type {
   CommandResult,
@@ -560,6 +564,50 @@ export class DesktopController {
     return this.#run(() => {
       this.#session.cancelRasterTrace();
       this.#rasterPreview = null;
+    });
+  }
+
+  public async previewSignTool(request: SignToolRequest): Promise<CommandResult> {
+    return this.#run(() => {
+      const state = this.#session.state;
+      const candidate = generateSignToolCandidate(request, {
+        document: state.project.document,
+        selectedObjectIds: state.editor.selectionIds,
+        createId: () => randomUUID(),
+        layoutText: (layoutRequest) => this.#fontEngine.layout(layoutRequest),
+      });
+      this.#session.previewSignTool(candidate);
+    });
+  }
+
+  public async acceptSignTool(): Promise<CommandResult> {
+    return this.#run(async () => {
+      const preview = this.#session.state.editor.signToolPreview;
+      if (preview === null) {
+        throw new RangeError("There is no sign-tool preview to accept.");
+      }
+      const objectIds = preview.objects.map((object) => object.id);
+      this.#session.acceptSignToolPreview();
+      this.#invalidateCutability();
+      await this.#analyzeCutability(randomUUID(), objectIds);
+    });
+  }
+
+  public async rejectSignTool(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.cancelSignToolPreview();
+    });
+  }
+
+  public async saveSignTemplate(name: string): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.saveSignToolPreviewTemplate(name);
+    });
+  }
+
+  public async deleteSignTemplate(templateId: string): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.deleteSignTemplate(templateId);
     });
   }
 
@@ -1111,7 +1159,7 @@ export class DesktopController {
   async #analyzeCutability(
     operationId: string,
     objectIds: readonly string[],
-  ): Promise<void> {
+  ): Promise<CutabilityAnalysisSummary | null> {
     if (this.#cutabilityAbortControllers.size > 0) {
       throw new RangeError("Finish or cancel the active manufacturing analysis first.");
     }
@@ -1119,7 +1167,7 @@ export class DesktopController {
     const cached = this.#cutabilityCache.get(document, objectIds);
     if (cached !== null) {
       this.#cutabilityAnalysis = { ...cached, operationId };
-      return;
+      return this.#cutabilityAnalysis;
     }
     const fingerprint = fingerprintCutabilityDocument(document);
     const abortController = new AbortController();
@@ -1152,8 +1200,9 @@ export class DesktopController {
       this.#cutabilityCache.set(document, objectIds, analysis);
       this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
       this.#bridgeProposal = null;
+      return analysis;
     } catch (error) {
-      if (error instanceof CutabilityAnalysisCancelledError) return;
+      if (error instanceof CutabilityAnalysisCancelledError) return null;
       throw error;
     } finally {
       if (this.#cutabilityAbortControllers.get(operationId) === abortController) {

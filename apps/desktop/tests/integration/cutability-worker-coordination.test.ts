@@ -2,7 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { analyzeDocumentCutability } from "@laserx/cutability";
+import {
+  analyzeDocumentCutability,
+  fingerprintCutabilityDocument,
+} from "@laserx/cutability";
 import {
   createBlankProject,
   identityTransform,
@@ -22,8 +25,11 @@ import {
 const OPERATION_ID = "a0000000-0000-4000-8000-000000000001";
 const SECOND_OPERATION_ID = "a0000000-0000-4000-8000-000000000002";
 const LAYER_ID = "b0000000-0000-4000-8000-000000000001";
+const SECOND_LAYER_ID = "b0000000-0000-4000-8000-000000000002";
 const OUTER_ID = "c0000000-0000-4000-8000-000000000001";
+const SECOND_OUTER_ID = "c0000000-0000-4000-8000-000000000002";
 const ISLAND_ID = "d0000000-0000-4000-8000-000000000001";
+const SECOND_ISLAND_ID = "d0000000-0000-4000-8000-000000000002";
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
 
@@ -67,6 +73,75 @@ function nestedProject(): LaserxProject {
   });
 }
 
+function twoLayerNestedProject(): LaserxProject {
+  return createBlankProject({
+    id: "e0000000-0000-4000-8000-000000000003",
+    documentId: "e0000000-0000-4000-8000-000000000004",
+    now: "2026-07-31T12:00:00.000Z",
+    width: 300,
+    height: 120,
+    layers: [
+      { id: LAYER_ID, name: "Front", visible: true, locked: false },
+      { id: SECOND_LAYER_ID, name: "Backing", visible: true, locked: false },
+    ],
+    activeLayerId: LAYER_ID,
+    objects: [
+      {
+        id: OUTER_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 10, yMm: 10 },
+          { xMm: 110, yMm: 10 },
+          { xMm: 110, yMm: 110 },
+          { xMm: 10, yMm: 110 },
+        ],
+      },
+      {
+        id: ISLAND_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 35, yMm: 35 },
+          { xMm: 85, yMm: 35 },
+          { xMm: 85, yMm: 85 },
+          { xMm: 35, yMm: 85 },
+        ],
+      },
+      {
+        id: SECOND_OUTER_ID,
+        type: "path",
+        layerId: SECOND_LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 160, yMm: 10 },
+          { xMm: 260, yMm: 10 },
+          { xMm: 260, yMm: 110 },
+          { xMm: 160, yMm: 110 },
+        ],
+      },
+      {
+        id: SECOND_ISLAND_ID,
+        type: "path",
+        layerId: SECOND_LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 185, yMm: 35 },
+          { xMm: 235, yMm: 35 },
+          { xMm: 235, yMm: 85 },
+          { xMm: 185, yMm: 85 },
+        ],
+      },
+    ],
+  });
+}
+
 function immediateWorker(counter?: { calls: number }): CutabilityWorkerPort {
   return {
     run: (request, _signal, onProgress) => {
@@ -82,7 +157,10 @@ function immediateWorker(counter?: { calls: number }): CutabilityWorkerPort {
   };
 }
 
-async function desktop(worker: CutabilityWorkerPort): Promise<DesktopController> {
+async function desktop(
+  worker: CutabilityWorkerPort,
+  project = nestedProject(),
+): Promise<DesktopController> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-cutability-"));
   temporaryDirectories.push(directory);
   const path = join(directory, "nested.laserx");
@@ -96,7 +174,7 @@ async function desktop(worker: CutabilityWorkerPort): Promise<DesktopController>
     dialogs,
     onStateChanged: () => undefined,
     projectStorage: {
-      read: () => Promise.resolve(nestedProject()),
+      read: () => Promise.resolve(project),
       write: () => Promise.resolve(),
     },
     cutabilityWorker: worker,
@@ -213,6 +291,78 @@ describe("cutability worker coordination", () => {
     expect(JSON.stringify(controller.state.project.document)).not.toBe(before);
     await controller.editorAction({ type: "history.undo" });
     expect(JSON.stringify(controller.state.project.document)).toBe(before);
+  });
+
+  it("keeps scoped and whole-design identities exact across layers and bridge repair", async () => {
+    const counter = { calls: 0 };
+    const controller = await desktop(
+      immediateWorker(counter),
+      twoLayerNestedProject(),
+    );
+
+    await controller.runCutabilityAnalysis(OPERATION_ID, [OUTER_ID, ISLAND_ID]);
+    expect(controller.state.analysis.cutability).toMatchObject({
+      documentFingerprint: fingerprintCutabilityDocument(
+        controller.state.project.document,
+      ),
+      analyzedObjectIds: [ISLAND_ID, OUTER_ID].sort(),
+    });
+    expect(counter.calls).toBe(1);
+
+    await controller.runCutabilityAnalysis(SECOND_OPERATION_ID, []);
+    const analysis = controller.state.analysis.cutability;
+    if (analysis === null) throw new Error("Expected whole-design analysis.");
+    const islandIssues = analysis.issues.filter(
+      (issue) => issue.code === "DISCONNECTED_ISLAND",
+    );
+    expect(islandIssues.map((issue) => issue.id)).toEqual([
+      "DISCONNECTED_ISLAND:1",
+      "DISCONNECTED_ISLAND:2",
+    ]);
+    expect(new Set(islandIssues.map((issue) => issue.id)).size).toBe(2);
+    expect(analysis.analyzedObjectIds).toEqual([
+      ISLAND_ID,
+      SECOND_ISLAND_ID,
+      OUTER_ID,
+      SECOND_OUTER_ID,
+    ].sort());
+    expect(counter.calls).toBe(2);
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    expect(counter.calls).toBe(2);
+
+    const target = islandIssues.find(
+      (issue) => issue.objectId === SECOND_ISLAND_ID,
+    );
+    if (target === undefined) throw new Error("Expected the second-layer island.");
+    await controller.focusCutabilityIssue(target.id);
+    expect(controller.state.editor.selectionIds).toEqual([SECOND_ISLAND_ID]);
+
+    const untouchedBefore = controller.state.project.document.objects
+      .filter((object) => object.id === OUTER_ID || object.id === ISLAND_ID);
+    expect(await controller.previewBridge({
+      issueId: target.id,
+      widthMm: 2,
+      mode: "manual",
+      direction: "right",
+    })).toMatchObject({ ok: true });
+    expect(controller.state.analysis.bridgeProposal?.sourceObjectIds).toEqual([
+      SECOND_OUTER_ID,
+      SECOND_ISLAND_ID,
+    ]);
+
+    expect(await controller.acceptBridge()).toMatchObject({ ok: true });
+    expect(counter.calls).toBe(3);
+    expect(controller.state.project.document.objects
+      .filter((object) => object.id === OUTER_ID || object.id === ISLAND_ID))
+      .toEqual(untouchedBefore);
+    expect(controller.state.project.document.objects.some(
+      (object) => object.id === SECOND_ISLAND_ID,
+    )).toBe(false);
+
+    await controller.editorAction({ type: "history.undo" });
+    expect(controller.state.analysis.cutability).toBeNull();
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    expect(counter.calls).toBe(4);
   });
 
   it("rejects a worker response for a different operation", async () => {

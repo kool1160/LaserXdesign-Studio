@@ -147,7 +147,7 @@ function editingProject(): LaserxProject {
   );
 }
 
-describe("schema version 6", () => {
+describe("schema version 7", () => {
   it("round trips layers, groups, transforms, guides, and order deterministically", () => {
     const project = editingProject();
     const first = serializeProject(project);
@@ -155,7 +155,7 @@ describe("schema version 6", () => {
 
     expect(reopened).toEqual(project);
     expect(serializeProject(reopened)).toBe(first);
-    expect(first).toContain('"schemaVersion": 6');
+    expect(first).toContain('"schemaVersion": 7');
     expect(reopened.document.layers.map((layer) => layer.id)).toEqual([
       ARTWORK_LAYER,
       NOTES_LAYER,
@@ -170,10 +170,10 @@ describe("schema version 6", () => {
 
   it("migrates the reviewed schema-v2 fixture deterministically", () => {
     const migrated = parseProject(fixture("populated-v2.laserx"));
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.migrationHistory.at(-1)).toEqual({
-      fromVersion: 5,
-      toVersion: 6,
+      fromVersion: 6,
+      toVersion: 7,
       migratedAt: NOW,
     });
     expect(migrated.document.settings.manufacturing).toEqual(
@@ -189,9 +189,9 @@ describe("schema version 6", () => {
     ).toBe(true);
   });
 
-  it("chains schema v1 through v6 without rewriting source metadata", () => {
+  it("chains schema v1 through v7 without rewriting source metadata", () => {
     const migrated = parseProject(fixture("blank-v1.laserx"));
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.document.id).toBe(PROJECT_ID);
     expect(migrated.document.dimensions).toEqual({
       widthMm: 304.8,
@@ -203,25 +203,31 @@ describe("schema version 6", () => {
       { fromVersion: 3, toVersion: 4, migratedAt: NOW },
       { fromVersion: 4, toVersion: 5, migratedAt: NOW },
       { fromVersion: 5, toVersion: 6, migratedAt: NOW },
+      { fromVersion: 6, toVersion: 7, migratedAt: NOW },
     ]);
   });
 
-  it("migrates schema v3 through v6 and persists editable text geometry", () => {
+  it("migrates schema v3 through v7 and persists editable text geometry", () => {
     const v3 = JSON.parse(fixture("editing-v3.laserx")) as unknown;
     const migrated = parseProjectValue(v3);
-    expect(migrated.migrationHistory.at(-3)).toEqual({
+    expect(migrated.migrationHistory.at(-4)).toEqual({
       fromVersion: 3,
       toVersion: 4,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-2)).toEqual({
+    expect(migrated.migrationHistory.at(-3)).toEqual({
       fromVersion: 4,
       toVersion: 5,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 5,
       toVersion: 6,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 6,
+      toVersion: 7,
       migratedAt: NOW,
     });
 
@@ -269,20 +275,27 @@ describe("schema version 6", () => {
       document: unknown;
     };
     const migrated = parseProjectValue(legacy);
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     const { manufacturing, ...migratedSettings } = migrated.document.settings;
-    expect({ ...migrated.document, settings: migratedSettings }).toEqual(
+    const { templates, ...migratedDocument } = migrated.document;
+    expect({ ...migratedDocument, settings: migratedSettings }).toEqual(
       legacy.document,
     );
+    expect(templates).toEqual([]);
     expect(manufacturing).toEqual(DEFAULT_MANUFACTURING_SETTINGS);
-    expect(migrated.migrationHistory.at(-2)).toEqual({
+    expect(migrated.migrationHistory.at(-3)).toEqual({
       fromVersion: 4,
       toVersion: 5,
       migratedAt: NOW,
     });
-    expect(migrated.migrationHistory.at(-1)).toEqual({
+    expect(migrated.migrationHistory.at(-2)).toEqual({
       fromVersion: 5,
       toVersion: 6,
+      migratedAt: NOW,
+    });
+    expect(migrated.migrationHistory.at(-1)).toEqual({
+      fromVersion: 6,
+      toVersion: 7,
       migratedAt: NOW,
     });
 
@@ -308,7 +321,7 @@ describe("schema version 6", () => {
     expectProjectError(() => serializeProject(project), "INVALID_PROJECT");
   });
 
-  it("persists accepted raster traces as ordinary editable schema-v6 paths", () => {
+  it("persists accepted raster traces as ordinary editable schema-v7 paths", () => {
     const project = createBlankProject({
       id: PROJECT_ID,
       documentId: DOCUMENT_ID,
@@ -421,7 +434,7 @@ describe("schema version 6", () => {
     expectProjectError(() => serializeProject(mixed), "INVALID_PROJECT");
   });
 
-  it("persists customized manufacturing settings and registers every migration through schema v6", () => {
+  it("persists customized manufacturing settings and registers every migration through schema v7", () => {
     const project = editingProject();
     project.document.settings.manufacturing = {
       ...project.document.settings.manufacturing,
@@ -432,13 +445,51 @@ describe("schema version 6", () => {
     expect(parseProject(serializeProject(project)).document.settings.manufacturing).toEqual(
       project.document.settings.manufacturing,
     );
-    expect(projectMigrationRegistry).toHaveLength(5);
+    expect(projectMigrationRegistry).toHaveLength(6);
     expect(projectMigrationRegistry).toMatchObject([
       { fromVersion: 1, toVersion: 2 },
       { fromVersion: 2, toVersion: 3 },
       { fromVersion: 3, toVersion: 4 },
       { fromVersion: 4, toVersion: 5 },
       { fromVersion: 5, toVersion: 6 },
+      { fromVersion: 6, toVersion: 7 },
     ]);
+  });
+
+  it("round trips a versioned saved sign template and migrates schema v6 with an empty library", () => {
+    const project = editingProject();
+    project.document.templates.push({
+      id: "823e4567-e89b-42d3-a456-426614174080",
+      name: "Twenty-four inch address",
+      templateVersion: 1,
+      stylePresetId: "industrial-stencil",
+      parameters: {
+        kind: "address",
+        shape: "rounded-rectangle",
+        widthMm: 609.6,
+        heightMm: 304.8,
+        borderWidthMm: 12,
+        holeDiameterMm: 6,
+        holeInsetMm: 25.4,
+        fontId: "bundled:saira-stencil-one",
+        fontSizeMm: 42,
+        primaryText: "1042",
+        secondaryText: "OAK STREET",
+        arcRadiusMm: null,
+      },
+    });
+    expect(parseProject(serializeProject(project)).document.templates).toEqual(
+      project.document.templates,
+    );
+
+    const current = JSON.parse(serializeProject(project)) as {
+      schemaVersion: number;
+      document: { templates?: unknown };
+      migrationHistory: unknown[];
+    };
+    current.schemaVersion = 6;
+    delete current.document.templates;
+    current.migrationHistory = [];
+    expect(parseProjectValue(current).document.templates).toEqual([]);
   });
 });

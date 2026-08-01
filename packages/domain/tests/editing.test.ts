@@ -830,4 +830,48 @@ describe("editing domain", () => {
       }),
     ).toThrow(/path geometry is invalid/);
   });
+
+  it("upserts and deletes validated reusable sign templates without touching geometry", () => {
+    const before = editingDocument();
+    const template = {
+      id: "93000000-0000-4000-8000-000000000000",
+      name: "Address plate",
+      templateVersion: 1 as const,
+      stylePresetId: "industrial-stencil",
+      parameters: {
+        kind: "address" as const,
+        shape: "rounded-rectangle" as const,
+        widthMm: 609.6,
+        heightMm: 304.8,
+        borderWidthMm: 12,
+        holeDiameterMm: 6,
+        holeInsetMm: 25.4,
+        fontId: "bundled:saira-stencil-one",
+        fontSizeMm: 42,
+        primaryText: "1042",
+        secondaryText: "OAK STREET",
+        arcRadiusMm: null,
+      },
+    };
+    const saved = applyEditorCommand(before, { type: "template.upsert", template });
+    expect(saved.templates).toEqual([template]);
+    expect(saved.objects).toEqual(before.objects);
+    expect(before.templates).toEqual([]);
+
+    const removed = applyEditorCommand(saved, {
+      type: "template.delete",
+      templateId: template.id,
+    });
+    expect(removed.templates).toEqual([]);
+    expect(removed.objects).toEqual(before.objects);
+
+    before.templates = Array.from({ length: 1_000 }, (_, index) => ({
+      ...template,
+      id: `94000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    }));
+    expect(() => applyEditorCommand(before, {
+      type: "template.upsert",
+      template: { ...template, id: "95000000-0000-4000-8000-000000000000" },
+    })).toThrow(/at most 1,000 saved sign templates/);
+  });
 });
