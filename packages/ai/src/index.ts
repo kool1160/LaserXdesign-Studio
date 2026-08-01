@@ -11,12 +11,23 @@ export type {
 } from "./concept.js";
 
 export const OPENAI_PROVIDER_ID = "openai";
-export const OPENAI_DEFAULT_MODEL = "gpt-5.6-sol";
 export const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 export const OPENAI_PLATFORM_SETUP_URL =
   "https://platform.openai.com/settings/organization/api-keys";
 export const OPENAI_PLATFORM_BILLING_URL =
   "https://platform.openai.com/settings/organization/billing";
+
+export interface OpenAiProviderPolicy {
+  model: string;
+  modelDocumentationUrl: string;
+  verifiedOn: string;
+}
+
+export const OPENAI_PROVIDER_POLICY: Readonly<OpenAiProviderPolicy> = Object.freeze({
+  model: "gpt-5.6-sol",
+  modelDocumentationUrl: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+  verifiedOn: "2026-08-01",
+});
 
 export const AI_LIMITS = Object.freeze({
   promptCharacters: 2_000,
@@ -149,6 +160,7 @@ export interface AiProvider {
 
 export type AiProviderErrorKind =
   | "invalid-key"
+  | "model-unavailable"
   | "no-credit"
   | "rate-limited"
   | "offline"
@@ -241,6 +253,8 @@ function connectionErrorMessage(kind: AiProviderErrorKind): string {
   switch (kind) {
     case "invalid-key":
       return "The OpenAI API key is invalid or not authorized for this project.";
+    case "model-unavailable":
+      return "The configured OpenAI model is unavailable to this API project. Verify model access or update the provider policy.";
     case "no-credit":
       return "The OpenAI account has no available credit or has reached a spending limit.";
     case "rate-limited":
@@ -280,6 +294,15 @@ export function classifyOpenAiHttpError(
   headers = new Headers(),
 ): AiProviderError {
   const code = bodyErrorCode(body);
+  if (
+    status === 404 ||
+    ["invalid_model", "model_not_available", "model_not_found", "unsupported_model"].includes(code ?? "")
+  ) {
+    return new AiProviderError(
+      "model-unavailable",
+      connectionErrorMessage("model-unavailable"),
+    );
+  }
   if (status === 401 || status === 403) {
     return new AiProviderError("invalid-key", connectionErrorMessage("invalid-key"));
   }
@@ -309,9 +332,9 @@ type FetchLike = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-interface OpenAiProviderOptions {
+export interface OpenAiProviderOptions {
   fetch?: FetchLike;
-  model?: string;
+  policy?: Readonly<OpenAiProviderPolicy>;
   responsesEndpoint?: string;
   modelsEndpoint?: string;
 }
@@ -542,7 +565,11 @@ export class OpenAiProvider implements AiProvider {
   readonly #modelsEndpoint: string;
 
   public constructor(options: OpenAiProviderOptions = {}) {
-    this.model = options.model ?? OPENAI_DEFAULT_MODEL;
+    const policy = options.policy ?? OPENAI_PROVIDER_POLICY;
+    if (policy.model.trim().length === 0) {
+      throw new RangeError("The OpenAI provider policy requires a model ID.");
+    }
+    this.model = policy.model;
     this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     this.#responsesEndpoint = options.responsesEndpoint ?? OPENAI_RESPONSES_ENDPOINT;
     this.#modelsEndpoint = options.modelsEndpoint ?? "https://api.openai.com/v1/models";
@@ -642,7 +669,7 @@ export function connectionStateForError(
   const providerError = error instanceof AiProviderError
     ? error
     : new AiProviderError("unavailable", connectionErrorMessage("unavailable"));
-  const status: AiConnectionStatus = providerError.kind === "canceled" || providerError.kind === "refused" || providerError.kind === "invalid-response"
+  const status: AiConnectionStatus = providerError.kind === "canceled" || providerError.kind === "refused" || providerError.kind === "invalid-response" || providerError.kind === "model-unavailable"
     ? "unavailable"
     : providerError.kind;
   return {

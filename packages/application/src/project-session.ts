@@ -550,6 +550,10 @@ export class ProjectSession implements ProjectCommandDispatcher {
     };
   }
 
+  public get projectFingerprint(): string {
+    return fingerprint(this.#project);
+  }
+
   public get lastEditorCommand(): EditorCommand | null {
     return this.#lastEditorCommand === null
       ? null
@@ -1189,9 +1193,15 @@ export class ProjectSession implements ProjectCommandDispatcher {
     return this.executeEditorCommand({ type: "template.delete", templateId });
   }
 
-  public previewAiConcept(candidate: AiNormalizedConcept): ProjectSessionState {
+  public previewAiConcept(
+    candidate: AiNormalizedConcept,
+    sourceProjectFingerprint: string,
+  ): ProjectSessionState {
     if (this.#transaction !== null) {
       throw new Error("Commit or cancel the active transaction before previewing AI concepts.");
+    }
+    if (sourceProjectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed while this AI concept was prepared. The stale preview was not published.");
     }
     if (
       this.#importPreview !== null ||
@@ -1225,9 +1235,9 @@ export class ProjectSession implements ProjectCommandDispatcher {
     this.#aiConceptPreview = {
       ...copyAiConceptPreview({
         ...candidate,
-        projectFingerprint: fingerprint(this.#project),
+        projectFingerprint: sourceProjectFingerprint,
       }) as AiNormalizedConcept,
-      projectFingerprint: fingerprint(this.#project),
+      projectFingerprint: sourceProjectFingerprint,
     };
     return this.state;
   }

@@ -1,8 +1,10 @@
 import type { AiGenerationRequest } from "../src/index.js";
 import {
   AiProviderError,
+  OPENAI_PROVIDER_POLICY,
   OpenAiProvider,
   classifyOpenAiHttpError,
+  connectionStateForError,
   validateAiGenerationRequest,
 } from "../src/index.js";
 import { describe, expect, it, vi } from "vitest";
@@ -47,6 +49,7 @@ describe("OpenAI provider boundary", () => {
       if (typeof init?.body !== "string") throw new Error("Expected a JSON string body.");
       const body = JSON.parse(init.body) as Record<string, unknown>;
       expect(init.method).toBe("POST");
+      expect(body.model).toBe(OPENAI_PROVIDER_POLICY.model);
       expect(body.store).toBe(false);
       expect(body.reasoning).toEqual({ effort: "low" });
       expect(body.text).toMatchObject({
@@ -56,7 +59,7 @@ describe("OpenAI provider boundary", () => {
       expect(serialized).not.toContain("sk-test-secret");
       return Promise.resolve(new Response(JSON.stringify({
         id: "resp_test",
-        model: "gpt-5.6-sol-2026-07-01",
+        model: OPENAI_PROVIDER_POLICY.model,
         output: [{
           type: "message",
           content: [{
@@ -79,6 +82,30 @@ describe("OpenAI provider boundary", () => {
       observedWording: request.wording,
     });
     expect(result.usage.totalTokens).toBe(200);
+    expect(result.model).toBe(OPENAI_PROVIDER_POLICY.model);
+  });
+
+  it("tests access to the exact configured production model", async () => {
+    const fetchMock = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+      const requestUrl = typeof url === "string"
+        ? url
+        : url instanceof URL
+          ? url.href
+          : url.url;
+      expect(requestUrl).toBe(
+        `https://api.openai.com/v1/models/${encodeURIComponent(OPENAI_PROVIDER_POLICY.model)}`,
+      );
+      expect(init?.method).toBe("GET");
+      return Promise.resolve(new Response(JSON.stringify({
+        id: OPENAI_PROVIDER_POLICY.model,
+      }), { status: 200 }));
+    });
+    const provider = new OpenAiProvider({ fetch: fetchMock });
+
+    await provider.testConnection("sk-test-secret-value-long-enough");
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(provider.model).toBe(OPENAI_PROVIDER_POLICY.model);
   });
 
   it("bounds prompts, dimensions, concepts, and consented reference images", () => {
@@ -97,7 +124,16 @@ describe("OpenAI provider boundary", () => {
     })).not.toThrow();
   });
 
-  it("distinguishes invalid keys, exhausted credit, and retryable rate limits", () => {
+  it("distinguishes model access, invalid keys, exhausted credit, and retryable rate limits", () => {
+    const modelUnavailable = classifyOpenAiHttpError(404, {
+      error: { code: "model_not_found" },
+    });
+    expect(modelUnavailable.kind).toBe("model-unavailable");
+    const connection = connectionStateForError(new OpenAiProvider({
+      fetch: () => Promise.reject(new Error("unused")),
+    }), modelUnavailable);
+    expect(connection.status).toBe("unavailable");
+    expect(connection.message).toMatch(/configured OpenAI model/u);
     expect(classifyOpenAiHttpError(401, null).kind).toBe("invalid-key");
     expect(classifyOpenAiHttpError(429, {
       error: { code: "credit_balance_exhausted" },
@@ -109,6 +145,16 @@ describe("OpenAI provider boundary", () => {
     );
     expect(limited.kind).toBe("rate-limited");
     expect(limited.retryAfterMs).toBe(2_000);
+  });
+
+  it("reports an unreachable provider as offline, not as a model or key failure", async () => {
+    const provider = new OpenAiProvider({
+      fetch: () => Promise.reject(new TypeError("network unavailable")),
+    });
+
+    await expect(provider.testConnection(
+      "sk-test-secret-value-long-enough",
+    )).rejects.toMatchObject({ kind: "offline" });
   });
 
   it("turns cancellation and malformed output into safe provider errors", async () => {

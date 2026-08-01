@@ -921,7 +921,7 @@ export class DesktopController {
         referenceImage: request.useReferenceImage ? this.#aiReference : null,
       };
       const abortController = new AbortController();
-      const projectFingerprint = JSON.stringify(this.#session.state.project);
+      const projectFingerprint = this.#session.projectFingerprint;
       this.#aiAbortController = abortController;
       this.#aiJob = {
         operationId: request.operationId,
@@ -960,7 +960,7 @@ export class DesktopController {
           };
           this.#emit();
         }
-        if (JSON.stringify(this.#session.state.project) !== projectFingerprint) {
+        if (this.#session.projectFingerprint !== projectFingerprint) {
           throw new Error("The project changed while AI concepts were generated; the stale concepts were discarded.");
         }
         const first = normalized[0];
@@ -973,7 +973,7 @@ export class DesktopController {
         this.#aiRequest = structuredClone(providerRequest);
         this.#aiSelectedConceptId = first.summary.id;
         this.#aiProjectFingerprint = projectFingerprint;
-        this.#session.previewAiConcept(first);
+        this.#session.previewAiConcept(first, projectFingerprint);
         this.#aiConnection = {
           providerId: this.#aiProvider.id,
           providerName: this.#aiProvider.name,
@@ -1013,7 +1013,7 @@ export class DesktopController {
       this.#assertAiConceptsCurrent();
       const concept = this.#aiConcepts.find((candidate) => candidate.summary.id === conceptId);
       if (concept === undefined) throw new RangeError("That AI concept is unavailable.");
-      this.#session.previewAiConcept(concept);
+      this.#session.previewAiConcept(concept, this.#aiProjectFingerprint as string);
       this.#aiSelectedConceptId = conceptId;
     });
   }
@@ -1024,7 +1024,11 @@ export class DesktopController {
     secondaryText: string,
   ): Promise<CommandResult> {
     return this.#run(async () => {
+      if (this.#aiAbortController !== null) {
+        throw new RangeError("Finish or cancel the active AI operation first.");
+      }
       this.#assertAiConceptsCurrent();
+      const projectFingerprint = this.#aiProjectFingerprint as string;
       const request = this.#aiRequest;
       const result = this.#aiResult;
       const rawIndex = this.#aiRawConcepts.findIndex((concept) => concept.id === conceptId);
@@ -1048,21 +1052,51 @@ export class DesktopController {
           secondaryText: secondaryText.trim(),
         },
       };
-      const concept = await this.#normalizeAiConcept(
-        corrected,
-        request,
-        result,
-        new AbortController().signal,
-        combined,
-      );
-      this.#aiRawConcepts[rawIndex] = corrected;
-      const conceptIndex = this.#aiConcepts.findIndex((candidate) => candidate.summary.id === conceptId);
-      if (conceptIndex < 0) {
-        throw new RangeError("That AI concept is unavailable.");
+      const abortController = new AbortController();
+      const operationId = randomUUID();
+      this.#aiAbortController = abortController;
+      this.#aiJob = {
+        operationId,
+        percent: 60,
+        stage: "normalizing",
+      };
+      this.#emit();
+      try {
+        const concept = await this.#normalizeAiConcept(
+          corrected,
+          request,
+          result,
+          abortController.signal,
+          combined,
+        );
+        if (abortController.signal.aborted) {
+          throw new AiProviderError("canceled", "AI wording correction was canceled; the open project was left unchanged.");
+        }
+        if (
+          this.#aiProjectFingerprint !== projectFingerprint ||
+          this.#session.projectFingerprint !== projectFingerprint
+        ) {
+          throw new Error("The project changed while AI wording was corrected; the stale correction was discarded.");
+        }
+        const conceptIndex = this.#aiConcepts.findIndex((candidate) => candidate.summary.id === conceptId);
+        if (conceptIndex < 0) {
+          throw new RangeError("That AI concept is unavailable.");
+        }
+        this.#session.previewAiConcept(concept, projectFingerprint);
+        this.#aiRawConcepts[rawIndex] = corrected;
+        this.#aiConcepts[conceptIndex] = concept;
+        this.#aiSelectedConceptId = conceptId;
+      } catch (error) {
+        if (abortController.signal.aborted && !(error instanceof AiProviderError)) {
+          throw new AiProviderError("canceled", "AI wording correction was canceled; the open project was left unchanged.");
+        }
+        throw error;
+      } finally {
+        if (this.#aiAbortController === abortController) {
+          this.#aiAbortController = null;
+          this.#aiJob = null;
+        }
       }
-      this.#aiConcepts[conceptIndex] = concept;
-      this.#aiSelectedConceptId = conceptId;
-      this.#session.previewAiConcept(concept);
     });
   }
 
@@ -1807,7 +1841,7 @@ export class DesktopController {
   #assertAiConceptsCurrent(): void {
     if (
       this.#aiProjectFingerprint === null ||
-      JSON.stringify(this.#session.state.project) !== this.#aiProjectFingerprint
+      this.#session.projectFingerprint !== this.#aiProjectFingerprint
     ) {
       throw new Error("The project changed after these AI concepts were created. Generate them again before selection or acceptance.");
     }

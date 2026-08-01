@@ -73,6 +73,7 @@ async function desktop(options: {
   delayMs?: number;
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
+  cutabilityWorker?: CutabilityWorkerPort;
 } = {}): Promise<{ controller: DesktopController; vault: MemoryCredentialVault }> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-ai-generation-"));
   temporaryDirectories.push(directory);
@@ -89,7 +90,7 @@ async function desktop(options: {
     dialogs,
     onStateChanged: () => undefined,
     fontEngine: testFontEngine(),
-    cutabilityWorker,
+    cutabilityWorker: options.cutabilityWorker ?? cutabilityWorker,
     aiProvider: options.aiProvider ?? new DeterministicAiProvider(options.delayMs ?? 0),
     credentialVault: vault,
     credentialAcquisition: new FixedCredentialAcquisition(CREDENTIAL),
@@ -170,6 +171,52 @@ function request() {
   };
 }
 
+function gatedCorrectionCutabilityWorker(): {
+  worker: CutabilityWorkerPort;
+  started: Promise<void>;
+  release(): void;
+} {
+  let callCount = 0;
+  let releaseCorrection: () => void = () => undefined;
+  let markStarted: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const worker: CutabilityWorkerPort = {
+    run: (analysisRequest, signal, onProgress) => {
+      callCount += 1;
+      onProgress?.({
+        operationId: analysisRequest.operationId,
+        percent: 100,
+        stage: "classifying",
+      });
+      const analysis = () => analyzeDocumentCutability(analysisRequest.document, {
+        operationId: analysisRequest.operationId,
+        objectIds: analysisRequest.objectIds,
+      });
+      if (callCount !== 4) return Promise.resolve(analysis());
+      markStarted();
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          signal.removeEventListener("abort", abort);
+          reject(new DOMException("aborted", "AbortError"));
+        };
+        releaseCorrection = () => {
+          signal.removeEventListener("abort", abort);
+          resolve(analysis());
+        };
+        if (signal.aborted) abort();
+        else signal.addEventListener("abort", abort, { once: true });
+      });
+    },
+  };
+  return {
+    worker,
+    started,
+    release: () => releaseCorrection(),
+  };
+}
+
 afterEach(async () => {
   for (const controller of controllers.splice(0)) controller.stop();
   await Promise.all(temporaryDirectories.splice(0).map((directory) =>
@@ -226,6 +273,74 @@ describe("AI generation coordination", () => {
     expect(JSON.stringify(controller.state.project.document)).toBe(before);
     expect(controller.state.analysis.cutability).toBeNull();
   });
+
+  it("discards a wording correction normalized against a project that changed midflight", async () => {
+    const gate = gatedCorrectionCutabilityWorker();
+    const { controller } = await desktop({ cutabilityWorker: gate.worker });
+    const beforeProject = JSON.stringify(controller.state.project);
+
+    expect(await controller.generateAiConcepts(request())).toMatchObject({ ok: true });
+    expect(await controller.selectAiConcept("mock-concept-2")).toMatchObject({ ok: true });
+    const priorPreview = JSON.stringify(controller.state.editor.aiConceptPreview);
+    const correction = controller.correctAiWording("mock-concept-2", "LASERX", "");
+    await gate.started;
+    expect(controller.state.ai.job).toMatchObject({ stage: "normalizing" });
+
+    expect(await controller.editorAction({
+      type: "object.create",
+      objectType: "rectangle",
+    })).toMatchObject({ ok: true });
+    const mutatedProject = JSON.stringify(controller.state.project);
+    expect(mutatedProject).not.toBe(beforeProject);
+    expect(controller.state.editor.history.undoDepth).toBe(1);
+    gate.release();
+
+    const correctionResult = await correction;
+    expect(correctionResult.ok).toBe(false);
+    if (correctionResult.ok) throw new Error("Expected a stale correction failure.");
+    expect(correctionResult.error).toMatch(/stale correction/u);
+    expect(JSON.stringify(controller.state.editor.aiConceptPreview)).toBe(priorPreview);
+    expect(JSON.stringify(controller.state.project)).toBe(mutatedProject);
+    expect(controller.state.editor.history.undoDepth).toBe(1);
+    const acceptance = await controller.acceptAiConcept();
+    expect(acceptance.ok).toBe(false);
+    if (acceptance.ok) throw new Error("Expected stale preview acceptance to fail.");
+    expect(acceptance.error).toMatch(/project changed/u);
+    expect(JSON.stringify(controller.state.project)).toBe(mutatedProject);
+
+    expect(await controller.editorAction({ type: "history.undo" })).toMatchObject({ ok: true });
+    expect(JSON.stringify(controller.state.project)).toBe(beforeProject);
+    expect(controller.state.editor.history.undoDepth).toBe(0);
+  }, 15_000);
+
+  it("cancels wording normalization without replacing its safe prior preview", async () => {
+    const gate = gatedCorrectionCutabilityWorker();
+    const { controller } = await desktop({ cutabilityWorker: gate.worker });
+    const beforeProject = JSON.stringify(controller.state.project);
+
+    expect(await controller.generateAiConcepts(request())).toMatchObject({ ok: true });
+    expect(await controller.selectAiConcept("mock-concept-2")).toMatchObject({ ok: true });
+    const priorPreview = JSON.stringify(controller.state.editor.aiConceptPreview);
+    const correction = controller.correctAiWording("mock-concept-2", "LASERX", "");
+    await gate.started;
+    const correctionOperationId = controller.state.ai.job?.operationId;
+    if (correctionOperationId === undefined) throw new Error("Expected an active correction job.");
+
+    expect(await controller.cancelAiGeneration(correctionOperationId)).toMatchObject({ ok: true });
+    const correctionResult = await correction;
+    expect(correctionResult.ok).toBe(false);
+    if (correctionResult.ok) throw new Error("Expected a canceled correction failure.");
+    expect(correctionResult.error).toMatch(/wording correction was canceled/u);
+    expect(controller.state.ai.job).toBeNull();
+    expect(JSON.stringify(controller.state.editor.aiConceptPreview)).toBe(priorPreview);
+    expect(JSON.stringify(controller.state.project)).toBe(beforeProject);
+    expect(controller.state.editor.history.undoDepth).toBe(0);
+
+    expect(await controller.acceptAiConcept()).toMatchObject({ ok: true });
+    expect(controller.state.editor.history.undoDepth).toBe(1);
+    expect(await controller.editorAction({ type: "history.undo" })).toMatchObject({ ok: true });
+    expect(JSON.stringify(controller.state.project)).toBe(beforeProject);
+  }, 15_000);
 
   it("connects, tests, replaces, and disconnects without changing the project", async () => {
     const { controller, vault } = await desktop({ credential: null });

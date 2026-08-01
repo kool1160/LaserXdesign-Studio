@@ -57,7 +57,7 @@ describe("M10 application workflow", () => {
   it("previews without mutation and accepts editable geometry as one undoable command", () => {
     const session = new ProjectSession(dependencies());
     const original = session.state.project.document.objects.length;
-    session.previewAiConcept(concept());
+    session.previewAiConcept(concept(), session.projectFingerprint);
     expect(session.state.project.document.objects).toHaveLength(original);
     expect(session.state.editor.aiConceptPreview?.objects).toHaveLength(1);
     expect(session.state.editor.history.undoDepth).toBe(0);
@@ -74,13 +74,26 @@ describe("M10 application workflow", () => {
 
   it("blocks mismatched wording and stale concepts without mutating history", () => {
     const session = new ProjectSession(dependencies());
-    session.previewAiConcept(concept(false));
+    session.previewAiConcept(concept(false), session.projectFingerprint);
     expect(() => session.acceptAiConceptPreview()).toThrow(/wording/u);
     expect(session.state.editor.history.undoDepth).toBe(0);
     session.cancelAiConceptPreview();
 
-    session.previewAiConcept(concept());
+    session.previewAiConcept(concept(), session.projectFingerprint);
     session.dispatch({ type: "project.set-display-unit", displayUnit: "inches" });
     expect(() => session.acceptAiConceptPreview()).toThrow(/project changed/u);
+  });
+
+  it("rejects a stale concept instead of stamping it onto the current project", () => {
+    const session = new ProjectSession(dependencies());
+    const sourceProjectFingerprint = session.projectFingerprint;
+    session.dispatch({ type: "project.set-display-unit", displayUnit: "inches" });
+
+    expect(() => session.previewAiConcept(
+      concept(),
+      sourceProjectFingerprint,
+    )).toThrow(/stale preview/u);
+    expect(session.state.editor.aiConceptPreview).toBeNull();
+    expect(session.state.editor.history.undoDepth).toBe(1);
   });
 });

@@ -30,6 +30,15 @@ disconnect update or delete that envelope without changing the open project.
 LaserX never embeds a shared key, resells credits, or requires AI for manual
 editing.
 
+The production provider policy selects `gpt-5.6-sol`, verified against the
+[official model page](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+on 2026-08-01. That API model supports the Responses endpoint, image input,
+and structured outputs required by this pipeline. The ID lives in the exported
+provider policy rather than renderer/UI code, so a reviewed policy update can
+replace it without changing the provider contract. Connection testing probes
+that exact configured model and reports model-not-found or inaccessible-model
+responses separately from invalid credentials and offline failures.
+
 ## Reference privacy
 
 A reference is read only after an explicit consent checkbox enables the
@@ -63,7 +72,10 @@ Acceptance rechecks the source-project fingerprint and dispatches one ordinary
 `objects.import` command. The accepted IDs immediately receive a fresh M08
 analysis. One Undo removes the whole accepted concept. Provider failure,
 refusal, malformed output, cancellation, stale work, or discard leaves the
-project, dirty state, and history unchanged.
+project, dirty state, and history unchanged. Generation and local wording
+correction both retain the exact source-project fingerprint through every
+awaited normalization step; the application layer rejects a preview whose
+source fingerprint no longer matches instead of stamping it onto newer state.
 
 ## Provenance, usage, and persistence
 
