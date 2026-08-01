@@ -11,6 +11,13 @@ absent record means ordinary editing organization; no name, visibility state,
 or M09 generator output implicitly creates a physical part. The deterministic
 v7-to-v8 migration preserves all legacy layers without metadata.
 
+Registration-hole identity is an explicit ordered list of top-level ellipse
+object IDs on that metadata. The domain and project parser reject duplicate,
+stale, nested, wrong-layer, non-ellipse, unnamed-group, or preview-only
+references. Coordination replaces only designated target holes, assigns fresh
+IDs to copied source holes, and updates the target list within the same
+undoable transaction. Decorative ellipses remain unrelated geometry.
+
 `packages/production-export` is a pure package-construction boundary over the
 authoritative project and existing SVG/DXF adapters. It filters one declared
 physical layer at a time while retaining the original document dimensions and
@@ -45,9 +52,9 @@ behave like one operation and makes partial failures explicit.
 
 ## Consequences
 
-Registration groups define top-level ellipses as coordinated holes, so users
-must use a dedicated layer/group when other ellipses are decorative. Physical
-layer exports deliberately include hidden geometry on the selected part. An
-existing package requires explicit replacement. M12 adds no 3D, bends, welds,
-BOM/ERP, quoting, nesting, CAM sequencing, G-code, DWG, machine control, or
-installer behavior.
+Registration groups alone do not classify geometry; users must explicitly
+designate each hole. Physical layer exports deliberately include hidden and
+decorative geometry on the selected part, while manifest registration evidence
+contains only designated IDs. An existing package requires explicit
+replacement. M12 adds no 3D, bends, welds, BOM/ERP, quoting, nesting, CAM
+sequencing, G-code, DWG, machine control, or installer behavior.

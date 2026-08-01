@@ -38,6 +38,7 @@ function productionPackage() {
           process: "laser",
           notes: "",
           registrationGroup: null,
+          registrationHoleIds: [],
         },
       }],
       activeLayerId: layerId,

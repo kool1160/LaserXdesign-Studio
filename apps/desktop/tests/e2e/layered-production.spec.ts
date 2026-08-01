@@ -22,6 +22,20 @@ test("layered sign analysis, registration, persistence, and production package",
       const faceId = state.project.document.activeLayerId;
       await window.laserx.editorAction({ type: "object.create", objectType: "rectangle" });
       await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const faceDecorativeOneId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const faceDecorativeTwoId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const faceHoleId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({
+        type: "objects.move",
+        objectIds: [faceHoleId],
+        deltaXmm: -120,
+        deltaYmm: -40,
+      });
       await window.laserx.editorAction({
         type: "layer.set-manufacturing",
         layerId: faceId,
@@ -32,6 +46,7 @@ test("layered sign analysis, registration, persistence, and production package",
           process: "laser",
           notes: "Black powder coat",
           registrationGroup: "main",
+          registrationHoleIds: [faceHoleId],
         },
       });
       await window.laserx.editorAction({ type: "layer.create", name: "Backing" });
@@ -39,6 +54,14 @@ test("layered sign analysis, registration, persistence, and production package",
       const backingId = state.project.document.activeLayerId;
       await window.laserx.editorAction({ type: "object.create", objectType: "rectangle" });
       await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const backingDecorativeOneId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const backingDecorativeTwoId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
+      state = await window.laserx.getState();
+      const originalBackingHoleId = state.editor.selectionIds[0] as string;
       await window.laserx.editorAction({
         type: "layer.set-manufacturing",
         layerId: backingId,
@@ -49,13 +72,28 @@ test("layered sign analysis, registration, persistence, and production package",
           process: "router",
           notes: "White diffuser",
           registrationGroup: "main",
+          registrationHoleIds: [originalBackingHoleId],
         },
       });
+      state = await window.laserx.getState();
+      const beforeCoordination = JSON.stringify(state.project);
       await window.laserx.editorAction({
         type: "layers.coordinate-registration",
         sourceLayerId: faceId,
         targetLayerId: backingId,
       });
+      state = await window.laserx.getState();
+      const afterCoordination = JSON.stringify(state.project);
+      const coordinatedBackingHoleId = state.project.document.layers.find(
+        (layer) => layer.id === backingId,
+      )?.manufacturing?.registrationHoleIds[0] as string;
+      const backingObjectIds = state.project.document.objects
+        .filter((object) => object.layerId === backingId)
+        .map((object) => object.id);
+      await window.laserx.editorAction({ type: "history.undo" });
+      const undoExact = JSON.stringify((await window.laserx.getState()).project) === beforeCoordination;
+      await window.laserx.editorAction({ type: "history.redo" });
+      const redoExact = JSON.stringify((await window.laserx.getState()).project) === afterCoordination;
       await window.laserx.editorAction({ type: "layer.create", name: "Lighting preview" });
       state = await window.laserx.getState();
       const previewId = state.project.document.activeLayerId;
@@ -70,10 +108,74 @@ test("layered sign analysis, registration, persistence, and production package",
           process: "non-cut",
           notes: "LED glow only",
           registrationGroup: null,
+          registrationHoleIds: [],
         },
       });
-      return { faceId, backingId, previewId };
+      return {
+        faceId,
+        backingId,
+        previewId,
+        faceHoleId,
+        coordinatedBackingHoleId,
+        faceDecorativeIds: [faceDecorativeOneId, faceDecorativeTwoId],
+        backingDecorativeIds: [backingDecorativeOneId, backingDecorativeTwoId],
+        backingObjectIds,
+        originalBackingHoleId,
+        undoExact,
+        redoExact,
+      };
     });
+
+    expect(layerIds.undoExact).toBe(true);
+    expect(layerIds.redoExact).toBe(true);
+    expect(layerIds.backingObjectIds).toEqual(expect.arrayContaining([
+      ...layerIds.backingDecorativeIds,
+      layerIds.coordinatedBackingHoleId,
+    ]));
+    expect(layerIds.backingObjectIds).not.toContain(layerIds.originalBackingHoleId);
+
+    await page.evaluate(async ({ faceId, backingId, previewId, faceHoleId }) => {
+      const state = await window.laserx.getState();
+      const hole = state.project.document.objects.find(
+        (object) => object.id === faceHoleId && object.type === "ellipse",
+      );
+      if (hole?.type !== "ellipse") throw new Error("Expected the designated face hole.");
+      await window.laserx.editorAction({ type: "layer.activate", layerId: faceId });
+      await window.laserx.editorAction({
+        type: "layer.set-visibility",
+        layerId: backingId,
+        visible: false,
+      });
+      await window.laserx.editorAction({
+        type: "layer.set-visibility",
+        layerId: previewId,
+        visible: false,
+      });
+      await window.laserx.editorAction({
+        type: "selection.point",
+        point: {
+          xMm: hole.center.xMm + hole.transform.eMm,
+          yMm: hole.center.yMm + hole.transform.fMm,
+        },
+        toleranceMm: 1,
+        mode: "replace",
+      });
+    }, layerIds);
+    await expect(page.getByTestId("designate-registration-holes")).toBeEnabled();
+    await page.getByTestId("designate-registration-holes").click();
+    await expect(page.getByText("Designated registration holes: 1")).toBeVisible();
+    await page.evaluate(async ({ backingId, previewId }) => {
+      await window.laserx.editorAction({
+        type: "layer.set-visibility",
+        layerId: backingId,
+        visible: true,
+      });
+      await window.laserx.editorAction({
+        type: "layer.set-visibility",
+        layerId: previewId,
+        visible: true,
+      });
+    }, layerIds);
 
     await expect(page.getByTestId("production-package")).toBeVisible();
     await expect(page.getByLabel("Exploded two-dimensional assembly preview").locator(".assembly-layer")).toHaveCount(2);
@@ -103,7 +205,12 @@ test("layered sign analysis, registration, persistence, and production package",
     const manifest = JSON.parse(await readFile(join(productionPath, "manifest.json"), "utf8")) as {
       sourceProjectVersion: number;
       originMm: { xMm: number; yMm: number };
-      layers: { id: string; role: string; registrationHoles: unknown[]; files: { name: string }[] }[];
+      layers: {
+        id: string;
+        role: string;
+        registrationHoles: { objectId: string; xMm: number; yMm: number; diameterMm: number }[];
+        files: { name: string }[];
+      }[];
     };
     expect(manifest.sourceProjectVersion).toBe(8);
     expect(manifest.originMm).toEqual({ xMm: 0, yMm: 0 });
@@ -112,8 +219,22 @@ test("layered sign analysis, registration, persistence, and production package",
       layerIds.backingId,
     ]);
     expect(manifest.layers.some((layer) => layer.id === layerIds.previewId)).toBe(false);
-    expect(manifest.layers[0]?.registrationHoles).toEqual(
-      manifest.layers[1]?.registrationHoles,
+    expect(manifest.layers.map((layer) => layer.registrationHoles.map((hole) => hole.objectId))).toEqual([
+      [layerIds.faceHoleId],
+      [layerIds.coordinatedBackingHoleId],
+    ]);
+    expect(
+      manifest.layers[0]?.registrationHoles.map(({ xMm, yMm, diameterMm }) => ({
+        xMm,
+        yMm,
+        diameterMm,
+      })),
+    ).toEqual(
+      manifest.layers[1]?.registrationHoles.map(({ xMm, yMm, diameterMm }) => ({
+        xMm,
+        yMm,
+        diameterMm,
+      })),
     );
     const faceSvg = await readFile(join(productionPath, "01-face-layer-1.svg"), "utf8");
     const backingSvg = await readFile(join(productionPath, "02-backing-backing.svg"), "utf8");
@@ -130,12 +251,32 @@ test("layered sign analysis, registration, persistence, and production package",
     await clickAndWaitForCommand(page, "Save as");
     await waitForProjectSchema(launched.projectPath, 8);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
-      document: { layers: { manufacturing?: { role: string } }[] };
+      document: {
+        layers: { manufacturing?: { role: string; registrationHoleIds: string[] } }[];
+      };
     };
     expect(saved.document.layers.map((layer) => layer.manufacturing?.role)).toEqual([
       "face",
       "backing",
       "non-cut-preview",
+    ]);
+    expect(saved.document.layers.map((layer) => layer.manufacturing?.registrationHoleIds)).toEqual([
+      [layerIds.faceHoleId],
+      [layerIds.coordinatedBackingHoleId],
+      [],
+    ]);
+
+    const reopenedRegistrationIds = await page.evaluate(async (filePath) => {
+      await window.laserx.newProject();
+      await window.laserx.openRecent({ filePath });
+      return (await window.laserx.getState()).project.document.layers.map(
+        (layer) => layer.manufacturing?.registrationHoleIds,
+      );
+    }, launched.projectPath);
+    expect(reopenedRegistrationIds).toEqual([
+      [layerIds.faceHoleId],
+      [layerIds.coordinatedBackingHoleId],
+      [],
     ]);
   } finally {
     await killAndRemove(launched);

@@ -356,16 +356,22 @@ secret or prompt content.
 
 ## M12 executable layers
 
-- domain/application tests cover optional manufacturing metadata, one-command
-  layer alignment, one-transaction registration-hole synchronization, and
-  undoable fresh-ID materialization;
-- project-format tests prove strict schema-v8 round trips and deterministic
-  v7-to-v8 migration without silently classifying any legacy layer;
+- domain/application tests cover optional manufacturing metadata, explicit
+  same-layer top-level registration IDs, fail-closed ambiguous/stale
+  references, one-command layer alignment, non-destructive one-transaction
+  registration-hole synchronization, exact undo/redo, and fresh-ID
+  materialization while multiple decorative ellipses remain unchanged;
+- project-format tests prove strict schema-v8 round trips, persistence of
+  registration identity, safe normalization of early schema-v8 metadata, safe
+  rejection of duplicate/stale/nested/non-ellipse/cross-layer references, and
+  deterministic v7-to-v8 migration without silently classifying any legacy
+  layer;
 - `fixtures/production/m12-package-goldens.json` independently pins two- and
   three-layer filenames, roles, shared millimeter origin/stock, and registration
   coordinates;
 - production-export tests inspect deterministic SVG/DXF text, full-stock SVG
-  viewBoxes, document order, bounds, SHA-256/byte manifest records, and complete
+  viewBoxes, document order, bounds, SHA-256/byte manifest records, designated-
+  only registration evidence amid multiple decorative ellipses, and complete
   exclusion of non-cut preview layers;
 - storage tests prove complete folder commit, fail-closed conflicts, explicit
   replacement, rollback-safe staging, and partial-file failure reporting with
@@ -373,10 +379,11 @@ secret or prompt content.
 - desktop integration tests persist/reopen semantic layers, switch visibly
   between whole-design and physical-layer analysis, export two real layers,
   and parse the actual manifest;
-- the packaged Windows scenario constructs face/backing/non-cut layers,
-  coordinates holes, runs scoped analysis, inspects exact-scale SVGs and the
-  real folder/manifest, proves conflict and replacement behavior, and saves
-  schema v8 metadata;
+- the packaged Windows scenario constructs face/backing/non-cut layers with
+  multiple decorative ellipses, coordinates only designated holes, proves
+  unrelated target geometry plus exact undo/redo and save/reopen identity,
+  runs scoped analysis, inspects designated-only manifest evidence and exact-
+  scale SVGs, and proves conflict and replacement behavior;
 - `pnpm audit:production` enforces explicit physical scope, preview exclusion,
   atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
 

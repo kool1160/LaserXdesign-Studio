@@ -7,6 +7,7 @@ import {
   createBlankProject,
   createDocument,
   getObjectsInRenderOrder,
+  getRegistrationHoleObjects,
   getSelectionBounds,
   hitTestDocument,
   identityTransform,
@@ -799,19 +800,20 @@ export class ProjectSession implements ProjectCommandDispatcher {
         if (!isLayerEditable(document, request.targetLayerId)) {
           throw new RangeError("Unlock and show the target manufacturing layer before coordinating holes.");
         }
-        const sourceHoles = document.objects.filter(
-          (object) =>
-            object.layerId === request.sourceLayerId && object.type === "ellipse",
+        const sourceHoles = getRegistrationHoleObjects(
+          document,
+          request.sourceLayerId,
         );
         if (sourceHoles.length === 0) {
-          throw new RangeError("The reference layer has no elliptical registration holes.");
+          throw new RangeError(
+            "The reference layer has no explicitly designated registration holes.",
+          );
         }
-        const targetHoleIds = document.objects
-          .filter(
-            (object) =>
-              object.layerId === request.targetLayerId && object.type === "ellipse",
-          )
-          .map((object) => object.id);
+        const targetHoles = getRegistrationHoleObjects(
+          document,
+          request.targetLayerId,
+        );
+        const targetHoleIds = targetHoles.map((object) => object.id);
         const coordinated = sourceHoles.map((object) => ({
           ...copyDocumentObject(object),
           id: this.#dependencies.createId(),
@@ -828,6 +830,14 @@ export class ProjectSession implements ProjectCommandDispatcher {
           this.executeEditorCommand({
             type: "objects.insert",
             objects: coordinated,
+          });
+          this.executeEditorCommand({
+            type: "layer.set-manufacturing",
+            layerId: request.targetLayerId,
+            manufacturing: {
+              ...targetLayer.manufacturing,
+              registrationHoleIds: coordinated.map((object) => object.id),
+            },
           });
           return this.commitTransaction();
         } catch (error) {

@@ -450,6 +450,16 @@ describe("schema version 8", () => {
 
   it("persists manufacturing settings and layer metadata through schema v8", () => {
     const project = editingProject();
+    const registrationHoleId = "923e4567-e89b-42d3-a456-426614174090";
+    project.document.objects.push({
+      id: registrationHoleId,
+      type: "ellipse",
+      layerId: ARTWORK_LAYER,
+      transform: identityTransform(),
+      center: { xMm: 80, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
     project.document.settings.manufacturing = {
       ...project.document.settings.manufacturing,
       kerfWidthMm: 0.35,
@@ -465,6 +475,7 @@ describe("schema version 8", () => {
         process: "laser",
         notes: "Front face",
         registrationGroup: "main-holes",
+        registrationHoleIds: [registrationHoleId],
       },
     };
     expect(parseProject(serializeProject(project)).document.settings.manufacturing).toEqual(
@@ -483,6 +494,70 @@ describe("schema version 8", () => {
       { fromVersion: 6, toVersion: 7 },
       { fromVersion: 7, toVersion: 8 },
     ]);
+
+    const earlySchemaV8 = JSON.parse(serializeProject(project)) as {
+      document: { layers: { manufacturing?: { registrationHoleIds?: string[] } }[] };
+    };
+    delete earlySchemaV8.document.layers[0]?.manufacturing?.registrationHoleIds;
+    expect(
+      parseProject(JSON.stringify(earlySchemaV8)).document.layers[0]?.manufacturing
+        ?.registrationHoleIds,
+    ).toEqual([]);
+  });
+
+  it("rejects duplicate, stale, nested, non-ellipse, and cross-layer registration references", () => {
+    const registrationHoleId = "923e4567-e89b-42d3-a456-426614174091";
+    const project = editingProject();
+    project.document.objects.push({
+      id: registrationHoleId,
+      type: "ellipse",
+      layerId: ARTWORK_LAYER,
+      transform: identityTransform(),
+      center: { xMm: 80, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+    project.document.layers[0] = {
+      ...(project.document.layers[0] as NonNullable<typeof project.document.layers[0]>),
+      manufacturing: {
+        role: "face",
+        material: "mild-steel",
+        thicknessMm: 3,
+        process: "laser",
+        notes: "",
+        registrationGroup: "main-holes",
+        registrationHoleIds: [registrationHoleId],
+      },
+    };
+    expect(parseProject(serializeProject(project))).toEqual(project);
+
+    for (const invalidIds of [
+      [registrationHoleId, registrationHoleId],
+      ["aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"],
+      ["123e4567-e89b-42d3-a456-426614174012"],
+      ["123e4567-e89b-42d3-a456-426614174010"],
+    ]) {
+      const invalid = structuredClone(project);
+      const metadata = invalid.document.layers[0]?.manufacturing;
+      if (metadata === undefined) throw new Error("Expected manufacturing metadata.");
+      metadata.registrationHoleIds = invalidIds;
+      expectProjectError(() => serializeProject(invalid), "INVALID_PROJECT");
+    }
+
+    const crossLayer = structuredClone(project);
+    const metadata = crossLayer.document.layers[0]?.manufacturing;
+    if (metadata === undefined) throw new Error("Expected manufacturing metadata.");
+    crossLayer.document.objects.push({
+      id: "a23e4567-e89b-42d3-a456-426614174092",
+      type: "ellipse",
+      layerId: NOTES_LAYER,
+      transform: identityTransform(),
+      center: { xMm: 100, yMm: 50 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    });
+    metadata.registrationHoleIds = ["a23e4567-e89b-42d3-a456-426614174092"];
+    expectProjectError(() => serializeProject(crossLayer), "INVALID_PROJECT");
   });
 
   it("round trips a versioned saved sign template and migrates schema v6 with an empty library", () => {

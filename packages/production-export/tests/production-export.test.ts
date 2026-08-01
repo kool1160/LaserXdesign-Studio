@@ -16,6 +16,8 @@ const FACE_ID = "11111111-1111-4111-8111-111111111111";
 const BACK_ID = "22222222-2222-4222-8222-222222222222";
 const PREVIEW_ID = "33333333-3333-4333-8333-333333333333";
 const SPACER_ID = "99999999-9999-4999-8999-999999999999";
+const FACE_HOLE_ID = "55555555-5555-4555-8555-555555555555";
+const BACK_HOLE_ID = "77777777-7777-4777-8777-777777777777";
 
 function layer(
   id: string,
@@ -33,7 +35,14 @@ function layer(
       thicknessMm: role === "backing" ? 6 : 3,
       process: role === "non-cut-preview" ? "non-cut" : "laser",
       notes: `${name} material note`,
-      registrationGroup: role === "non-cut-preview" ? null : "main",
+      registrationGroup:
+        role === "face" || role === "backing" ? "main" : null,
+      registrationHoleIds:
+        role === "face"
+          ? [FACE_HOLE_ID]
+          : role === "backing"
+            ? [BACK_HOLE_ID]
+            : [],
     },
   };
 }
@@ -81,7 +90,25 @@ function project(): LaserxProject {
         heightMm: 80,
       },
       {
-        id: "55555555-5555-4555-8555-555555555555",
+        id: "45555555-5555-4555-8555-555555555551",
+        type: "ellipse",
+        layerId: FACE_ID,
+        transform: identityTransform(),
+        center: { xMm: 100, yMm: 50 },
+        radiusXmm: 20,
+        radiusYmm: 8,
+      },
+      {
+        id: "45555555-5555-4555-8555-555555555552",
+        type: "ellipse",
+        layerId: FACE_ID,
+        transform: identityTransform(),
+        center: { xMm: 140, yMm: 60 },
+        radiusXmm: 12,
+        radiusYmm: 12,
+      },
+      {
+        id: FACE_HOLE_ID,
         type: "ellipse",
         layerId: FACE_ID,
         transform: identityTransform(),
@@ -99,7 +126,25 @@ function project(): LaserxProject {
         heightMm: 100,
       },
       {
-        id: "77777777-7777-4777-8777-777777777777",
+        id: "67777777-7777-4777-8777-777777777771",
+        type: "ellipse",
+        layerId: BACK_ID,
+        transform: identityTransform(),
+        center: { xMm: 120, yMm: 80 },
+        radiusXmm: 18,
+        radiusYmm: 9,
+      },
+      {
+        id: "67777777-7777-4777-8777-777777777772",
+        type: "ellipse",
+        layerId: BACK_ID,
+        transform: identityTransform(),
+        center: { xMm: 160, yMm: 70 },
+        radiusXmm: 10,
+        radiusYmm: 10,
+      },
+      {
+        id: BACK_HOLE_ID,
         type: "ellipse",
         layerId: BACK_ID,
         transform: identityTransform(),
@@ -138,9 +183,15 @@ describe("production package export", () => {
     expect(svgFiles.every((file) => file.content.includes('viewBox="0 0 300 200"'))).toBe(true);
     expect(first.manifest.originMm).toEqual({ xMm: 0, yMm: 0 });
     expect(first.manifest.stockMm).toEqual({ widthMm: 300, heightMm: 200 });
-    expect(first.manifest.layers.map((item) => item.objectCount)).toEqual([2, 2]);
-    expect(first.manifest.layers[0]?.registrationHoles).toEqual(
-      first.manifest.layers[1]?.registrationHoles,
+    expect(first.manifest.layers.map((item) => item.objectCount)).toEqual([4, 4]);
+    expect(first.manifest.layers[0]?.registrationHoles).toEqual([
+      { objectId: FACE_HOLE_ID, xMm: 40, yMm: 50, diameterMm: 6 },
+    ]);
+    expect(first.manifest.layers[1]?.registrationHoles).toEqual([
+      { objectId: BACK_HOLE_ID, xMm: 40, yMm: 50, diameterMm: 6 },
+    ]);
+    expect(first.manifest.warnings).not.toContainEqual(
+      expect.stringContaining("not numerically aligned"),
     );
     expect(first.manifest.warnings).toContain(
       "1 non-cut preview layer(s) were intentionally excluded from manufacturing files.",
@@ -152,10 +203,32 @@ describe("production package export", () => {
   it("keeps whole-design selection distinct from physical-layer scope", () => {
     expect(manufacturingLayerObjectIds(project().document, FACE_ID)).toEqual([
       "44444444-4444-4444-8444-444444444444",
-      "55555555-5555-4555-8555-555555555555",
+      "45555555-5555-4555-8555-555555555551",
+      "45555555-5555-4555-8555-555555555552",
+      FACE_HOLE_ID,
     ]);
     expect(() => manufacturingLayerObjectIds(project().document, PREVIEW_ID)).toThrow(
       "physical manufacturing layer",
+    );
+  });
+
+  it("fails closed for stale or ambiguous registration references", () => {
+    const stale = project();
+    const face = stale.document.layers.find((item) => item.id === FACE_ID);
+    if (face?.manufacturing === undefined) throw new Error("Expected face metadata.");
+    face.manufacturing.registrationHoleIds = [
+      "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ];
+    expect(() => buildProductionPackage(stale)).toThrow("is stale");
+
+    const decorative = project();
+    const decorativeFace = decorative.document.layers.find((item) => item.id === FACE_ID);
+    if (decorativeFace?.manufacturing === undefined) throw new Error("Expected face metadata.");
+    decorativeFace.manufacturing.registrationHoleIds = [
+      "44444444-4444-4444-8444-444444444444",
+    ];
+    expect(() => buildProductionPackage(decorative)).toThrow(
+      "must identify a top-level ellipse",
     );
   });
 

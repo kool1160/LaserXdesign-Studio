@@ -29,8 +29,10 @@ Owns process presets, limits, issue detection, retained/drop-out region classifi
 ### Production package — `packages/production-export`
 
 Owns deterministic physical-layer filtering, per-layer SVG/DXF artifacts,
-schema-1 manifests, registration comparison, hashes, and the simple 2D assembly
-projection. It never writes the filesystem or changes authoritative geometry.
+schema-1 manifests, explicit registration-object comparison, hashes, and the
+simple 2D assembly projection. It resolves only validated registration-hole
+IDs from domain metadata; decorative ellipses remain ordinary geometry. It
+never writes the filesystem or changes authoritative geometry.
 
 ### Adapters
 

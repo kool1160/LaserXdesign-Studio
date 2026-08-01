@@ -22,6 +22,7 @@ export type {
 
 export const PROJECT_SCHEMA_VERSION = 8 as const;
 export const MAX_SAVED_SIGN_TEMPLATES = 1_000;
+export const MAX_REGISTRATION_HOLES_PER_LAYER = 1_000;
 export const MILLIMETERS_PER_INCH = 25.4;
 export const DEFAULT_GRID_SPACING_MM = 10;
 
@@ -114,6 +115,7 @@ export interface ManufacturingLayerMetadata {
   process: ManufacturingLayerProcess;
   notes: string;
   registrationGroup: string | null;
+  registrationHoleIds: string[];
 }
 
 export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
@@ -912,6 +914,52 @@ export function findLayer(
   return document.layers.find((layer) => layer.id === layerId);
 }
 
+export function getRegistrationHoleObjects(
+  document: LaserxDocument,
+  layerId: string,
+): EllipseObject[] {
+  const layer = findLayer(document, layerId);
+  if (layer === undefined) {
+    throw new RangeError("The registration layer does not exist.");
+  }
+  const metadata = layer.manufacturing;
+  if (metadata === undefined) return [];
+  validateManufacturingLayerMetadata(metadata);
+  if (metadata.registrationHoleIds.length === 0) return [];
+  if (
+    metadata.role === "non-cut-preview" ||
+    metadata.registrationGroup === null
+  ) {
+    throw new RangeError(
+      "Registration holes require a named physical manufacturing layer.",
+    );
+  }
+  return metadata.registrationHoleIds.map((objectId) => {
+    const object = document.objects.find((candidate) => candidate.id === objectId);
+    if (object === undefined) {
+      throw new RangeError(
+        `Registration hole reference ${objectId} is stale.`,
+      );
+    }
+    if (object.layerId !== layerId || object.type !== "ellipse") {
+      throw new RangeError(
+        `Registration hole reference ${objectId} must identify a top-level ellipse on its manufacturing layer.`,
+      );
+    }
+    return object;
+  });
+}
+
+export function validateRegistrationHoleReferences(
+  document: LaserxDocument,
+): void {
+  for (const layer of document.layers) {
+    if (layer.manufacturing !== undefined) {
+      getRegistrationHoleObjects(document, layer.id);
+    }
+  }
+}
+
 export function isLayerEditable(
   document: LaserxDocument,
   layerId: string,
@@ -999,6 +1047,30 @@ export function validateManufacturingLayerMetadata(
     throw new RangeError("Registration group must contain 1 to 100 characters.");
   }
   if (
+    metadata.registrationHoleIds.length > MAX_REGISTRATION_HOLES_PER_LAYER
+  ) {
+    throw new RangeError("A layer supports at most 1,000 registration holes.");
+  }
+  if (
+    new Set(metadata.registrationHoleIds).size !==
+    metadata.registrationHoleIds.length
+  ) {
+    throw new RangeError("Registration hole references must be unique.");
+  }
+  if (
+    metadata.registrationHoleIds.some((objectId) => objectId.trim().length === 0)
+  ) {
+    throw new RangeError("Registration hole references cannot be empty.");
+  }
+  if (
+    metadata.registrationHoleIds.length > 0 &&
+    (metadata.role === "non-cut-preview" || metadata.registrationGroup === null)
+  ) {
+    throw new RangeError(
+      "Registration holes require a named physical manufacturing layer.",
+    );
+  }
+  if (
     (metadata.role === "non-cut-preview") !==
     (metadata.process === "non-cut")
   ) {
@@ -1016,6 +1088,7 @@ export function copyManufacturingLayerMetadata(
     ...metadata,
     notes: metadata.notes.trim(),
     registrationGroup: metadata.registrationGroup?.trim() ?? null,
+    registrationHoleIds: [...metadata.registrationHoleIds],
   };
 }
 

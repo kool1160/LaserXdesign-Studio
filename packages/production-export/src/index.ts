@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import {
   PROJECT_SCHEMA_VERSION,
   copyDocument,
+  getRegistrationHoleObjects,
   getObjectBounds,
   type BoundsMm,
-  type DocumentObject,
   type LaserxDocument,
   type LaserxProject,
   type ManufacturingLayerMetadata,
@@ -30,6 +30,7 @@ export interface ProductionManifestFile {
 }
 
 export interface ProductionRegistrationHole {
+  objectId: string;
   xMm: number;
   yMm: number;
   diameterMm: number;
@@ -130,14 +131,11 @@ function registrationHoles(
   document: LaserxDocument,
   layerId: string,
 ): ProductionRegistrationHole[] {
-  return document.objects
-    .filter(
-      (object): object is Extract<DocumentObject, { type: "ellipse" }> =>
-        object.layerId === layerId && object.type === "ellipse",
-    )
+  return getRegistrationHoleObjects(document, layerId)
     .map((object) => {
       const bounds = getObjectBounds(object);
       return {
+        objectId: object.id,
         xMm: (bounds.minXmm + bounds.maxXmm) / 2,
         yMm: (bounds.minYmm + bounds.maxYmm) / 2,
         diameterMm: Math.min(
@@ -149,7 +147,8 @@ function registrationHoles(
     .sort((left, right) =>
       left.xMm - right.xMm ||
       left.yMm - right.yMm ||
-      left.diameterMm - right.diameterMm,
+      left.diameterMm - right.diameterMm ||
+      left.objectId.localeCompare(right.objectId),
     );
 }
 

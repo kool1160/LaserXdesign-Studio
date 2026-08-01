@@ -455,6 +455,10 @@ export function App() {
     .map((layer) => layer.id);
   const viewportPreferences = document.settings.viewport;
   const selectionIds = state.editor.selectionIds;
+  const selectedRegistrationHoleIds = selectionIds.filter((objectId) => {
+    const object = document.objects.find((candidate) => candidate.id === objectId);
+    return object?.type === "ellipse" && object.layerId === activeLayer?.id;
+  });
   const selectionBounds = state.editor.selectionBounds;
   const pathSelection = state.editor.pathSelection;
   const selectedPaths = selectionIds
@@ -2414,6 +2418,7 @@ export function App() {
                             : document.settings.manufacturing.process,
                           notes: "",
                           registrationGroup: null,
+                          registrationHoleIds: [],
                         },
                       });
                     }}
@@ -2493,13 +2498,51 @@ export function App() {
                         key={`${activeLayer.id}-${activeLayer.manufacturing.registrationGroup ?? ""}-registration`}
                         defaultValue={activeLayer.manufacturing.registrationGroup ?? ""}
                         placeholder="Optional shared group"
-                        onBlur={(event) =>
+                        onBlur={(event) => {
+                          const registrationGroup = event.target.value.trim() || null;
                           updateActiveLayerManufacturing({
-                            registrationGroup: event.target.value.trim() || null,
-                          })
-                        }
+                            registrationGroup,
+                            ...(registrationGroup === null
+                              ? { registrationHoleIds: [] }
+                              : {}),
+                          });
+                        }}
                       />
                     </label>
+                    <div className="button-grid compact">
+                      <button
+                        type="button"
+                        data-testid="designate-registration-holes"
+                        disabled={
+                          busy ||
+                          activeLayer.manufacturing.role === "non-cut-preview" ||
+                          activeLayer.manufacturing.registrationGroup === null ||
+                          selectedRegistrationHoleIds.length === 0
+                        }
+                        onClick={() =>
+                          updateActiveLayerManufacturing({
+                            registrationHoleIds: selectedRegistrationHoleIds,
+                          })
+                        }
+                      >
+                        Designate selected ellipses as holes
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          busy ||
+                          activeLayer.manufacturing.registrationHoleIds.length === 0
+                        }
+                        onClick={() =>
+                          updateActiveLayerManufacturing({ registrationHoleIds: [] })
+                        }
+                      >
+                        Clear designated holes
+                      </button>
+                    </div>
+                    <small>
+                      Designated registration holes: {activeLayer.manufacturing.registrationHoleIds.length}
+                    </small>
                     <label>
                       Material notes
                       <input
@@ -2534,7 +2577,8 @@ export function App() {
                               busy ||
                               activeLayer.manufacturing?.registrationGroup === null ||
                               activeLayer.manufacturing?.registrationGroup !==
-                                referenceLayer.manufacturing?.registrationGroup
+                                referenceLayer.manufacturing?.registrationGroup ||
+                              referenceLayer.manufacturing?.registrationHoleIds.length === 0
                             }
                             onClick={() =>
                               dispatchEditorAction({

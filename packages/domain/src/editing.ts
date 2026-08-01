@@ -30,12 +30,15 @@ import {
   collectObjectIds,
   copyDocument,
   copyDocumentObject,
+  copyLayer,
+  copyManufacturingLayerMetadata,
   copySignTemplate,
   findLayer,
   getObjectBounds,
   getSelectionBounds,
   isLayerEditable,
   objectUsesLayerRecursively,
+  validateRegistrationHoleReferences,
   type DocumentObject,
   type Guide,
   type LaserxDocument,
@@ -797,6 +800,7 @@ export function applyEditorCommand(
   source: LaserxDocument,
   command: EditorCommand,
 ): LaserxDocument {
+  validateRegistrationHoleReferences(source);
   const document = copyDocument(source);
   switch (command.type) {
     case "objects.move": {
@@ -958,7 +962,7 @@ export function applyEditorCommand(
         if (name.length === 0 || name.length > 100) {
           throw new RangeError("Imported layer names must contain 1 to 100 characters.");
         }
-        return { ...layer, name };
+        return { ...copyLayer(layer), name };
       });
       document.layers.push(...layers);
       validateInsertedIds(document, command.objects);
@@ -1352,7 +1356,7 @@ export function applyEditorCommand(
       if (document.layers.some((layer) => layer.id === command.layer.id)) {
         throw new RangeError("Layer IDs must be unique.");
       }
-      document.layers.push({ ...command.layer });
+      document.layers.push(copyLayer(command.layer));
       document.activeLayerId = command.layer.id;
       break;
     case "layer.activate":
@@ -1391,7 +1395,11 @@ export function applyEditorCommand(
               ...layer,
               ...(command.manufacturing === null
                 ? { manufacturing: undefined }
-                : { manufacturing: { ...command.manufacturing } }),
+                : {
+                    manufacturing: copyManufacturingLayerMetadata(
+                      command.manufacturing,
+                    ),
+                  }),
             }
           : layer,
       );
@@ -1457,6 +1465,42 @@ export function applyEditorCommand(
       );
       break;
   }
+  if (
+    command.type === "objects.replace" ||
+    command.type === "objects.replace-topology" ||
+    command.type === "objects.delete" ||
+    command.type === "objects.group" ||
+    command.type === "layer.delete"
+  ) {
+    const topLevelEllipses = new Map(
+      document.layers.map((layer) => [
+        layer.id,
+        new Set(
+          document.objects
+            .filter(
+              (object) =>
+                object.layerId === layer.id && object.type === "ellipse",
+            )
+            .map((object) => object.id),
+        ),
+      ]),
+    );
+    document.layers = document.layers.map((layer) =>
+      layer.manufacturing === undefined
+        ? layer
+        : {
+            ...layer,
+            manufacturing: {
+              ...layer.manufacturing,
+              registrationHoleIds:
+                layer.manufacturing.registrationHoleIds.filter((objectId) =>
+                  topLevelEllipses.get(layer.id)?.has(objectId),
+                ),
+            },
+          },
+    );
+  }
+  validateRegistrationHoleReferences(document);
   return document;
 }
 

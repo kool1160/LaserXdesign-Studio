@@ -1,6 +1,7 @@
 import {
   DEFAULT_MANUFACTURING_SETTINGS,
   DEFAULT_VIEWPORT_PREFERENCES,
+  MAX_REGISTRATION_HOLES_PER_LAYER,
   MAX_SAVED_SIGN_TEMPLATES,
   PROJECT_SCHEMA_VERSION,
   collectObjectIds,
@@ -8,6 +9,7 @@ import {
   identityTransform,
   isInvertibleTransform,
   objectUsesLayerRecursively,
+  validateRegistrationHoleReferences,
   type AffineTransformMm,
   type DocumentObject,
   type LaserxProject,
@@ -280,12 +282,28 @@ const manufacturingLayerMetadataSchema = z
     ]),
     notes: z.string().trim().max(500),
     registrationGroup: z.string().trim().min(1).max(100).nullable(),
+    registrationHoleIds: z
+      .array(z.uuid())
+      .max(MAX_REGISTRATION_HOLES_PER_LAYER)
+      .default([]),
   })
   .refine(
     (metadata) =>
       (metadata.role === "non-cut-preview") ===
       (metadata.process === "non-cut"),
     "Preview-only layers must use the non-cut process, and physical layers cannot use it.",
+  )
+  .refine(
+    (metadata) =>
+      new Set(metadata.registrationHoleIds).size ===
+      metadata.registrationHoleIds.length,
+    "Registration hole references must be unique.",
+  )
+  .refine(
+    (metadata) =>
+      metadata.registrationHoleIds.length === 0 ||
+      (metadata.role !== "non-cut-preview" && metadata.registrationGroup !== null),
+    "Registration holes require a named physical manufacturing layer.",
   );
 const layerSchema = legacyLayerSchema.extend({
   manufacturing: manufacturingLayerMetadataSchema.optional(),
@@ -1094,6 +1112,14 @@ export function parseProjectValue(candidate: unknown): LaserxProject {
     throw new ProjectFormatError(
       "INVALID_PROJECT",
       "This project contains duplicate IDs or invalid layer references.",
+    );
+  }
+  try {
+    validateRegistrationHoleReferences(result.data.document);
+  } catch {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This project contains ambiguous or stale registration-hole references.",
     );
   }
   return result.data;

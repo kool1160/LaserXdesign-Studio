@@ -5,7 +5,8 @@
 An ordinary editing layer is not a physical part. Per-layer analysis and
 production export are available only after the user assigns strict
 manufacturing metadata: role, material, positive millimeter thickness,
-process, notes, and an optional registration-group name.
+process, notes, an optional registration-group name, and explicit registration-
+hole object IDs.
 
 Supported roles are `face`, `backing`, `spacer-tab`, `drill-reference`, and
 `non-cut-preview`. Preview-only layers must use process `non-cut`; physical
@@ -23,11 +24,20 @@ never implies that the whole design and one physical layer are equivalent.
 Center alignment translates all editable objects on a target physical layer
 until its world-space bounds center matches the selected reference layer.
 Registration coordination requires the same nonempty registration-group name.
-It replaces the target layer’s top-level ellipses with fresh-ID copies of the
-reference layer’s top-level ellipses in one undoable transaction. Within a
-registration group, those ellipses are the declared registration/mounting
-holes. The package manifest records their world-millimeter centers and
-diameters and warns if another layer differs numerically.
+The user designates selected top-level ellipse objects as holes; no ordinary
+circle, oval, decorative ring, cutout, badge element, or other ellipse is
+inferred. Coordination replaces only the target layer's designated objects
+with fresh-ID copies of the reference layer's designated objects and updates
+the target designation in the same undoable transaction. Unrelated geometry
+on both layers remains byte-for-byte unchanged. Duplicate, missing, nested,
+wrong-layer, non-ellipse, unnamed-group, and preview-only references fail
+closed before coordination or export.
+
+The package manifest records only designated holes, including their source
+object IDs, world-millimeter centers, and diameters, and warns if another layer
+in the named group differs numerically. Decorative ellipses remain ordinary
+manufacturing geometry in that layer's SVG/DXF and object count, but never
+appear as registration evidence.
 
 The renderer’s exploded preview is a simple two-dimensional stack of physical
 layer bounds. Its visual offsets are presentation only and never alter stored
@@ -60,7 +70,8 @@ records:
 - source schema/project/document identity and source update timestamp;
 - package name, millimeter units, origin, and stock dimensions;
 - each layer’s identity, role, material, thickness, process, notes, object
-  count, exact bounds, registration holes, and warnings;
+  count, exact bounds, explicitly designated registration-hole object IDs and
+  coordinates, and warnings;
 - each actual SVG/DXF filename, byte length, SHA-256 digest, and format;
 - package-level registration and preview-exclusion warnings.
 

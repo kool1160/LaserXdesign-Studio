@@ -2,6 +2,40 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-01 - M12 explicit registration-hole review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking review finding 4835349348
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Synced the branch with current `main` through the owner-locked
+  M14-M16 roadmap and agent contract while retaining the complete M12 guard.
+  Replaced the destructive all-ellipses registration heuristic with explicit,
+  persisted same-layer top-level ellipse IDs; added a renderer designation
+  control; made duplicate, stale, nested, non-ellipse, cross-layer, unnamed-
+  group, and preview-only references fail closed; and limited coordination,
+  manifests, alignment warnings, and shared-registration helpers to those IDs.
+  Coordination now preserves every decorative target ellipse, gives copied
+  holes fresh IDs, updates target metadata in the same transaction, and undoes
+  and redoes exactly.
+- Verification: `pnpm verify` passes in 265 seconds with all policy/license
+  audits, lint, typecheck, 263 unit/integration tests, build/package, and all 29
+  serial packaged Windows Electron E2E scenarios. Focused regressions cover
+  multiple decorative ellipses on both layers, renderer designation, exact
+  target preservation, fresh-ID synchronization, exact undo/redo, early-v8
+  normalization, invalid-reference rejection, designated-only manifest and
+  alignment evidence, and save/reopen identity.
+- Decisions: Registration groups express coordination scope but classify no
+  geometry by themselves. `registrationHoleIds` is the authoritative identity;
+  early schema-v8 metadata defaults it to an empty list, and no migration or
+  object name infers a hole. Manifest registration records now include the
+  designated object ID with world-millimeter evidence.
+- Known limitations: Designation is limited to top-level ellipse objects in
+  M12. Assembly preview remains presentation-only 2D. Existing no-CAM, no-3D,
+  no-machine-control, and no-M13 boundaries are unchanged.
+- Next allowed work: Publish the repair to the existing draft PR #29, wait for
+  all exact-head workflows, and stop for independent re-review. Do not merge,
+  close Issue #12, advance status, or begin M13 or later work.
+
 ## 2026-08-01 - M12 layered production candidate
 
 - Date: 2026-08-01
@@ -25,8 +59,8 @@ Add concise dated entries for substantial work that needs durable handoff beyond
 - Decisions: ADR 0022 keeps ordinary layers nonphysical by default, reuses the
   existing exact-scale SVG/DXF adapters, records registration ellipses in
   world millimeters, and keeps filesystem commits/rollback in Electron main.
-- Known limitations: Registration groups treat top-level ellipses as holes.
-  Assembly preview is presentation-only 2D. No PDF/raster assembly export, 3D,
+- Known limitations: Registration designation supports top-level ellipse
+  objects only. Assembly preview is presentation-only 2D. No PDF/raster assembly export, 3D,
   bends, welds, BOM/ERP, quoting, nesting, CAM, G-code, DWG, machine control,
   or M13 installer/release work is included.
 - Next allowed work: Publish the candidate to a draft M12 PR, wait for exact-

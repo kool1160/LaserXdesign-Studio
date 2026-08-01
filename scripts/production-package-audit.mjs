@@ -18,6 +18,7 @@ function rejectText(value, pattern, label) {
 const domain = await source("packages/domain/src/model.ts");
 const projectFormat = await source("packages/project-format/src/index.ts");
 const production = await source("packages/production-export/src/index.ts");
+const application = await source("packages/application/src/project-session.ts");
 const storage = await source("apps/desktop/electron/production-storage.ts");
 const renderer = await source("apps/desktop/src/app/App.tsx");
 const contract = await source("apps/desktop/electron/ipc-contract.ts");
@@ -27,6 +28,8 @@ const golden = JSON.parse(await source("fixtures/production/m12-package-goldens.
 for (const marker of [
   "PROJECT_SCHEMA_VERSION = 8",
   "manufacturing?: ManufacturingLayerMetadata",
+  "registrationHoleIds: string[]",
+  "getRegistrationHoleObjects",
   '"non-cut-preview"',
 ]) requireText(domain, marker, "schema-v8 manufacturing layer contract");
 
@@ -42,7 +45,13 @@ for (const marker of [
   "sha256",
   'originMm: { xMm: 0, yMm: 0 }',
   'name: "manifest.json"',
+  "getRegistrationHoleObjects(document, layerId)",
 ]) requireText(production, marker, "production package contract");
+
+for (const marker of [
+  "getRegistrationHoleObjects",
+  "registrationHoleIds: coordinated.map",
+]) requireText(application, marker, "non-destructive registration coordination");
 
 for (const marker of [
   'conflictPolicy === "fail"',
@@ -64,6 +73,8 @@ for (const marker of [
   "An ordinary editing layer is not a physical part.",
   "no incomplete destination is called successful",
   "never emitted as SVG or DXF manufacturing artifacts",
+  "no ordinary",
+  "Decorative ellipses remain ordinary",
 ]) requireText(documentation, marker, "production documentation");
 
 if (

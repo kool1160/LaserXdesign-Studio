@@ -25,7 +25,12 @@ parameters, font/text settings, and an optional arc radius. Generated geometry,
 preview state, and cutability results are not template data. See
 `docs/SIGN_TEMPLATES.md`.
 Schema v8 adds optional manufacturing-layer metadata: role, material, positive
-millimeter thickness, process, notes, and optional registration-group name.
+millimeter thickness, process, notes, an optional registration-group name, and
+an ordered list of explicitly designated top-level ellipse object IDs for
+registration holes. Those IDs must be unique, resolve on the same layer, and
+cannot be used by preview-only or unnamed groups. Early schema-v8 files that
+predate the designation field normalize it to an empty list; no ellipse is
+inferred as a hole.
 Absence means an ordinary editing layer. See `docs/PRODUCTION_PACKAGES.md`.
 `fixtures/projects/editing-v4.laserx` remains the reviewed v4 compatibility
 fixture; schema-v5 curve persistence and schema-v6 manufacturing-setting

@@ -161,6 +161,25 @@ describe("typed IPC validation", () => {
           process: "laser",
           notes: "Invalid preview process",
           registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      editorActionRequestSchema.safeParse({
+        type: "layer.set-manufacturing",
+        layerId: "123e4567-e89b-42d3-a456-426614174002",
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: "main",
+          registrationHoleIds: [
+            "223e4567-e89b-42d3-a456-426614174002",
+            "223e4567-e89b-42d3-a456-426614174002",
+          ],
         },
       }).success,
     ).toBe(false);

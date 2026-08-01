@@ -44,6 +44,11 @@ describe("layered production workflow", () => {
     const faceId = controller.state.project.document.activeLayerId;
     await controller.editorAction({ type: "object.create", objectType: "rectangle" });
     await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const faceDecorativeOneId = controller.state.editor.selectionIds[0] as string;
+    await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const faceDecorativeTwoId = controller.state.editor.selectionIds[0] as string;
+    await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const faceHoleId = controller.state.editor.selectionIds[0] as string;
     await controller.editorAction({
       type: "layer.set-manufacturing",
       layerId: faceId,
@@ -54,12 +59,18 @@ describe("layered production workflow", () => {
         process: "laser",
         notes: "Powder coat black",
         registrationGroup: "main",
+        registrationHoleIds: [faceHoleId],
       },
     });
     await controller.editorAction({ type: "layer.create", name: "Backing" });
     const backingId = controller.state.project.document.activeLayerId;
     await controller.editorAction({ type: "object.create", objectType: "rectangle" });
     await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const backingDecorativeOneId = controller.state.editor.selectionIds[0] as string;
+    await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const backingDecorativeTwoId = controller.state.editor.selectionIds[0] as string;
+    await controller.editorAction({ type: "object.create", objectType: "ellipse" });
+    const originalBackingHoleId = controller.state.editor.selectionIds[0] as string;
     await controller.editorAction({
       type: "layer.set-manufacturing",
       layerId: backingId,
@@ -70,8 +81,45 @@ describe("layered production workflow", () => {
         process: "router",
         notes: "White diffuser",
         registrationGroup: "main",
+        registrationHoleIds: [originalBackingHoleId],
       },
     });
+
+    const beforeCoordination = JSON.stringify(controller.state.project);
+    await controller.editorAction({
+      type: "layers.coordinate-registration",
+      sourceLayerId: faceId,
+      targetLayerId: backingId,
+    });
+    const afterCoordination = JSON.stringify(controller.state.project);
+    const coordinatedBacking = controller.state.project.document.layers.find(
+      (layer) => layer.id === backingId,
+    );
+    const coordinatedBackingHoleId = coordinatedBacking?.manufacturing
+      ?.registrationHoleIds[0] as string;
+    expect(
+      controller.state.project.document.objects
+        .filter((object) => object.layerId === backingId)
+        .map((object) => object.id),
+    ).toEqual(expect.arrayContaining([
+      backingDecorativeOneId,
+      backingDecorativeTwoId,
+      coordinatedBackingHoleId,
+    ]));
+    expect(
+      controller.state.project.document.objects.some(
+        (object) => object.id === originalBackingHoleId,
+      ),
+    ).toBe(false);
+    expect(
+      controller.state.project.document.objects.some(
+        (object) => object.id === faceDecorativeOneId || object.id === faceDecorativeTwoId,
+      ),
+    ).toBe(true);
+    await controller.editorAction({ type: "history.undo" });
+    expect(JSON.stringify(controller.state.project)).toBe(beforeCoordination);
+    await controller.editorAction({ type: "history.redo" });
+    expect(JSON.stringify(controller.state.project)).toBe(afterCoordination);
 
     await controller.runCutabilityAnalysis(
       "11111111-1111-4111-8111-111111111111",
@@ -105,9 +153,16 @@ describe("layered production workflow", () => {
     });
     const manifest = JSON.parse(
       await readFile(join(packagePath, "manifest.json"), "utf8"),
-    ) as { sourceProjectVersion: number; layers: { role: string }[] };
+    ) as {
+      sourceProjectVersion: number;
+      layers: { role: string; registrationHoles: { objectId: string }[] }[];
+    };
     expect(manifest.sourceProjectVersion).toBe(8);
     expect(manifest.layers.map((layer) => layer.role)).toEqual(["face", "backing"]);
+    expect(manifest.layers.map((layer) => layer.registrationHoles.map((hole) => hole.objectId))).toEqual([
+      [faceHoleId],
+      [coordinatedBackingHoleId],
+    ]);
 
     await controller.saveProjectAs();
     await controller.newProject();
@@ -115,6 +170,11 @@ describe("layered production workflow", () => {
     expect(
       controller.state.project.document.layers.map((layer) => layer.manufacturing?.role),
     ).toEqual(["face", "backing"]);
+    expect(
+      controller.state.project.document.layers.map(
+        (layer) => layer.manufacturing?.registrationHoleIds,
+      ),
+    ).toEqual([[faceHoleId], [coordinatedBackingHoleId]]);
   });
 
   it("publishes a failed command and zero files when package storage is partial", async () => {
@@ -153,6 +213,7 @@ describe("layered production workflow", () => {
         process: "laser",
         notes: "",
         registrationGroup: null,
+        registrationHoleIds: [],
       },
     });
 

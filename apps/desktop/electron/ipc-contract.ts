@@ -187,10 +187,19 @@ const manufacturingLayerMetadataSchema = z.strictObject({
     process: z.enum(["laser", "plasma", "waterjet", "router", "drill", "non-cut"]),
     notes: z.string().max(500),
     registrationGroup: z.string().min(1).max(100).nullable(),
+    registrationHoleIds: z.array(z.uuid()).max(1_000).default([]),
   }).refine(
     (metadata) =>
       (metadata.role === "non-cut-preview") ===
       (metadata.process === "non-cut"),
+  ).refine(
+    (metadata) =>
+      new Set(metadata.registrationHoleIds).size ===
+      metadata.registrationHoleIds.length,
+  ).refine(
+    (metadata) =>
+      metadata.registrationHoleIds.length === 0 ||
+      (metadata.role !== "non-cut-preview" && metadata.registrationGroup !== null),
   );
 const layerSchema = z.strictObject({
   id: z.uuid(),
