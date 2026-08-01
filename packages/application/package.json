@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@laserx/ai": "workspace:*",
     "@laserx/domain": "workspace:*",
     "@laserx/geometry": "workspace:*",
     "@laserx/project-format": "workspace:*",

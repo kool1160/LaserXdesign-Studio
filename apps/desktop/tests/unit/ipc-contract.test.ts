@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   bridgeProposalRequestSchema,
+  aiGenerateRequestSchema,
+  attachAiReferenceRequestSchema,
   cutabilityAnalysisRequestSchema,
   createDocumentRequestSchema,
   desktopStateSchema,
@@ -221,6 +223,7 @@ describe("typed IPC validation", () => {
         importPreview: null,
         rasterTracePreview: null,
         signToolPreview: null,
+        aiConceptPreview: null,
         history: {
           undoDepth: 0,
           redoDepth: 0,
@@ -235,6 +238,26 @@ describe("typed IPC validation", () => {
       recovery: null,
       interchange: { exportSummary: null },
       raster: { job: null, preview: null },
+      ai: {
+        connection: {
+          providerId: "openai",
+          providerName: "OpenAI",
+          status: "disconnected",
+          model: "gpt-5.6-sol",
+          message: "Connect a user-owned OpenAI API key to generate concepts.",
+          retryAfterMs: null,
+        },
+        job: null,
+        reference: null,
+        concepts: [],
+        selectedConceptId: null,
+        usage: null,
+        estimate: {
+          model: "gpt-5.6-sol",
+          maxOutputTokens: 6000,
+          note: "Provider billing varies by usage.",
+        },
+      },
       analysis: {
         job: null,
         focusedIssueId: null,
@@ -336,6 +359,42 @@ describe("typed IPC validation", () => {
         contours: [{ points: [{ xMm: 0, yMm: 0 }] }],
         fontPath: "C:\\Windows\\Fonts\\arial.ttf",
       },
+    }).success).toBe(false);
+  });
+
+  it("keeps AI credentials, reference bytes, and generated geometry out of renderer requests", () => {
+    const request = {
+      operationId: "70000000-0000-4000-8000-000000000071",
+      prompt: "An industrial address sign",
+      wording: "1042 OAK STREET",
+      widthMm: 609.6,
+      heightMm: 304.8,
+      style: "industrial",
+      process: "laser",
+      detailLevel: "balanced",
+      bridgePreference: "automatic",
+      holes: { enabled: true, diameterMm: 6, insetMm: 25.4 },
+      layerCount: 2,
+      backingPlate: true,
+      conceptCount: 3,
+      useReferenceImage: true,
+      referenceConsent: true,
+    };
+    expect(aiGenerateRequestSchema.safeParse(request).success).toBe(true);
+    for (const forbidden of [
+      { apiKey: "renderer-secret" },
+      { credential: "renderer-secret" },
+      { referenceImage: { dataUrl: "data:image/png;base64,AAAA" } },
+      { objects: [] },
+      { provider: { endpoint: "https://example.test" } },
+    ]) {
+      expect(aiGenerateRequestSchema.safeParse({ ...request, ...forbidden }).success).toBe(false);
+    }
+    expect(attachAiReferenceRequestSchema.safeParse({ consent: true }).success).toBe(true);
+    expect(attachAiReferenceRequestSchema.safeParse({ consent: false }).success).toBe(false);
+    expect(attachAiReferenceRequestSchema.safeParse({
+      consent: true,
+      filePath: "C:\\private\\reference.png",
     }).success).toBe(false);
   });
 

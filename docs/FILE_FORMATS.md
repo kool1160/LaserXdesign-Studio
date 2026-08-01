@@ -188,3 +188,17 @@ millimeter paths through one undoable command. Original pixels,
 preview images, trace settings, and engine-specific records are not embedded in
 the current `.laserx` schema and raster pixels are never manufacturing export
 geometry.
+
+## AI concepts
+
+AI concepts do not add a file format or schema-v7 record. Before acceptance,
+prompt text, a consented reference image, concept alternatives, wording review,
+provider/model/request IDs, usage, analysis, and provenance are transient host
+state. Discard, failure, project replacement, or application exit persists none
+of them.
+
+Acceptance stores only the same ordinary millimeter layers and line,
+rectangle, ellipse, path, text, or group objects produced by manual/import/sign
+tools. No provider payload, raster fallback bytes, prompt, reference,
+credential, AI provenance, or bypass flag is serialized. Normal SVG/DXF export
+therefore sees only reviewed editable geometry.

@@ -5,11 +5,15 @@ import type { EditorActionRequest } from "@laserx/application";
 import {
   commandResultSchema,
   bridgeProposalRequestSchema,
+  aiGenerateRequestSchema,
+  attachAiReferenceRequestSchema,
+  cancelAiGenerationRequestSchema,
   cancelCutabilityAnalysisRequestSchema,
   cancelGeometryOperationRequestSchema,
   cancelRasterTraceRequestSchema,
   createDocumentRequestSchema,
   deleteSignTemplateRequestSchema,
+  correctAiWordingRequestSchema,
   desktopStateSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
@@ -18,19 +22,25 @@ import {
   IPC_CHANNELS,
   fontCatalogSchema,
   openRecentRequestSchema,
+  openAiAccountPageRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
   saveSignTemplateRequestSchema,
+  selectAiConceptRequestSchema,
   signToolRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   vectorExportRequestSchema,
   vectorImportPreviewRequestSchema,
   type CreateDocumentRequest,
+  type AiGenerateRequest,
+  type AttachAiReferenceRequest,
+  type CancelAiGenerationRequest,
   type DeleteSignTemplateRequest,
+  type CorrectAiWordingRequest,
   type CancelGeometryOperationRequest,
   type CancelCutabilityAnalysisRequest,
   type CancelRasterTraceRequest,
@@ -41,8 +51,10 @@ import {
   type BridgeProposalRequestDto,
   type LaserxDesktopApi,
   type OpenRecentRequest,
+  type OpenAiAccountPageRequest,
   type RasterTraceRequest,
   type SaveSignTemplateRequest,
+  type SelectAiConceptRequest,
   type ResolveRecoveryRequest,
   type SetDisplayUnitRequest,
   type SetManufacturingSettingsRequest,
@@ -166,6 +178,77 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = deleteSignTemplateRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.deleteSignTemplate, validated),
+    );
+  },
+  async openAiAccountPage(request: OpenAiAccountPageRequest) {
+    const validated = openAiAccountPageRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.openAiAccountPage, validated),
+    );
+  },
+  async connectAi() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.connectAi),
+    );
+  },
+  async replaceAiCredential() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.replaceAiCredential),
+    );
+  },
+  async testAiConnection() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.testAiConnection),
+    );
+  },
+  async disconnectAi() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.disconnectAi),
+    );
+  },
+  async attachAiReference(request: AttachAiReferenceRequest) {
+    const validated = attachAiReferenceRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.attachAiReference, validated),
+    );
+  },
+  async removeAiReference() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.removeAiReference),
+    );
+  },
+  async generateAiConcepts(request: AiGenerateRequest) {
+    const validated = aiGenerateRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.generateAiConcepts, validated),
+    );
+  },
+  async cancelAiGeneration(request: CancelAiGenerationRequest) {
+    const validated = cancelAiGenerationRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelAiGeneration, validated),
+    );
+  },
+  async selectAiConcept(request: SelectAiConceptRequest) {
+    const validated = selectAiConceptRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.selectAiConcept, validated),
+    );
+  },
+  async correctAiWording(request: CorrectAiWordingRequest) {
+    const validated = correctAiWordingRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.correctAiWording, validated),
+    );
+  },
+  async acceptAiConcept() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.acceptAiConcept),
+    );
+  },
+  async discardAiConcepts() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.discardAiConcepts),
     );
   },
   async setDisplayUnit(request: SetDisplayUnitRequest) {

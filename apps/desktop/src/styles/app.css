@@ -251,6 +251,103 @@ button:disabled {
   border-top: 1px solid #283038;
 }
 
+.ai-generation-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-generation-panel .section-heading {
+  align-items: center;
+}
+
+.ai-status {
+  padding: 3px 7px;
+  border: 1px solid #39444c;
+  border-radius: 999px;
+  color: #aeb9bf;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ai-status.connected {
+  border-color: #4cc9b5;
+  color: #7ee0d1;
+}
+
+.ai-status.invalid-key,
+.ai-status.no-credit,
+.ai-status.rate-limited,
+.ai-status.offline,
+.ai-status.unavailable {
+  border-color: #d99a52;
+  color: #efbc7f;
+}
+
+.panel-note,
+.privacy-note,
+.usage-note {
+  margin: 0;
+}
+
+.privacy-note,
+.usage-note {
+  color: #8b989f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ai-generation-form .wide-field {
+  grid-column: 1 / -1;
+}
+
+.ai-generation-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.ai-reference,
+.ai-job,
+.ai-review,
+.wording-correction {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-summary,
+.ai-job {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-job progress {
+  flex: 1;
+}
+
+.ai-concepts {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-concepts button {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.ai-concepts button.active {
+  border-color: #4cc9b5;
+}
+
+.wording-correction label {
+  display: grid;
+  gap: 4px;
+}
+
 .template-save-row {
   display: grid;
   gap: 6px;

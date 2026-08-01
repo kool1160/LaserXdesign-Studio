@@ -34,6 +34,19 @@ export const IPC_CHANNELS = {
   rejectSignTool: "laserx:sign-tools:reject",
   saveSignTemplate: "laserx:sign-tools:save-template",
   deleteSignTemplate: "laserx:sign-tools:delete-template",
+  openAiAccountPage: "laserx:ai:open-account-page",
+  connectAi: "laserx:ai:connect",
+  replaceAiCredential: "laserx:ai:replace-credential",
+  testAiConnection: "laserx:ai:test-connection",
+  disconnectAi: "laserx:ai:disconnect",
+  attachAiReference: "laserx:ai:attach-reference",
+  removeAiReference: "laserx:ai:remove-reference",
+  generateAiConcepts: "laserx:ai:generate",
+  cancelAiGeneration: "laserx:ai:cancel",
+  selectAiConcept: "laserx:ai:select-concept",
+  correctAiWording: "laserx:ai:correct-wording",
+  acceptAiConcept: "laserx:ai:accept-concept",
+  discardAiConcepts: "laserx:ai:discard-concepts",
   setDisplayUnit: "laserx:project:set-display-unit",
   setViewportPreferences: "laserx:viewport:set-preferences",
   setManufacturingSettings: "laserx:manufacturing:set-settings",
@@ -57,6 +70,7 @@ export const displayUnitSchema = z.enum(["millimeters", "inches"]);
 const finiteNumber = z.number();
 const positiveNumber = finiteNumber.positive();
 const nonnegativeNumber = finiteNumber.nonnegative();
+const manufacturingProcessSchema = z.enum(["laser", "plasma", "waterjet", "router"]);
 const objectIdsSchema = z.array(z.uuid()).min(1);
 const pointSchema = z.strictObject({
   xMm: finiteNumber,
@@ -179,7 +193,7 @@ const guideSchema = z.strictObject({
 export const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
   z.strictObject({
     presetId: z.string().trim().min(1).max(100),
-    process: z.enum(["laser", "plasma", "waterjet", "router"]),
+    process: manufacturingProcessSchema,
     material: z.enum([
       "mild-steel",
       "stainless-steel",
@@ -284,6 +298,50 @@ export const saveSignTemplateRequestSchema = z.strictObject({
 
 export const deleteSignTemplateRequestSchema = z.strictObject({
   templateId: z.uuid(),
+});
+
+export const openAiAccountPageRequestSchema = z.strictObject({
+  target: z.enum(["keys", "billing"]),
+});
+
+export const attachAiReferenceRequestSchema = z.strictObject({
+  consent: z.literal(true),
+});
+
+export const aiGenerateRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+  prompt: z.string().trim().min(1).max(2_000),
+  wording: z.string().trim().min(1).max(200),
+  widthMm: positiveNumber.max(100_000),
+  heightMm: positiveNumber.max(100_000),
+  style: z.enum(["auto", "motorcycle-badge", "farmhouse", "industrial", "address-sign"]),
+  process: manufacturingProcessSchema,
+  detailLevel: z.enum(["simple", "balanced", "detailed"]),
+  bridgePreference: z.enum(["none", "automatic", "manual"]),
+  holes: z.strictObject({
+    enabled: z.boolean(),
+    diameterMm: nonnegativeNumber.max(10_000),
+    insetMm: nonnegativeNumber.max(100_000),
+  }),
+  layerCount: z.number().int().min(1).max(3),
+  backingPlate: z.boolean(),
+  conceptCount: z.number().int().min(2).max(4),
+  useReferenceImage: z.boolean(),
+  referenceConsent: z.boolean(),
+});
+
+export const cancelAiGenerationRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
+export const selectAiConceptRequestSchema = z.strictObject({
+  conceptId: z.string().min(1).max(200),
+});
+
+export const correctAiWordingRequestSchema = z.strictObject({
+  conceptId: z.string().min(1).max(200),
+  primaryText: z.string().trim().min(1).max(200),
+  secondaryText: z.string().max(200),
 });
 
 const documentSchema = z.strictObject({
@@ -823,6 +881,41 @@ export const desktopStateSchema = z.strictObject({
         }).nullable(),
       })
       .nullable(),
+    aiConceptPreview: z
+      .strictObject({
+        summary: z.strictObject({
+          id: z.string().min(1).max(200),
+          title: z.string().min(1).max(100),
+          description: z.string().min(1).max(300),
+          source: z.enum(["structured-vector", "raster-trace"]),
+          requestedWording: z.string().min(1).max(200),
+          observedWording: z.string().min(1).max(200),
+          wordingMatches: z.boolean(),
+          objectCount: z.number().int().positive().max(10_000),
+          layerCount: z.number().int().min(1).max(3),
+          warnings: z.array(z.string()),
+        }),
+        layers: z.array(layerSchema).min(1).max(3),
+        objects: z.array(documentObjectSchema).min(1).max(10_000),
+        providerId: z.string().min(1).max(100),
+        model: z.string().min(1).max(200),
+        requestId: z.string().max(500).nullable(),
+        usage: z.strictObject({
+          inputTokens: z.number().int().nonnegative().nullable(),
+          outputTokens: z.number().int().nonnegative().nullable(),
+          totalTokens: z.number().int().nonnegative().nullable(),
+        }),
+        analysis: z.strictObject({
+          status: z.enum(["complete", "ambiguous"]),
+          issueCount: z.number().int().nonnegative(),
+          errorCount: z.number().int().nonnegative(),
+          warningCount: z.number().int().nonnegative(),
+          cutReady: z.literal(false),
+          disclaimer: z.string().min(1),
+        }),
+        provenanceSaved: z.literal(false),
+      })
+      .nullable(),
     history: z.strictObject({
       undoDepth: z.number().int().nonnegative(),
       redoDepth: z.number().int().nonnegative(),
@@ -862,6 +955,63 @@ export const desktopStateSchema = z.strictObject({
         edges: z.string().startsWith("data:image/png;base64,"),
       })
       .nullable(),
+  }),
+  ai: z.strictObject({
+    connection: z.strictObject({
+      providerId: z.string().min(1).max(100),
+      providerName: z.string().min(1).max(100),
+      status: z.enum([
+        "disconnected",
+        "connecting",
+        "connected",
+        "invalid-key",
+        "no-credit",
+        "rate-limited",
+        "offline",
+        "unavailable",
+      ]),
+      model: z.string().min(1).max(200),
+      message: z.string().min(1).max(1_000),
+      retryAfterMs: z.number().nonnegative().nullable(),
+    }),
+    job: z.strictObject({
+      operationId: z.uuid(),
+      percent: z.number().min(0).max(100),
+      stage: z.enum(["requesting", "normalizing"]),
+    }).nullable(),
+    reference: z.strictObject({
+      mimeType: z.enum(["image/png", "image/jpeg"]),
+      widthPx: z.number().int().positive(),
+      heightPx: z.number().int().positive(),
+      byteLength: z.number().int().positive().max(8 * 1024 * 1024),
+      previewDataUrl: z.string().max(12 * 1024 * 1024).refine(
+        (value) => value.startsWith("data:image/png;base64,") || value.startsWith("data:image/jpeg;base64,"),
+      ),
+      consent: z.literal(true),
+    }).nullable(),
+    concepts: z.array(z.strictObject({
+      id: z.string().min(1).max(200),
+      title: z.string().min(1).max(100),
+      description: z.string().min(1).max(300),
+      source: z.enum(["structured-vector", "raster-trace"]),
+      requestedWording: z.string().min(1).max(200),
+      observedWording: z.string().min(1).max(200),
+      wordingMatches: z.boolean(),
+      objectCount: z.number().int().positive().max(10_000),
+      layerCount: z.number().int().min(1).max(3),
+      warnings: z.array(z.string()),
+    })).max(4),
+    selectedConceptId: z.string().min(1).max(200).nullable(),
+    usage: z.strictObject({
+      inputTokens: z.number().int().nonnegative().nullable(),
+      outputTokens: z.number().int().nonnegative().nullable(),
+      totalTokens: z.number().int().nonnegative().nullable(),
+    }).nullable(),
+    estimate: z.strictObject({
+      model: z.string().min(1).max(200),
+      maxOutputTokens: z.number().int().positive(),
+      note: z.string().min(1).max(1_000),
+    }),
   }),
   analysis: z.strictObject({
     job: z
@@ -1016,6 +1166,12 @@ export type CancelRasterTraceRequest = z.infer<
 export type SignToolRequestDto = z.infer<typeof signToolRequestSchema>;
 export type SaveSignTemplateRequest = z.infer<typeof saveSignTemplateRequestSchema>;
 export type DeleteSignTemplateRequest = z.infer<typeof deleteSignTemplateRequestSchema>;
+export type OpenAiAccountPageRequest = z.infer<typeof openAiAccountPageRequestSchema>;
+export type AttachAiReferenceRequest = z.infer<typeof attachAiReferenceRequestSchema>;
+export type AiGenerateRequest = z.infer<typeof aiGenerateRequestSchema>;
+export type CancelAiGenerationRequest = z.infer<typeof cancelAiGenerationRequestSchema>;
+export type SelectAiConceptRequest = z.infer<typeof selectAiConceptRequestSchema>;
+export type CorrectAiWordingRequest = z.infer<typeof correctAiWordingRequestSchema>;
 
 export interface LaserxDesktopApi {
   readonly security: Readonly<{
@@ -1042,6 +1198,19 @@ export interface LaserxDesktopApi {
   rejectSignTool(): Promise<CommandResult>;
   saveSignTemplate(request: SaveSignTemplateRequest): Promise<CommandResult>;
   deleteSignTemplate(request: DeleteSignTemplateRequest): Promise<CommandResult>;
+  openAiAccountPage(request: OpenAiAccountPageRequest): Promise<CommandResult>;
+  connectAi(): Promise<CommandResult>;
+  replaceAiCredential(): Promise<CommandResult>;
+  testAiConnection(): Promise<CommandResult>;
+  disconnectAi(): Promise<CommandResult>;
+  attachAiReference(request: AttachAiReferenceRequest): Promise<CommandResult>;
+  removeAiReference(): Promise<CommandResult>;
+  generateAiConcepts(request: AiGenerateRequest): Promise<CommandResult>;
+  cancelAiGeneration(request: CancelAiGenerationRequest): Promise<CommandResult>;
+  selectAiConcept(request: SelectAiConceptRequest): Promise<CommandResult>;
+  correctAiWording(request: CorrectAiWordingRequest): Promise<CommandResult>;
+  acceptAiConcept(): Promise<CommandResult>;
+  discardAiConcepts(): Promise<CommandResult>;
   setDisplayUnit(request: SetDisplayUnitRequest): Promise<CommandResult>;
   setViewportPreferences(
     request: SetViewportPreferencesRequest,

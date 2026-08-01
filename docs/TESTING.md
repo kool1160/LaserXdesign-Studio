@@ -307,6 +307,34 @@ the conservative analysis into a manufacturability guarantee.
   runtime presets, the bundled-font catalog, SPDX identity, and repository
   license texts.
 
+## M10 executable layers
+
+- provider tests inspect the exact OpenAI request boundary, strict JSON schema,
+  `store: false`, token bounds, reference consent, usage parsing, malformed
+  output, cancellation, invalid-key, no-credit, and rate-limit classification;
+- credential-vault tests prove plaintext is absent from disk, replacement and
+  deletion work, and unavailable OS encryption fails closed;
+- application tests prove AI preview/select/discard is non-mutating, stale and
+  wording-mismatched concepts cannot be accepted, acceptance is one undoable
+  import, and persisted objects contain no AI-specific records;
+- desktop coordination tests use replaceable provider/credential ports to
+  prove multi-concept normalization, pre-acceptance M08 analysis, local wording
+  correction, post-acceptance analysis, connection lifecycle, cancellation,
+  project safety, and exact undo;
+- strict IPC and source-boundary tests reject renderer credentials, endpoints,
+  local reference paths, pixels, and generated geometry, while validating only
+  bounded intent and projected state;
+- packaged Playwright uses a deterministic main-process provider, corrects a
+  mismatch, accepts editable geometry, analyzes, verifies transient provenance,
+  undoes exactly, disconnects, and confirms manual editing still works;
+- `pnpm audit:ai` checks provider pinning, request privacy controls, renderer
+  isolation, schema-v7 non-persistence, documentation, and production-source
+  secret patterns.
+
+Real-provider calls are never required in CI. The separate procedure in
+`docs/AI_PIPELINE.md` uses a dedicated spending-limited user key and records no
+secret or prompt content.
+
 Run all milestone checks from the repository root:
 
 ```bash

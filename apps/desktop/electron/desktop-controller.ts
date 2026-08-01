@@ -12,6 +12,20 @@ import {
   type GeometryOperationRequest,
 } from "@laserx/application";
 import {
+  AI_LIMITS,
+  OPENAI_PLATFORM_BILLING_URL,
+  OPENAI_PLATFORM_SETUP_URL,
+  AiProviderError,
+  OpenAiProvider,
+  connectionStateForError,
+  type AiConnectionState,
+  type AiGenerationRequest,
+  type AiNormalizedConcept,
+  type AiProvider,
+  type AiProviderConcept,
+  type AiProviderResult,
+} from "@laserx/ai";
+import {
   CutabilityAnalysisCache,
   fingerprintCutabilityDocument,
   materializeBridgeProposal,
@@ -21,6 +35,10 @@ import {
 } from "@laserx/cutability";
 import {
   identityTransform,
+  copyDocumentObject,
+  type DocumentObject,
+  type Layer,
+  type PathObject,
   type TextObject,
   type UpdateViewportPreferences,
   type VectorExportSummary,
@@ -35,6 +53,7 @@ import {
   MAX_RASTER_PREVIEW_DIMENSION_PX,
   MAX_RASTER_PROCESSING_TIME_MS,
   inspectRasterSource,
+  settingsForRasterTracePreset,
   type RasterPreviewPixels,
   type RasterTraceProgress,
 } from "@laserx/import-raster";
@@ -42,6 +61,7 @@ import { exportDxf, importDxf } from "@laserx/io-dxf";
 import { exportSvg, importSvg } from "@laserx/io-svg";
 import {
   generateSignToolCandidate,
+  type SignGenerationCandidate,
   type SignToolRequest,
 } from "@laserx/sign-tools";
 
@@ -53,10 +73,15 @@ import type {
   SetViewportPreferencesRequest,
   TextUpdateRequestDto,
   RasterTraceRequest,
+  AiGenerateRequest,
   BridgeProposalRequestDto,
   VectorExportRequest,
   VectorImportPreviewRequest,
 } from "./ipc-contract.js";
+import type {
+  CredentialAcquisitionPort,
+  CredentialVaultPort,
+} from "./ai-credentials.js";
 import {
   CutabilityAnalysisCancelledError,
   NodeCutabilityWorkerService,
@@ -124,6 +149,10 @@ export interface DesktopControllerOptions {
   rasterWorker?: RasterWorkerPort;
   rasterOperationTimeoutMs?: number;
   cutabilityWorker?: CutabilityWorkerPort;
+  aiProvider?: AiProvider;
+  credentialVault?: CredentialVaultPort;
+  credentialAcquisition?: CredentialAcquisitionPort;
+  openExternal?: (url: string) => Promise<void>;
 }
 
 export interface AutosaveScheduler {
@@ -141,6 +170,58 @@ const intervalAutosaveScheduler: AutosaveScheduler = {
 };
 
 const MAX_RASTER_PREVIEW_DATA_URL_LENGTH = 8 * 1024 * 1024;
+
+const unavailableCredentialVault: CredentialVaultPort = {
+  read: () => Promise.resolve(null),
+  write: () => Promise.reject(new Error("Operating-system credential storage is unavailable.")),
+  delete: () => Promise.resolve(),
+};
+
+const unavailableCredentialAcquisition: CredentialAcquisitionPort = {
+  acquire: () => Promise.reject(new Error("Secure credential entry is unavailable.")),
+};
+
+function disconnectedAiState(provider: Pick<AiProvider, "id" | "name" | "model">): AiConnectionState {
+  return {
+    providerId: provider.id,
+    providerName: provider.name,
+    status: "disconnected",
+    model: provider.model,
+    message: "Connect a user-owned OpenAI API key to generate concepts.",
+    retryAfterMs: null,
+  };
+}
+
+function canonicalWording(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLocaleUpperCase();
+}
+
+function mappedObjectLayer(object: DocumentObject, layerId: string): DocumentObject {
+  const copied = copyDocumentObject(object);
+  if (copied.type !== "group") return { ...copied, layerId };
+  return {
+    ...copied,
+    layerId,
+    children: copied.children.map((child) => mappedObjectLayer(child, layerId)),
+  };
+}
+
+function normalizedLayerCount(
+  candidate: SignGenerationCandidate,
+  requestedCount: number,
+): Pick<SignGenerationCandidate, "layers" | "objects"> {
+  const count = Math.max(1, Math.min(requestedCount, candidate.layers.length));
+  const layers = candidate.layers.slice(0, count).map((layer, index) => ({
+    ...layer,
+    name: index === 0 && count === 1 ? "AI Sign" : layer.name,
+  }));
+  const sourceIndex = new Map(candidate.layers.map((layer, index) => [layer.id, index]));
+  const objects = candidate.objects.map((object) => {
+    const index = Math.min(sourceIndex.get(object.layerId) ?? 0, count - 1);
+    return mappedObjectLayer(object, (layers[index] as Layer).id);
+  });
+  return { layers, objects };
+}
 
 function validatedRasterPreview(
   encoded: RasterPreviewDataUrls,
@@ -190,10 +271,15 @@ export class DesktopController {
   readonly #rasterWorker: RasterWorkerPort;
   readonly #rasterOperationTimeoutMs: number;
   readonly #cutabilityWorker: CutabilityWorkerPort;
+  readonly #aiProvider: AiProvider;
+  readonly #credentialVault: CredentialVaultPort;
+  readonly #credentialAcquisition: CredentialAcquisitionPort;
+  readonly #openExternal: ((url: string) => Promise<void>) | null;
   readonly #cutabilityCache = new CutabilityAnalysisCache();
   readonly #geometryAbortControllers = new Map<string, AbortController>();
   readonly #rasterAbortControllers = new Map<string, AbortController>();
   readonly #cutabilityAbortControllers = new Map<string, AbortController>();
+  #aiAbortController: AbortController | null = null;
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -213,6 +299,19 @@ export class DesktopController {
   } | null = null;
   #focusedCutabilityIssueId: string | null = null;
   #bridgeProposal: BridgeProposal | null = null;
+  #aiConnection: AiConnectionState;
+  #aiReference: AiGenerationRequest["referenceImage"] = null;
+  #aiJob: {
+    operationId: string;
+    percent: number;
+    stage: "requesting" | "normalizing";
+  } | null = null;
+  #aiConcepts: AiNormalizedConcept[] = [];
+  #aiRawConcepts: AiProviderConcept[] = [];
+  #aiResult: AiProviderResult | null = null;
+  #aiRequest: AiGenerationRequest | null = null;
+  #aiSelectedConceptId: string | null = null;
+  #aiProjectFingerprint: string | null = null;
 
   public constructor(options: DesktopControllerOptions) {
     this.#storage = options.projectStorage ?? new ProjectStorage();
@@ -234,6 +333,12 @@ export class DesktopController {
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
     this.#cutabilityWorker =
       options.cutabilityWorker ?? new NodeCutabilityWorkerService();
+    this.#aiProvider = options.aiProvider ?? new OpenAiProvider();
+    this.#credentialVault = options.credentialVault ?? unavailableCredentialVault;
+    this.#credentialAcquisition =
+      options.credentialAcquisition ?? unavailableCredentialAcquisition;
+    this.#openExternal = options.openExternal ?? null;
+    this.#aiConnection = disconnectedAiState(this.#aiProvider);
     this.#rasterOperationTimeoutMs =
       options.rasterOperationTimeoutMs ?? MAX_RASTER_PROCESSING_TIME_MS;
     if (
@@ -247,6 +352,21 @@ export class DesktopController {
   public async initialize(): Promise<void> {
     this.#recentProjects = await this.#recentStore.load();
     this.#pendingRecovery = await this.#recoveryStore.load();
+    try {
+      const credential = await this.#credentialVault.read(this.#aiProvider.id);
+      if (credential !== null) {
+        this.#aiConnection = {
+          providerId: this.#aiProvider.id,
+          providerName: this.#aiProvider.name,
+          status: "connected",
+          model: this.#aiProvider.model,
+          message: "A protected OpenAI API key is available in the operating-system vault.",
+          retryAfterMs: null,
+        };
+      }
+    } catch (error) {
+      this.#aiConnection = connectionStateForError(this.#aiProvider, error);
+    }
     this.#startAutosave();
     await this.#logger.info("desktop-controller-initialized");
     this.#emit();
@@ -285,6 +405,31 @@ export class DesktopController {
           session.editor.rasterTracePreview === null || this.#rasterPreview === null
             ? null
             : { ...this.#rasterPreview },
+      },
+      ai: {
+        connection: { ...this.#aiConnection },
+        job: this.#aiJob === null ? null : { ...this.#aiJob },
+        reference: this.#aiReference === null
+          ? null
+          : {
+              mimeType: this.#aiReference.mimeType,
+              widthPx: this.#aiReference.widthPx,
+              heightPx: this.#aiReference.heightPx,
+              byteLength: this.#aiReference.byteLength,
+              previewDataUrl: this.#aiReference.dataUrl,
+              consent: true as const,
+            },
+        concepts: this.#aiConcepts.map((concept) => ({
+          ...concept.summary,
+          warnings: [...concept.summary.warnings],
+        })),
+        selectedConceptId: this.#aiSelectedConceptId,
+        usage: this.#aiResult === null ? null : { ...this.#aiResult.usage },
+        estimate: {
+          model: this.#aiProvider.model,
+          maxOutputTokens: AI_LIMITS.outputTokens,
+          note: "OpenAI bills the connected account directly. Exact cost depends on input, image, and output tokens.",
+        },
       },
       analysis: {
         job: this.#cutabilityJob === null ? null : { ...this.#cutabilityJob },
@@ -608,6 +753,369 @@ export class DesktopController {
   public async deleteSignTemplate(templateId: string): Promise<CommandResult> {
     return this.#run(() => {
       this.#session.deleteSignTemplate(templateId);
+    });
+  }
+
+  public async openAiAccountPage(
+    target: "keys" | "billing",
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#openExternal === null) {
+        throw new Error("Opening the OpenAI Platform is unavailable in this desktop host.");
+      }
+      await this.#openExternal(
+        target === "keys" ? OPENAI_PLATFORM_SETUP_URL : OPENAI_PLATFORM_BILLING_URL,
+      );
+    });
+  }
+
+  public async connectAi(replacing = false): Promise<CommandResult> {
+    return this.#run(async () => {
+      const previous = { ...this.#aiConnection };
+      this.#aiConnection = {
+        ...previous,
+        status: "connecting",
+        message: replacing
+          ? "Waiting for a replacement key in the secure Windows prompt."
+          : "Waiting for a key in the secure Windows prompt.",
+        retryAfterMs: null,
+      };
+      this.#emit();
+      const credential = await this.#credentialAcquisition.acquire(
+        this.#aiProvider.name,
+        replacing,
+      );
+      if (credential === null) {
+        this.#aiConnection = previous;
+        return;
+      }
+      try {
+        await this.#aiProvider.testConnection(credential);
+        await this.#credentialVault.write(this.#aiProvider.id, credential);
+        this.#aiConnection = {
+          providerId: this.#aiProvider.id,
+          providerName: this.#aiProvider.name,
+          status: "connected",
+          model: this.#aiProvider.model,
+          message: replacing
+            ? "The protected OpenAI API key was replaced and tested."
+            : "The OpenAI connection was tested and stored in the operating-system vault.",
+          retryAfterMs: null,
+        };
+      } catch (error) {
+        this.#aiConnection = connectionStateForError(this.#aiProvider, error);
+        throw error;
+      }
+    });
+  }
+
+  public async testAiConnection(): Promise<CommandResult> {
+    return this.#run(async () => {
+      const credential = await this.#credentialVault.read(this.#aiProvider.id);
+      if (credential === null) {
+        this.#aiConnection = disconnectedAiState(this.#aiProvider);
+        throw new Error("Connect an OpenAI API key before testing the connection.");
+      }
+      this.#aiConnection = {
+        ...this.#aiConnection,
+        status: "connecting",
+        message: "Testing the protected OpenAI connection.",
+        retryAfterMs: null,
+      };
+      this.#emit();
+      try {
+        await this.#aiProvider.testConnection(credential);
+        this.#aiConnection = {
+          providerId: this.#aiProvider.id,
+          providerName: this.#aiProvider.name,
+          status: "connected",
+          model: this.#aiProvider.model,
+          message: "The protected OpenAI connection is valid.",
+          retryAfterMs: null,
+        };
+      } catch (error) {
+        this.#aiConnection = connectionStateForError(this.#aiProvider, error);
+        throw error;
+      }
+    });
+  }
+
+  public async disconnectAi(): Promise<CommandResult> {
+    return this.#run(async () => {
+      this.#aiAbortController?.abort();
+      this.#aiAbortController = null;
+      this.#aiJob = null;
+      await this.#credentialVault.delete(this.#aiProvider.id);
+      this.#aiConnection = disconnectedAiState(this.#aiProvider);
+    });
+  }
+
+  public async attachAiReference(consent: boolean): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (!consent) {
+        throw new Error("Explicit consent is required before attaching a reference image to an AI request.");
+      }
+      if (this.#dialogs.chooseImportRaster === undefined) {
+        throw new Error("Reference-image selection is unavailable in this desktop host.");
+      }
+      if (this.#rasterCodec === null) {
+        throw new Error("Reference-image decoding is unavailable in this desktop host.");
+      }
+      const filePath = await this.#dialogs.chooseImportRaster();
+      if (filePath === null) return;
+      const bytes = await this.#rasterStorage.read(filePath);
+      if (bytes.byteLength > AI_LIMITS.referenceBytes) {
+        throw new RangeError(`AI references cannot exceed ${String(AI_LIMITS.referenceBytes)} bytes.`);
+      }
+      const format = extname(filePath).toLowerCase() === ".png" ? "png" : "jpeg";
+      const source = inspectRasterSource(bytes, format);
+      if (source.widthPx * source.heightPx > AI_LIMITS.referencePixels) {
+        throw new RangeError("AI reference image exceeds the bounded pixel limit.");
+      }
+      await this.#rasterCodec.decode(bytes, source);
+      const mimeType = format === "png" ? "image/png" : "image/jpeg";
+      this.#aiReference = {
+        mimeType,
+        dataUrl: `data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
+        widthPx: source.widthPx,
+        heightPx: source.heightPx,
+        byteLength: bytes.byteLength,
+        consent: true,
+      };
+    });
+  }
+
+  public async removeAiReference(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#aiReference = null;
+    });
+  }
+
+  public async generateAiConcepts(request: AiGenerateRequest): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#aiAbortController !== null) {
+        throw new RangeError("Finish or cancel the active AI generation first.");
+      }
+      const credential = await this.#credentialVault.read(this.#aiProvider.id);
+      if (credential === null) {
+        this.#aiConnection = disconnectedAiState(this.#aiProvider);
+        throw new Error("Connect an OpenAI API key before generating concepts.");
+      }
+      if (request.useReferenceImage && (!request.referenceConsent || this.#aiReference === null)) {
+        throw new Error("Attach the reference image with explicit consent before generation.");
+      }
+      const providerRequest: AiGenerationRequest = {
+        operationId: request.operationId,
+        prompt: request.prompt,
+        wording: request.wording,
+        widthMm: request.widthMm,
+        heightMm: request.heightMm,
+        style: request.style,
+        process: request.process,
+        detailLevel: request.detailLevel,
+        bridgePreference: request.bridgePreference,
+        holes: { ...request.holes },
+        layerCount: request.layerCount,
+        backingPlate: request.backingPlate,
+        conceptCount: request.conceptCount,
+        referenceImage: request.useReferenceImage ? this.#aiReference : null,
+      };
+      const abortController = new AbortController();
+      const projectFingerprint = this.#session.projectFingerprint;
+      this.#aiAbortController = abortController;
+      this.#aiJob = {
+        operationId: request.operationId,
+        percent: 10,
+        stage: "requesting",
+      };
+      this.#emit();
+      try {
+        const result = await this.#aiProvider.generate(
+          providerRequest,
+          credential,
+          abortController.signal,
+        );
+        if (abortController.signal.aborted) {
+          throw new AiProviderError("canceled", "AI generation was canceled; the open project was left unchanged.");
+        }
+        this.#aiJob = {
+          operationId: request.operationId,
+          percent: 60,
+          stage: "normalizing",
+        };
+        this.#emit();
+        const normalized: AiNormalizedConcept[] = [];
+        for (let index = 0; index < result.concepts.length; index += 1) {
+          const raw = result.concepts[index] as AiProviderConcept;
+          normalized.push(await this.#normalizeAiConcept(
+            raw,
+            providerRequest,
+            result,
+            abortController.signal,
+          ));
+          this.#aiJob = {
+            operationId: request.operationId,
+            percent: 60 + Math.round(((index + 1) / result.concepts.length) * 35),
+            stage: "normalizing",
+          };
+          this.#emit();
+        }
+        if (this.#session.projectFingerprint !== projectFingerprint) {
+          throw new Error("The project changed while AI concepts were generated; the stale concepts were discarded.");
+        }
+        const first = normalized[0];
+        if (first === undefined) {
+          throw new Error("The provider returned no normalized concepts.");
+        }
+        this.#aiConcepts = normalized;
+        this.#aiRawConcepts = result.concepts.map((concept) => structuredClone(concept));
+        this.#aiResult = structuredClone(result);
+        this.#aiRequest = structuredClone(providerRequest);
+        this.#aiSelectedConceptId = first.summary.id;
+        this.#aiProjectFingerprint = projectFingerprint;
+        this.#session.previewAiConcept(first, projectFingerprint);
+        this.#aiConnection = {
+          providerId: this.#aiProvider.id,
+          providerName: this.#aiProvider.name,
+          status: "connected",
+          model: result.model,
+          message: "OpenAI concepts were received and normalized by LaserX.",
+          retryAfterMs: null,
+        };
+      } catch (error) {
+        if (error instanceof AiProviderError && error.kind !== "canceled") {
+          this.#aiConnection = connectionStateForError(this.#aiProvider, error);
+        }
+        throw error;
+      } finally {
+        if (this.#aiAbortController === abortController) {
+          this.#aiAbortController = null;
+          this.#aiJob = null;
+        }
+      }
+    });
+  }
+
+  public async cancelAiGeneration(operationId: string): Promise<CommandResult> {
+    return this.#run(() => {
+      if (
+        this.#aiAbortController === null ||
+        this.#aiJob?.operationId !== operationId
+      ) {
+        throw new RangeError("That AI generation operation is not active.");
+      }
+      this.#aiAbortController.abort();
+    });
+  }
+
+  public async selectAiConcept(conceptId: string): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#assertAiConceptsCurrent();
+      const concept = this.#aiConcepts.find((candidate) => candidate.summary.id === conceptId);
+      if (concept === undefined) throw new RangeError("That AI concept is unavailable.");
+      this.#session.previewAiConcept(concept, this.#aiProjectFingerprint as string);
+      this.#aiSelectedConceptId = conceptId;
+    });
+  }
+
+  public async correctAiWording(
+    conceptId: string,
+    primaryText: string,
+    secondaryText: string,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (this.#aiAbortController !== null) {
+        throw new RangeError("Finish or cancel the active AI operation first.");
+      }
+      this.#assertAiConceptsCurrent();
+      const projectFingerprint = this.#aiProjectFingerprint as string;
+      const request = this.#aiRequest;
+      const result = this.#aiResult;
+      const rawIndex = this.#aiRawConcepts.findIndex((concept) => concept.id === conceptId);
+      const raw = this.#aiRawConcepts[rawIndex];
+      if (request === null || result === null || raw === undefined) {
+        throw new RangeError("That AI concept is unavailable.");
+      }
+      if (raw.source !== "structured-vector") {
+        throw new Error("Raster wording cannot be altered safely. Revise the prompt and generate new concepts.");
+      }
+      const combined = `${primaryText.trim()} ${secondaryText.trim()}`.trim();
+      if (combined.length === 0 || combined.length > AI_LIMITS.wordingCharacters) {
+        throw new RangeError("Corrected wording must contain 1 to 200 characters.");
+      }
+      const corrected: AiProviderConcept = {
+        ...raw,
+        observedWording: combined,
+        intent: {
+          ...raw.intent,
+          primaryText: primaryText.trim(),
+          secondaryText: secondaryText.trim(),
+        },
+      };
+      const abortController = new AbortController();
+      const operationId = randomUUID();
+      this.#aiAbortController = abortController;
+      this.#aiJob = {
+        operationId,
+        percent: 60,
+        stage: "normalizing",
+      };
+      this.#emit();
+      try {
+        const concept = await this.#normalizeAiConcept(
+          corrected,
+          request,
+          result,
+          abortController.signal,
+          combined,
+        );
+        if (abortController.signal.aborted) {
+          throw new AiProviderError("canceled", "AI wording correction was canceled; the open project was left unchanged.");
+        }
+        if (
+          this.#aiProjectFingerprint !== projectFingerprint ||
+          this.#session.projectFingerprint !== projectFingerprint
+        ) {
+          throw new Error("The project changed while AI wording was corrected; the stale correction was discarded.");
+        }
+        const conceptIndex = this.#aiConcepts.findIndex((candidate) => candidate.summary.id === conceptId);
+        if (conceptIndex < 0) {
+          throw new RangeError("That AI concept is unavailable.");
+        }
+        this.#session.previewAiConcept(concept, projectFingerprint);
+        this.#aiRawConcepts[rawIndex] = corrected;
+        this.#aiConcepts[conceptIndex] = concept;
+        this.#aiSelectedConceptId = conceptId;
+      } catch (error) {
+        if (abortController.signal.aborted && !(error instanceof AiProviderError)) {
+          throw new AiProviderError("canceled", "AI wording correction was canceled; the open project was left unchanged.");
+        }
+        throw error;
+      } finally {
+        if (this.#aiAbortController === abortController) {
+          this.#aiAbortController = null;
+          this.#aiJob = null;
+        }
+      }
+    });
+  }
+
+  public async acceptAiConcept(): Promise<CommandResult> {
+    return this.#run(async () => {
+      const preview = this.#session.state.editor.aiConceptPreview;
+      if (preview === null) throw new RangeError("There is no AI concept to accept.");
+      const objectIds = preview.objects.map((object) => object.id);
+      this.#session.acceptAiConceptPreview();
+      this.#clearAiConcepts(false);
+      this.#invalidateCutability();
+      await this.#analyzeCutability(randomUUID(), objectIds);
+    });
+  }
+
+  public async discardAiConcepts(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.cancelAiConceptPreview();
+      this.#clearAiConcepts(false);
     });
   }
 
@@ -1114,6 +1622,241 @@ export class DesktopController {
     return true;
   }
 
+  async #normalizeAiConcept(
+    concept: AiProviderConcept,
+    request: AiGenerationRequest,
+    result: AiProviderResult,
+    signal: AbortSignal,
+    requestedWording = request.wording,
+  ): Promise<AiNormalizedConcept> {
+    signal.throwIfAborted();
+    let layers: Layer[];
+    let objects: DocumentObject[];
+    const warnings = [...concept.warnings];
+    if (concept.source === "structured-vector") {
+      const minimumDimension = Math.min(request.widthMm, request.heightMm);
+      const holeDiameterMm = request.holes.enabled
+        ? Math.min(request.holes.diameterMm, minimumDimension * 0.15)
+        : 0;
+      const holeInsetMm = request.holes.enabled
+        ? Math.max(
+            holeDiameterMm / 2,
+            Math.min(request.holes.insetMm, request.widthMm / 2),
+          )
+        : 0;
+      let candidate = generateSignToolCandidate({
+        kind: "template",
+        stylePresetId: concept.intent.stylePresetId,
+        parameters: {
+          kind: concept.intent.kind,
+          shape: "rectangle",
+          widthMm: request.widthMm,
+          heightMm: request.heightMm,
+          borderWidthMm: Math.max(
+            0.5,
+            Math.min(concept.intent.borderWidthMm, minimumDimension * 0.2),
+          ),
+          holeDiameterMm,
+          holeInsetMm,
+          fontId: "provider-selection-is-not-authoritative",
+          fontSizeMm: Math.max(
+            2,
+            Math.min(concept.intent.fontSizeMm, request.heightMm * 0.35),
+          ),
+          primaryText: concept.intent.primaryText,
+          secondaryText: concept.intent.secondaryText,
+          arcRadiusMm: concept.intent.arcRadiusMm === null
+            ? null
+            : Math.max(
+                1,
+                Math.min(concept.intent.arcRadiusMm, request.widthMm / 2),
+              ),
+        },
+      }, {
+        document: this.#session.state.project.document,
+        selectedObjectIds: [],
+        createId: () => randomUUID(),
+        layoutText: (layoutRequest) => this.#fontEngine.layout(layoutRequest),
+      });
+      if (!request.backingPlate) {
+        const backingLayerId = candidate.layers.find(
+          (layer) => layer.name === "Sign Backing",
+        )?.id;
+        if (backingLayerId !== undefined) {
+          candidate = {
+            ...candidate,
+            layers: candidate.layers.map((layer) =>
+              layer.id === backingLayerId
+                ? { ...layer, name: "AI Sign Layer" }
+                : layer,
+            ),
+            objects: candidate.objects.filter(
+              (object) => object.layerId !== backingLayerId,
+            ),
+          };
+        }
+      }
+      const normalized = normalizedLayerCount(candidate, request.layerCount);
+      layers = normalized.layers;
+      objects = normalized.objects;
+      warnings.push(...candidate.summary.warnings);
+      if (concept.intent.backingPlate !== request.backingPlate) {
+        warnings.push("LaserX used the explicit backing-plate choice instead of the provider suggestion.");
+      }
+    } else {
+      if (this.#rasterCodec === null) {
+        throw new Error("Raster fallback is unavailable in this desktop host.");
+      }
+      const prefix = `data:${concept.raster.mimeType};base64,`;
+      if (!concept.raster.dataUrl.startsWith(prefix)) {
+        throw new RangeError("AI raster fallback data is invalid.");
+      }
+      const bytes = new Uint8Array(Buffer.from(
+        concept.raster.dataUrl.slice(prefix.length),
+        "base64",
+      ));
+      if (
+        bytes.byteLength !== concept.raster.byteLength ||
+        bytes.byteLength <= 0 ||
+        bytes.byteLength > AI_LIMITS.referenceBytes
+      ) {
+        throw new RangeError("AI raster fallback exceeds its byte boundary.");
+      }
+      const format = concept.raster.mimeType === "image/png" ? "png" : "jpeg";
+      const source = inspectRasterSource(bytes, format);
+      if (
+        source.widthPx !== concept.raster.widthPx ||
+        source.heightPx !== concept.raster.heightPx
+      ) {
+        throw new RangeError("AI raster fallback dimensions do not match its validated header.");
+      }
+      const image = await this.#rasterCodec.decode(bytes, source);
+      signal.throwIfAborted();
+      const settings = {
+        ...settingsForRasterTracePreset("balanced"),
+        outputWidthMm: request.widthMm,
+      };
+      const traced = await this.#rasterWorker.run({
+        operationId: `${request.operationId}:${concept.id}`,
+        source,
+        image,
+        settings,
+      }, signal, () => undefined);
+      signal.throwIfAborted();
+      const layer: Layer = {
+        id: randomUUID(),
+        name: "AI Raster Trace",
+        visible: true,
+        locked: false,
+      };
+      const scaleX = request.widthMm / traced.candidate.summary.outputWidthMm;
+      const scaleY = request.heightMm / traced.candidate.summary.outputHeightMm;
+      layers = [layer];
+      objects = traced.candidate.paths.map<PathObject>((path) => ({
+        id: randomUUID(),
+        type: "path",
+        layerId: layer.id,
+        transform: identityTransform(),
+        closed: path.closed,
+        points: path.points.map((point) => ({
+          xMm: point.xMm * scaleX,
+          yMm: point.yMm * scaleY,
+        })),
+        ...(path.handles === undefined
+          ? {}
+          : {
+              handles: path.handles.map((handles) => ({
+                incoming: handles.incoming === null
+                  ? null
+                  : {
+                      xMm: handles.incoming.xMm * scaleX,
+                      yMm: handles.incoming.yMm * scaleY,
+                    },
+                outgoing: handles.outgoing === null
+                  ? null
+                  : {
+                      xMm: handles.outgoing.xMm * scaleX,
+                      yMm: handles.outgoing.yMm * scaleY,
+                    },
+              })),
+            }),
+      }));
+      warnings.push(...traced.candidate.warnings.map((warning) => warning.message));
+    }
+    if (objects.length === 0 || objects.length > AI_LIMITS.editableObjects) {
+      throw new RangeError("AI normalization produced an invalid editable-object count.");
+    }
+    const document = this.#session.state.project.document;
+    const previewDocument = {
+      ...document,
+      layers: [...document.layers, ...layers],
+      objects: [...document.objects, ...objects],
+    };
+    const analysis = await this.#cutabilityWorker.run({
+      operationId: randomUUID(),
+      document: previewDocument,
+      objectIds: [],
+    }, signal, () => undefined);
+    signal.throwIfAborted();
+    const generatedWording = concept.source === "structured-vector"
+      ? `${concept.intent.primaryText} ${concept.intent.secondaryText}`.trim()
+      : concept.observedWording;
+    const wordingMatches =
+      canonicalWording(requestedWording) === canonicalWording(generatedWording) &&
+      canonicalWording(requestedWording) === canonicalWording(concept.observedWording);
+    if (!wordingMatches) {
+      warnings.push("Generated wording differs from the requested wording and must be corrected before acceptance.");
+    }
+    return {
+      summary: {
+        id: concept.id,
+        title: concept.title,
+        description: concept.description,
+        source: concept.source,
+        requestedWording,
+        observedWording: concept.observedWording,
+        wordingMatches,
+        objectCount: objects.length,
+        layerCount: layers.length,
+        warnings: [...new Set(warnings)],
+      },
+      layers,
+      objects,
+      providerId: result.providerId,
+      model: result.model,
+      requestId: result.requestId,
+      usage: { ...result.usage },
+      analysis: {
+        status: analysis.status,
+        issueCount: analysis.issueCount,
+        errorCount: analysis.errorCount,
+        warningCount: analysis.warningCount,
+        cutReady: false,
+        disclaimer: analysis.disclaimer,
+      },
+      provenanceSaved: false,
+    };
+  }
+
+  #assertAiConceptsCurrent(): void {
+    if (
+      this.#aiProjectFingerprint === null ||
+      this.#session.projectFingerprint !== this.#aiProjectFingerprint
+    ) {
+      throw new Error("The project changed after these AI concepts were created. Generate them again before selection or acceptance.");
+    }
+  }
+
+  #clearAiConcepts(cancelPreview: boolean): void {
+    if (cancelPreview) this.#session.cancelAiConceptPreview();
+    this.#aiConcepts = [];
+    this.#aiRawConcepts = [];
+    this.#aiResult = null;
+    this.#aiRequest = null;
+    this.#aiSelectedConceptId = null;
+    this.#aiProjectFingerprint = null;
+  }
+
   #clearRasterState(): void {
     for (const controller of this.#rasterAbortControllers.values()) {
       controller.abort();
@@ -1129,6 +1872,11 @@ export class DesktopController {
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
+    this.#aiAbortController?.abort();
+    this.#aiAbortController = null;
+    this.#aiJob = null;
+    this.#aiReference = null;
+    this.#clearAiConcepts(false);
     this.#cutabilityCache.invalidate();
   }
 

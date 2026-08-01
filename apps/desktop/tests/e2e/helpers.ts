@@ -66,6 +66,8 @@ export interface TestLaunch {
 }
 
 export interface LaunchEnvironment {
+  aiMock?: boolean;
+  aiDelayMs?: string;
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
   geometryDelayMs?: string;
@@ -91,6 +93,12 @@ export async function launchPackaged(
       LASERX_TEST_CLOSE_RESPONSE: closeResponse,
       LASERX_TEST_PROJECT_PATH: projectPath,
       LASERX_USER_DATA_PATH: userDataPath,
+      ...(launchEnvironment.aiMock === true
+        ? { LASERX_TEST_AI_MOCK: "1" }
+        : {}),
+      ...(launchEnvironment.aiDelayMs === undefined
+        ? {}
+        : { LASERX_TEST_AI_DELAY_MS: launchEnvironment.aiDelayMs }),
       ...(launchEnvironment.deviceScaleFactor === undefined
         ? {}
         : {

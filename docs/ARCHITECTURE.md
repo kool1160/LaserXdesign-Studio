@@ -233,6 +233,23 @@ use one complete M08 geometry scope. Only an explicit object-ID selection may
 narrow analysis, and the published summary retains that exact scope and the
 full document fingerprint.
 
+For M10, `packages/ai` owns the provider-neutral request/result contract,
+OpenAI Responses mapping, strict structured-output validation, and provider
+error classification. Electron main owns credential acquisition, Windows
+`safeStorage`, provider calls, bounded reference reads, normalization, and
+worker coordination. The sandboxed renderer receives only typed intent DTOs,
+bounded media previews, concept summaries, and normalized editable previews;
+it never receives a credential or creates provider geometry.
+
+Structured output is materialized through the M09 generator. Raster fallback
+is decoded and traced through M07. Every temporary concept is analyzed through
+M08 before publication and remains `cutReady: false`. The application session
+owns the preview and source-project fingerprint. Wording mismatch or stale
+project state blocks acceptance; a successful acceptance is exactly one
+`objects.import` command followed by a fresh analysis of the accepted IDs.
+Prompts, references, alternatives, provider metadata, usage, and AI provenance
+remain transient and do not change schema v7.
+
 ## State flow
 
 ```text

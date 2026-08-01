@@ -8,8 +8,19 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  safeStorage,
+  shell,
   type MenuItemConstructorOptions,
 } from "electron";
+import {
+  ElectronCredentialVault,
+  WindowsCredentialAcquisition,
+} from "./ai-credentials.js";
+import {
+  DeterministicAiProvider,
+  FixedCredentialAcquisition,
+  MemoryCredentialVault,
+} from "./ai-test-provider.js";
 import {
   bundledFontSources,
   discoverWindowsFontSources,
@@ -23,17 +34,22 @@ import {
 } from "./desktop-controller.js";
 import {
   createDocumentRequestSchema,
+  aiGenerateRequestSchema,
+  attachAiReferenceRequestSchema,
   deleteSignTemplateRequestSchema,
   bridgeProposalRequestSchema,
   cancelCutabilityAnalysisRequestSchema,
   cancelGeometryOperationRequestSchema,
   cancelRasterTraceRequestSchema,
+  cancelAiGenerationRequestSchema,
   editorActionRequestSchema,
   geometryOperationRequestSchema,
   cutabilityAnalysisRequestSchema,
   focusCutabilityIssueRequestSchema,
+  correctAiWordingRequestSchema,
   IPC_CHANNELS,
   openRecentRequestSchema,
+  openAiAccountPageRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
   setDisplayUnitRequestSchema,
@@ -41,6 +57,7 @@ import {
   setViewportPreferencesRequestSchema,
   saveSignTemplateRequestSchema,
   signToolRequestSchema,
+  selectAiConceptRequestSchema,
   textLayoutRequestSchema,
   textUpdateRequestSchema,
   vectorExportRequestSchema,
@@ -274,6 +291,55 @@ function registerIpc(): void {
     const validated = deleteSignTemplateRequestSchema.parse(request);
     return requireController().deleteSignTemplate(validated.templateId);
   });
+  ipcMain.handle(IPC_CHANNELS.openAiAccountPage, (_event, request: unknown) => {
+    const validated = openAiAccountPageRequestSchema.parse(request);
+    return requireController().openAiAccountPage(validated.target);
+  });
+  ipcMain.handle(IPC_CHANNELS.connectAi, () =>
+    requireController().connectAi(false),
+  );
+  ipcMain.handle(IPC_CHANNELS.replaceAiCredential, () =>
+    requireController().connectAi(true),
+  );
+  ipcMain.handle(IPC_CHANNELS.testAiConnection, () =>
+    requireController().testAiConnection(),
+  );
+  ipcMain.handle(IPC_CHANNELS.disconnectAi, () =>
+    requireController().disconnectAi(),
+  );
+  ipcMain.handle(IPC_CHANNELS.attachAiReference, (_event, request: unknown) => {
+    const validated = attachAiReferenceRequestSchema.parse(request);
+    return requireController().attachAiReference(validated.consent);
+  });
+  ipcMain.handle(IPC_CHANNELS.removeAiReference, () =>
+    requireController().removeAiReference(),
+  );
+  ipcMain.handle(IPC_CHANNELS.generateAiConcepts, (_event, request: unknown) => {
+    const validated = aiGenerateRequestSchema.parse(request);
+    return requireController().generateAiConcepts(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.cancelAiGeneration, (_event, request: unknown) => {
+    const validated = cancelAiGenerationRequestSchema.parse(request);
+    return requireController().cancelAiGeneration(validated.operationId);
+  });
+  ipcMain.handle(IPC_CHANNELS.selectAiConcept, (_event, request: unknown) => {
+    const validated = selectAiConceptRequestSchema.parse(request);
+    return requireController().selectAiConcept(validated.conceptId);
+  });
+  ipcMain.handle(IPC_CHANNELS.correctAiWording, (_event, request: unknown) => {
+    const validated = correctAiWordingRequestSchema.parse(request);
+    return requireController().correctAiWording(
+      validated.conceptId,
+      validated.primaryText,
+      validated.secondaryText,
+    );
+  });
+  ipcMain.handle(IPC_CHANNELS.acceptAiConcept, () =>
+    requireController().acceptAiConcept(),
+  );
+  ipcMain.handle(IPC_CHANNELS.discardAiConcepts, () =>
+    requireController().discardAiConcepts(),
+  );
   ipcMain.handle(IPC_CHANNELS.setDisplayUnit, (_event, request: unknown) => {
     const validated = setDisplayUnitRequestSchema.parse(request);
     return requireController().setDisplayUnit(validated.displayUnit);
@@ -529,6 +595,8 @@ async function createWindow(): Promise<void> {
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
+  const useDeterministicAi = process.env.LASERX_TEST_AI_MOCK === "1";
+  const testCredential = "laserx-e2e-credential-placeholder";
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
     dialogs,
@@ -548,6 +616,22 @@ async function createWindow(): Promise<void> {
     rasterCodec: new ElectronRasterCodec({
       createFromBuffer: (buffer) => nativeImage.createFromBuffer(buffer),
     }),
+    ...(useDeterministicAi
+      ? {
+          aiProvider: new DeterministicAiProvider(
+            Number(process.env.LASERX_TEST_AI_DELAY_MS ?? 0),
+          ),
+        }
+      : {}),
+    credentialVault: useDeterministicAi
+      ? new MemoryCredentialVault(testCredential)
+      : new ElectronCredentialVault(app.getPath("userData"), safeStorage),
+    credentialAcquisition: useDeterministicAi
+      ? new FixedCredentialAcquisition(testCredential)
+      : new WindowsCredentialAcquisition(),
+    openExternal: async (url) => {
+      await shell.openExternal(url);
+    },
   });
   await controller.initialize();
 

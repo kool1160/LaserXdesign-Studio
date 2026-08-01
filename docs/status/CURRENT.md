@@ -19,7 +19,7 @@ Before implementation, read:
 2. `docs/OPERATOR_PROTOCOL.md`
 3. `docs/status/CURRENT.md`
 4. `docs/milestones/M10-ai-generation.md`
-5. `docs/decisions/0017-openai-first-provider-neutral-ai.md`
+5. `docs/decisions/0017-user-owned-ai-provider-credentials.md`
 6. `docs/ARCHITECTURE.md`
 7. `docs/CUTABILITY_RULES.md`
 8. `docs/FILE_FORMATS.md`
