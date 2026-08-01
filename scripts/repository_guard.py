@@ -26,6 +26,9 @@ REQUIRED_FILES = (
     "docs/milestones/M00-foundation.md",
     "docs/milestones/M01-desktop-shell.md",
     "docs/milestones/M13-windows-installer-beta-hardening.md",
+    "docs/milestones/M14-beta-validation-v1-release.md",
+    "docs/milestones/M15-machine-platform-foundation.md",
+    "docs/milestones/M16-first-controller-vertical-slice.md",
     "docs/decisions/0016-secure-svg-dxf-interchange.md",
     "docs/decisions/0019-secure-replaceable-raster-tracing.md",
     "docs/decisions/0020-deterministic-cutability-and-bridge-proposals.md",
@@ -93,6 +96,9 @@ EXPECTED_MILESTONES = tuple(
         "M11-ui-branding-polish.md",
         "M12-layered-production.md",
         "M13-windows-installer-beta-hardening.md",
+        "M14-beta-validation-v1-release.md",
+        "M15-machine-platform-foundation.md",
+        "M16-first-controller-vertical-slice.md",
     )
 )
 
@@ -134,15 +140,45 @@ def check_required(errors: list[str]) -> None:
 
 def check_instruction_links(errors: list[str]) -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    required_terms = (
+    compatibility = (ROOT / "agent.md").read_text(encoding="utf-8")
+    milestone_index = (ROOT / "docs" / "MILESTONES.md").read_text(encoding="utf-8")
+    m13 = (
+        ROOT / "docs" / "milestones" / "M13-windows-installer-beta-hardening.md"
+    ).read_text(encoding="utf-8")
+
+    required_agent_terms = (
         "docs/status/CURRENT.md",
         "docs/milestones/",
         "canonical stored length unit: millimeters",
         "Native DWG editing is explicitly out of scope",
+        "packages/production-export/",
+        "Prompt text, reference media, concept alternatives",
+        "M11 - UI, branding, and product polish.",
+        "M14 - Beta validation and Version 1.0 release.",
+        "M15 - Simulator-first machine platform foundation.",
+        "M16 - First explicitly approved LaserX controller vertical slice.",
     )
-    for term in required_terms:
+    for term in required_agent_terms:
         if term not in agents:
             errors.append(f"AGENTS.md is missing required contract text: {term}")
+
+    if "AGENTS.md" not in compatibility or "authoritative agent contract" not in compatibility:
+        errors.append("agent.md must remain a compatibility pointer to authoritative AGENTS.md")
+
+    required_roadmap_terms = (
+        "| M11 | UI, branding, and product polish |",
+        "| M12 | Layered production |",
+        "| M13 | Windows installer and beta hardening |",
+        "| M14 | Beta validation and Version 1.0 release |",
+        "| M15 | Machine platform foundation |",
+        "| M16 | First LaserX controller vertical slice |",
+    )
+    for term in required_roadmap_terms:
+        if term not in milestone_index:
+            errors.append(f"docs/MILESTONES.md is missing required roadmap row: {term}")
+
+    if "Status advances to M14" not in m13:
+        errors.append("M13 must advance to M14 rather than stopping at maintenance/planning")
 
 
 def check_secrets(errors: list[str]) -> None:

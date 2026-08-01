@@ -17,6 +17,9 @@ Milestones are large, testable delivery gates. The active milestone is controlle
 | M10 | AI generation | Prompt/image concepts converted to editable validated designs |
 | M11 | UI, branding, and product polish | Website-aligned identity, clearer workflows, accessibility, and commercial desktop finish |
 | M12 | Layered production | Explicit manufacturing-layer separation, assembly preview, and organized export packages |
-| M13 | Windows installer and beta hardening | Signed installer, shortcuts, clean uninstall, versioned releases, recovery, performance, and release gates |
+| M13 | Windows installer and beta hardening | Signed installer, shortcuts, clean uninstall, versioned beta releases, recovery, performance, and release gates |
+| M14 | Beta validation and Version 1.0 release | Real-job beta validation, release-defect closure, final documentation, and signed Version 1.0 publication |
+| M15 | Machine platform foundation | Simulator-first machine profiles, privileged host, deterministic job plans, safety states, and future controller boundaries |
+| M16 | First LaserX controller vertical slice | One explicitly approved controller, machine, and process validated through dry run, hardware-in-the-loop safety tests, and one supervised job |
 
 Detailed scope and exit criteria live in `docs/milestones/Mxx-*.md`.
