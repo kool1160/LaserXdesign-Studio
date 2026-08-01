@@ -15,7 +15,8 @@ Milestones are large, testable delivery gates. The active milestone is controlle
 | M08 | Cutability | Detect islands and bad geometry, add bridges, preview retained metal |
 | M09 | Sign tools | Borders, holes, backing plates, templates, arcs, and sign helpers |
 | M10 | AI generation | Prompt/image concepts converted to editable validated designs |
-| M11 | Layered production | Layer separation, assembly preview, and organized export packages |
-| M12 | Beta hardening | Installer, performance targets, accessibility, recovery, and release gates |
+| M11 | UI, branding, and product polish | Website-aligned identity, clearer workflows, accessibility, and commercial desktop finish |
+| M12 | Layered production | Explicit manufacturing-layer separation, assembly preview, and organized export packages |
+| M13 | Windows installer and beta hardening | Signed installer, shortcuts, clean uninstall, versioned releases, recovery, performance, and release gates |
 
 Detailed scope and exit criteria live in `docs/milestones/Mxx-*.md`.
