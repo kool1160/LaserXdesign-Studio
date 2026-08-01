@@ -6,6 +6,7 @@ import {
   applyAffineTransform,
   composeAffineTransforms,
   invertAffineTransform,
+  maximumAffineStretch,
   pointInPolygon,
   pointInCompoundPolygonEvenOdd,
   pointInCompoundPolygonUnionEvenOdd,
@@ -88,6 +89,37 @@ describe("affine transforms", () => {
         fMm: 0,
       }),
     ).toThrow("invertible");
+  });
+
+  it("measures the exact maximum affine stretch without overflow", () => {
+    expect(maximumAffineStretch(IDENTITY_AFFINE_TRANSFORM)).toBe(1);
+    expect(maximumAffineStretch(
+      rotationTransformAt(37, { xMm: 4, yMm: 8 }),
+    )).toBeCloseTo(1, 12);
+    expect(maximumAffineStretch({
+      a: 3,
+      b: 0,
+      c: 0,
+      d: 4,
+      eMm: 10,
+      fMm: -20,
+    })).toBe(4);
+    expect(maximumAffineStretch({
+      a: 1,
+      b: 0,
+      c: 2,
+      d: 1,
+      eMm: 0,
+      fMm: 0,
+    })).toBeCloseTo(1 + Math.SQRT2, 12);
+    expect(() => maximumAffineStretch({
+      a: Number.MAX_VALUE,
+      b: Number.MAX_VALUE,
+      c: Number.MAX_VALUE,
+      d: -Number.MAX_VALUE,
+      eMm: 0,
+      fMm: 0,
+    })).toThrow("too large");
   });
 
   it("tests polygon interiors without treating the full bounds as filled", () => {

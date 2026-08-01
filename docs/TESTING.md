@@ -244,9 +244,12 @@ controller and worker enforce the separately documented 30-second safeguards; se
 - pure cutability tests cover all twelve rule codes, geometry-derived nested
   retained/drop-out depth, conservative ambiguity for open, degenerate,
   duplicate/overlapping, self-intersecting, and mutually intersecting geometry,
-  explicit measured/limit evidence, exact cache invalidation, ellipse
-  flattening without adjacent-segment false positives, and a 400-contour gross
-  performance regression boundary;
+  explicit measured/limit evidence, exact cache invalidation, and complete-
+  transform world-space flattening for cubic paths and ellipses under large
+  uniform scale, nonuniform scale, shear, and nested transforms. A transformed-
+  ellipse intersection regression proves local-space flattening cannot hide a
+  topology conflict, while the adjacent-segment false-positive guard and a
+  400-contour gross performance boundary remain covered;
 - `fixtures/cutability/m08-rule-goldens.json` pins nested classification,
   open-contour ambiguity, a safe single-contour false-positive guard, and
   narrow/close geometry against repository-owned millimeter coordinates;

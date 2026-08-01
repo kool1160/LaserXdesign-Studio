@@ -177,6 +177,34 @@ export function applyAffineTransform(
   };
 }
 
+export function maximumAffineStretch(transform: AffineTransformMm): number {
+  const scale = Math.max(
+    Math.abs(transform.a),
+    Math.abs(transform.b),
+    Math.abs(transform.c),
+    Math.abs(transform.d),
+  );
+  if (scale === 0) {
+    return 0;
+  }
+  const a = transform.a / scale;
+  const b = transform.b / scale;
+  const c = transform.c / scale;
+  const d = transform.d / scale;
+  const squaredFrobenius = a * a + b * b + c * c + d * d;
+  const determinant = a * d - b * c;
+  const discriminant = Math.max(
+    0,
+    squaredFrobenius * squaredFrobenius - 4 * determinant * determinant,
+  );
+  const stretch =
+    scale * Math.sqrt((squaredFrobenius + Math.sqrt(discriminant)) / 2);
+  if (!Number.isFinite(stretch)) {
+    throw new RangeError("Affine transform is too large to measure safely.");
+  }
+  return stretch;
+}
+
 export function invertAffineTransform(
   transform: AffineTransformMm,
 ): AffineTransformMm {

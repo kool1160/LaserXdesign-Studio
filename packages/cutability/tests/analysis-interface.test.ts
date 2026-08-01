@@ -5,12 +5,23 @@ import {
   type LaserxDocument,
   type PathObject,
 } from "@laserx/domain";
+import {
+  applyAffineTransform,
+  composeAffineTransforms,
+  distancePointToSegment,
+  evaluatePathSegment,
+  type AffineTransformMm,
+  type EditablePathGeometry,
+  type PointMm,
+} from "@laserx/geometry";
 import { describe, expect, it } from "vitest";
 
 import {
+  CUTABILITY_FLATTENING_TOLERANCE_MM,
   CutabilityAnalysisCache,
   analyzeDocumentCutability,
   materializeBridgeProposal,
+  normalizeCutPaths,
   proposeBridge,
 } from "../src/index.js";
 
@@ -18,6 +29,82 @@ const LAYER_ID = "10000000-0000-4000-8000-000000000001";
 const OUTER_ID = "20000000-0000-4000-8000-000000000001";
 const ISLAND_ID = "30000000-0000-4000-8000-000000000001";
 const INNER_DROPOUT_ID = "40000000-0000-4000-8000-000000000001";
+const GROUP_ID = "60000000-0000-4000-8000-000000000001";
+const CURVE: EditablePathGeometry = {
+  closed: false,
+  points: [
+    { xMm: 0, yMm: 0 },
+    { xMm: 100, yMm: 0 },
+  ],
+  handles: [
+    { incoming: null, outgoing: { xMm: 0, yMm: 80 } },
+    { incoming: { xMm: 100, yMm: 80 }, outgoing: null },
+  ],
+};
+
+function distanceToPolyline(
+  point: PointMm,
+  points: readonly PointMm[],
+  closed: boolean,
+): number {
+  const segmentCount = closed ? points.length : points.length - 1;
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < segmentCount; index += 1) {
+    minimum = Math.min(
+      minimum,
+      distancePointToSegment(
+        point,
+        points[index] as PointMm,
+        points[(index + 1) % points.length] as PointMm,
+      ),
+    );
+  }
+  return minimum;
+}
+
+function expectCubicWorldTolerance(
+  transform: AffineTransformMm,
+  flattened: readonly PointMm[],
+): void {
+  const samples = Array.from({ length: 2_001 }, (_unused, index) =>
+    applyAffineTransform(evaluatePathSegment(CURVE, 0, index / 2_000), transform),
+  );
+  const maximumDeviation = Math.max(
+    ...samples.map((point) => distanceToPolyline(point, flattened, false)),
+  );
+  expect(maximumDeviation).toBeLessThanOrEqual(
+    CUTABILITY_FLATTENING_TOLERANCE_MM + 1e-9,
+  );
+}
+
+function expectEllipseWorldTolerance(
+  transform: AffineTransformMm,
+  flattened: readonly PointMm[],
+): void {
+  const center = { xMm: 50, yMm: 30 };
+  const radiusXmm = 30;
+  const radiusYmm = 12;
+  let maximumDeviation = 0;
+  for (let segmentIndex = 0; segmentIndex < flattened.length; segmentIndex += 1) {
+    const start = flattened[segmentIndex] as PointMm;
+    const end = flattened[(segmentIndex + 1) % flattened.length] as PointMm;
+    for (let sampleIndex = 0; sampleIndex <= 8; sampleIndex += 1) {
+      const ratio = sampleIndex / 8;
+      const angle = ((segmentIndex + ratio) / flattened.length) * Math.PI * 2;
+      const point = applyAffineTransform({
+        xMm: center.xMm + Math.cos(angle) * radiusXmm,
+        yMm: center.yMm + Math.sin(angle) * radiusYmm,
+      }, transform);
+      maximumDeviation = Math.max(
+        maximumDeviation,
+        distancePointToSegment(point, start, end),
+      );
+    }
+  }
+  expect(maximumDeviation).toBeLessThanOrEqual(
+    CUTABILITY_FLATTENING_TOLERANCE_MM + 1e-9,
+  );
+}
 
 function rectangle(
   id: string,
@@ -124,6 +211,107 @@ describe("cutability analysis", () => {
 
     expect(codes).not.toContain("FEATURE_TOO_NARROW");
     expect(codes).not.toContain("KERF_COLLAPSE_RISK");
+  });
+
+  it.each([
+    {
+      name: "large uniform scale",
+      child: { a: 25, b: 0, c: 0, d: 25, eMm: 10, fMm: -20 },
+    },
+    {
+      name: "nonuniform scale",
+      child: { a: 40, b: 0, c: 0, d: 3, eMm: -15, fMm: 25 },
+    },
+    {
+      name: "shear",
+      child: { a: 1, b: 0.5, c: 18, d: 1, eMm: 5, fMm: 7 },
+    },
+    {
+      name: "nested group transforms",
+      parent: { a: 3, b: 1, c: 0.5, d: 2, eMm: 11, fMm: -9 },
+      child: { a: 4, b: 0, c: 1, d: 5, eMm: 2, fMm: 6 },
+    },
+  ] as Array<{
+    name: string;
+    child: AffineTransformMm;
+    parent?: AffineTransformMm;
+  }>)("keeps cubic and ellipse analysis deviation in world millimeters under $name", ({ child, parent }) => {
+    const path: DocumentObject = {
+      id: OUTER_ID,
+      type: "path",
+      layerId: LAYER_ID,
+      transform: child,
+      ...CURVE,
+    };
+    const ellipse: DocumentObject = {
+      id: ISLAND_ID,
+      type: "ellipse",
+      layerId: LAYER_ID,
+      transform: child,
+      center: { xMm: 50, yMm: 30 },
+      radiusXmm: 30,
+      radiusYmm: 12,
+    };
+    const objects: DocumentObject[] = parent === undefined
+      ? [path, ellipse]
+      : [{
+          id: GROUP_ID,
+          type: "group",
+          layerId: LAYER_ID,
+          transform: parent,
+          children: [path, ellipse],
+        }];
+    const normalized = normalizeCutPaths(documentWith(objects));
+    const worldTransform = parent === undefined
+      ? child
+      : composeAffineTransforms(parent, child);
+
+    expectCubicWorldTolerance(
+      worldTransform,
+      normalized.find((candidate) => candidate.objectId === OUTER_ID)?.points ?? [],
+    );
+    expectEllipseWorldTolerance(
+      worldTransform,
+      normalized.find((candidate) => candidate.objectId === ISLAND_ID)?.points ?? [],
+    );
+  });
+
+  it("detects an intersection hidden by local-space ellipse flattening", () => {
+    const scale = 25;
+    const radiusMm = 30 * scale;
+    const oldLocalSegmentCount = 122;
+    const angle = Math.PI / oldLocalSegmentCount;
+    const radialPoint = (radius: number): PointMm => ({
+      xMm: Math.cos(angle) * radius,
+      yMm: Math.sin(angle) * radius,
+    });
+    const lineId = "70000000-0000-4000-8000-000000000001";
+    const analysis = analyzeDocumentCutability(documentWith([
+      {
+        id: OUTER_ID,
+        type: "ellipse",
+        layerId: LAYER_ID,
+        transform: { a: scale, b: 0, c: 0, d: scale, eMm: 0, fMm: 0 },
+        center: { xMm: 0, yMm: 0 },
+        radiusXmm: 30,
+        radiusYmm: 30,
+      },
+      {
+        id: lineId,
+        type: "line",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        start: radialPoint(radiusMm - 0.05),
+        end: radialPoint(radiusMm + 0.05),
+      },
+    ]));
+
+    expect(analysis.issues.some(
+      (issue) =>
+        issue.code === "UNSUPPORTED_GEOMETRY" &&
+        issue.objectIds.includes(OUTER_ID) &&
+        issue.objectIds.includes(lineId),
+    )).toBe(true);
   });
 
   it("detects duplicates, overlaps, self intersections, narrow features, gaps, and kerf risk", () => {

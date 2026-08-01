@@ -13,9 +13,11 @@ import {
   composeAffineTransforms,
   findPathSelfIntersections,
   flattenEditablePath,
+  maximumAffineStretch,
   pointInPolygon,
   type AffineTransformMm,
   type BoundsMm,
+  type EditablePathGeometry,
   type PointMm,
 } from "@laserx/geometry";
 
@@ -136,22 +138,55 @@ function ellipsePoints(
   center: PointMm,
   radiusXmm: number,
   radiusYmm: number,
+  transform: AffineTransformMm,
 ): PointMm[] {
   const maximumRadiusMm = Math.max(radiusXmm, radiusYmm);
+  const maximumStretch = maximumAffineStretch(transform);
+  const localToleranceMm = maximumStretch === 0
+    ? CUTABILITY_FLATTENING_TOLERANCE_MM
+    : CUTABILITY_FLATTENING_TOLERANCE_MM / maximumStretch;
   const maximumSegmentAngle = 2 * Math.acos(
-    Math.max(-1, 1 - CUTABILITY_FLATTENING_TOLERANCE_MM / maximumRadiusMm),
+    Math.max(-1, 1 - localToleranceMm / maximumRadiusMm),
   );
-  const count = Math.max(
-    24,
-    Math.min(2_048, Math.ceil((Math.PI * 2) / maximumSegmentAngle)),
-  );
-  return Array.from({ length: count }, (_, index) => {
-    const angle = (index / count) * Math.PI * 2;
+  const requiredCount = maximumSegmentAngle > 0
+    ? Math.max(24, Math.ceil((Math.PI * 2) / maximumSegmentAngle))
+    : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(requiredCount) || requiredCount > MAX_CUTABILITY_SEGMENTS) {
+    throw new RangeError(
+      `Manufacturing analysis supports at most ${String(MAX_CUTABILITY_SEGMENTS)} flattened segments per run. Simplify or analyze a smaller selection.`,
+    );
+  }
+  return transformPoints(Array.from({ length: requiredCount }, (_, index) => {
+    const angle = (index / requiredCount) * Math.PI * 2;
     return {
       xMm: center.xMm + Math.cos(angle) * radiusXmm,
       yMm: center.yMm + Math.sin(angle) * radiusYmm,
     };
-  });
+  }), transform);
+}
+
+function transformPathForWorldFlattening(
+  object: PathObject,
+  transform: AffineTransformMm,
+): EditablePathGeometry {
+  return {
+    closed: object.closed,
+    points: transformPoints(object.points, transform),
+    ...(object.handles === undefined
+      ? {}
+      : {
+          handles: object.handles.map((handles) => ({
+            incoming:
+              handles.incoming === null
+                ? null
+                : applyAffineTransform(handles.incoming, transform),
+            outgoing:
+              handles.outgoing === null
+                ? null
+                : applyAffineTransform(handles.outgoing, transform),
+          })),
+        }),
+  };
 }
 
 function collectObjectPaths(
@@ -196,8 +231,10 @@ function collectObjectPaths(
         ...base,
         id: `${object.id}:0`,
         closed: true,
-        points: transformPoints(
-          ellipsePoints(object.center, object.radiusXmm, object.radiusYmm),
+        points: ellipsePoints(
+          object.center,
+          object.radiusXmm,
+          object.radiusYmm,
           transform,
         ),
       }];
@@ -206,9 +243,9 @@ function collectObjectPaths(
         ...base,
         id: `${object.id}:0`,
         closed: object.closed,
-        points: transformPoints(
-          flattenEditablePath(object, CUTABILITY_FLATTENING_TOLERANCE_MM),
-          transform,
+        points: flattenEditablePath(
+          transformPathForWorldFlattening(object, transform),
+          CUTABILITY_FLATTENING_TOLERANCE_MM,
         ),
       }];
     case "text":

@@ -108,8 +108,9 @@ vertical slice while M08 remains the active gate:
 - schema v6 persists transparent preset-derived manufacturing settings and
   migrates schema v1 through v5 deterministically;
 - the pure world-millimeter rule engine reports all twelve required issue
-  classes with measured/configured evidence and conservatively marks invalid
-  topology ambiguous;
+  classes with measured/configured evidence, flattens transformed cubic paths
+  and ellipses within the 0.01 mm world-space tolerance, and conservatively
+  marks invalid topology ambiguous;
 - geometry-derived containment classifies retained islands and enclosed
   drop-outs without character-name rules;
 - exact cache keys, document-command invalidation, worker cancellation, and
@@ -125,7 +126,7 @@ vertical slice while M08 remains the active gate:
   scenarios provide executable evidence.
 
 Local `pnpm verify`, `pnpm audit --prod`, Repository Guard, and
-`git diff --check` pass. The suite records 213 unit/integration tests and 22
+`git diff --check` pass. The suite records 219 unit/integration tests and 22
 packaged Windows Electron scenarios.
 
 This candidate is not a merge or milestone advancement. Issue #9 stays open,
