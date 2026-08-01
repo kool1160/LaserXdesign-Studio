@@ -169,44 +169,6 @@ function validatedRasterPreview(
   return { ...encoded };
 }
 
-function combineLayerAnalyses(
-  operationId: string,
-  analyses: readonly CutabilityAnalysisSummary[],
-): CutabilityAnalysisSummary {
-  const first = analyses[0];
-  if (first === undefined) {
-    throw new RangeError("Layered manufacturing analysis requires at least one result.");
-  }
-  const issues = analyses.flatMap((analysis) => analysis.issues);
-  const smallestSegments = analyses
-    .map((analysis) => analysis.smallestSegmentMm)
-    .filter((value): value is number => value !== null);
-  return {
-    operationId,
-    status: analyses.some((analysis) => analysis.status === "ambiguous")
-      ? "ambiguous"
-      : "complete",
-    documentFingerprint: first.documentFingerprint,
-    analyzedObjectIds: analyses.flatMap((analysis) => analysis.analyzedObjectIds),
-    settings: structuredClone(first.settings),
-    pathCount: analyses.reduce((sum, analysis) => sum + analysis.pathCount, 0),
-    closedPathCount: analyses.reduce((sum, analysis) => sum + analysis.closedPathCount, 0),
-    openPathCount: analyses.reduce((sum, analysis) => sum + analysis.openPathCount, 0),
-    segmentCount: analyses.reduce((sum, analysis) => sum + analysis.segmentCount, 0),
-    smallestSegmentMm:
-      smallestSegments.length === 0 ? null : Math.min(...smallestSegments),
-    issueCount: issues.length,
-    errorCount: issues.filter((issue) => issue.severity === "error").length,
-    warningCount: issues.filter((issue) => issue.severity === "warning").length,
-    issues: structuredClone(issues),
-    regions: structuredClone(analyses.flatMap((analysis) => analysis.regions)),
-    previewAssumption:
-      "Each selected layer is analyzed independently under the standard retained-stock assumption; layers may represent separate material pieces.",
-    disclaimer: first.disclaimer,
-    cutReady: false,
-  };
-}
-
 export class DesktopController {
   readonly #session = new ProjectSession({
     createId: () => randomUUID(),
@@ -627,7 +589,7 @@ export class DesktopController {
       const objectIds = preview.objects.map((object) => object.id);
       this.#session.acceptSignToolPreview();
       this.#invalidateCutability();
-      await this.#analyzeCutabilityByLayer(randomUUID(), objectIds);
+      await this.#analyzeCutability(randomUUID(), objectIds);
     });
   }
 
@@ -741,7 +703,7 @@ export class DesktopController {
     objectIds: readonly string[],
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      await this.#analyzeCutabilityByLayer(operationId, objectIds);
+      await this.#analyzeCutability(operationId, objectIds);
     });
   }
 
@@ -1249,38 +1211,6 @@ export class DesktopController {
       this.#clearCutabilityJob(operationId);
       this.#emit();
     }
-  }
-
-  async #analyzeCutabilityByLayer(
-    operationId: string,
-    objectIds: readonly string[],
-  ): Promise<void> {
-    const document = this.#session.state.project.document;
-    const requested = new Set(objectIds);
-    const scoped = objectIds.length === 0
-      ? document.objects.filter((object) =>
-          document.layers.some((layer) => layer.id === object.layerId && layer.visible),
-        )
-      : document.objects.filter((object) => requested.has(object.id));
-    const byLayer = new Map<string, string[]>();
-    for (const object of scoped) {
-      const ids = byLayer.get(object.layerId);
-      if (ids === undefined) byLayer.set(object.layerId, [object.id]);
-      else ids.push(object.id);
-    }
-    if (byLayer.size <= 1) {
-      await this.#analyzeCutability(operationId, objectIds);
-      return;
-    }
-    const analyses: CutabilityAnalysisSummary[] = [];
-    for (const ids of byLayer.values()) {
-      const analysis = await this.#analyzeCutability(randomUUID(), ids);
-      if (analysis === null) return;
-      analyses.push(analysis);
-    }
-    this.#cutabilityAnalysis = combineLayerAnalyses(operationId, analyses);
-    this.#focusedCutabilityIssueId = this.#cutabilityAnalysis.issues[0]?.id ?? null;
-    this.#bridgeProposal = null;
   }
 
   async #run(action: () => void | Promise<void>): Promise<CommandResult> {

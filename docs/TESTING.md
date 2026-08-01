@@ -294,10 +294,15 @@ the conservative analysis into a manufacturability guarantee.
 - strict IPC and desktop integration tests keep renderer requests limited to
   bounded parameters, keep font paths/contours/IDs out of requests, and run
   accepted IDs through the real M08 worker before returning the final state;
+- cross-layer regressions prove duplicate, overlapping, intersecting,
+  too-close, and nested contours remain in one standard M08 scope. A two-layer
+  two-island coordination case proves globally unique issue IDs, exact focus
+  selection, targeted bridge preview/acceptance, and cache invalidation;
 - three packaged Windows scenarios build the reviewed 24-inch badge, address,
   and layered family-name signs, inspect the noninteractive preview, accept and
-  analyze ordinary objects, export SVG, persist schema v7, save/reopen the
-  representative user template, and undo generation exactly;
+  analyze ordinary objects, explicitly scope the family-name detail objects
+  before returning to whole-design analysis, export SVG, persist schema v7,
+  save/reopen the representative user template, and undo generation exactly;
 - `pnpm audit:templates` checks the machine-readable asset manifest against
   runtime presets, the bundled-font catalog, SPDX identity, and repository
   license texts.

@@ -82,6 +82,42 @@ for (const fixture of cases) {
         ["line", "rectangle", "ellipse", "path", "text", "group"].includes(object.type),
       )).toBe(true);
 
+      if (fixture.model === "family-name") {
+        const detailLayer = accepted.project.document.layers.find(
+          (layer) => layer.name === "Sign Detail",
+        );
+        if (detailLayer === undefined) throw new Error("Expected the sign detail layer.");
+        const detailObjectIds = accepted.project.document.objects
+          .filter((object) => object.layerId === detailLayer.id)
+          .map((object) => object.id)
+          .sort();
+        const scoped = await page.evaluate(async (objectIds) =>
+          window.laserx.runCutabilityAnalysis({
+            operationId: window.crypto.randomUUID(),
+            objectIds,
+          }), detailObjectIds);
+        expect(scoped.ok).toBe(true);
+        expect(scoped.state.analysis.cutability?.analyzedObjectIds).toEqual(
+          detailObjectIds,
+        );
+        await expect(page.getByTestId("cutability-scope")).toContainText(
+          `${String(detailObjectIds.length)} object(s)`,
+        );
+
+        const wholeDesign = await page.evaluate(async () =>
+          window.laserx.runCutabilityAnalysis({
+            operationId: window.crypto.randomUUID(),
+            objectIds: [],
+          }));
+        expect(wholeDesign.ok).toBe(true);
+        expect(wholeDesign.state.analysis.cutability).toMatchObject({
+          status: "complete",
+          analyzedObjectIds: accepted.project.document.objects
+            .map((object) => object.id)
+            .sort(),
+        });
+      }
+
       await page.getByTestId("export-svg").click();
       await expect(page.getByTestId("export-summary")).toContainText(
         "as SVG in millimeters",

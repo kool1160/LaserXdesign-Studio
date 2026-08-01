@@ -90,6 +90,8 @@ ephemeral, rejection is non-mutating, and acceptance imports ordinary editable
 objects as one undoable command.
 
 Saved templates persist version-1 parameter intent in schema v7 rather than
-generated geometry. Each accepted material layer runs independently through
-the standard M08 cutability worker, while SVG/DXF export continues to flatten
+generated geometry. Acceptance and Analyze all send one complete geometry
+scope through the standard M08 worker; ordinary layer membership never implies
+a separate physical sheet. Analyze selection is the explicit scoped workflow
+and reports its exact analyzed object IDs. SVG/DXF export continues to flatten
 the same ordinary document objects.

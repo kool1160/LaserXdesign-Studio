@@ -116,20 +116,18 @@ describe("reviewed M09 representative sign goldens", () => {
       const bounds = getSelectionBounds(accepted, candidate.objects.map((object) => object.id));
       if (bounds === null) throw new Error("Representative sign bounds are missing.");
       expect(bounds.maxXmm - bounds.minXmm).toBeCloseTo(609.6, 6);
-      const analyses = candidate.layers.map((layer) => analyzeDocumentCutability(
+      const analysis = analyzeDocumentCutability(
         accepted,
-        candidate.objects
-          .filter((object) => object.layerId === layer.id)
-          .map((object) => object.id),
-      ));
+        candidate.objects.map((object) => object.id),
+      );
       expect(
-        analyses.map((analysis) => analysis.status),
-        JSON.stringify(analyses.flatMap((analysis) => analysis.issues).map((issue) => ({
+        analysis.status,
+        JSON.stringify(analysis.issues.map((issue) => ({
           code: issue.code,
           objectId: issue.objectId,
           message: issue.message,
         }))),
-      ).toEqual(["complete", "complete", "complete"]);
+      ).toBe("complete");
       expect(candidate.summary.provenanceIds.length).toBeGreaterThanOrEqual(2);
     }, 15_000);
   }

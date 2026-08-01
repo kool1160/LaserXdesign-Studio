@@ -26,6 +26,7 @@ import {
 } from "../src/index.js";
 
 const LAYER_ID = "10000000-0000-4000-8000-000000000001";
+const SECOND_LAYER_ID = "10000000-0000-4000-8000-000000000002";
 const OUTER_ID = "20000000-0000-4000-8000-000000000001";
 const ISLAND_ID = "30000000-0000-4000-8000-000000000001";
 const INNER_DROPOUT_ID = "40000000-0000-4000-8000-000000000001";
@@ -113,11 +114,12 @@ function rectangle(
   maxXmm: number,
   maxYmm: number,
   closed = true,
+  layerId = LAYER_ID,
 ): PathObject {
   return {
     id,
     type: "path",
-    layerId: LAYER_ID,
+    layerId,
     transform: identityTransform(),
     closed,
     points: [
@@ -127,6 +129,21 @@ function rectangle(
       { xMm: minXmm, yMm: maxYmm },
     ],
   };
+}
+
+function layeredDocumentWith(objects: DocumentObject[]): LaserxDocument {
+  return createDocument({
+    id: "50000000-0000-4000-8000-000000000002",
+    width: 300,
+    height: 180,
+    inputUnit: "millimeters",
+    layers: [
+      { id: LAYER_ID, name: "Artwork", visible: true, locked: false },
+      { id: SECOND_LAYER_ID, name: "Backing", visible: true, locked: false },
+    ],
+    activeLayerId: LAYER_ID,
+    objects,
+  });
 }
 
 function documentWith(objects: DocumentObject[]): LaserxDocument {
@@ -195,6 +212,60 @@ describe("cutability analysis", () => {
     expect(analysis.issues).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "UNSUPPORTED_GEOMETRY" }),
     ]));
+  });
+
+  it("preserves standard cross-layer conflicts, spacing, and containment", () => {
+    const duplicateAnalysis = analyzeDocumentCutability(layeredDocumentWith([
+      rectangle(OUTER_ID, 10, 10, 60, 60),
+      rectangle(ISLAND_ID, 10, 10, 60, 60, true, SECOND_LAYER_ID),
+    ]));
+    expect(duplicateAnalysis.status).toBe("ambiguous");
+    expect(duplicateAnalysis.issues.some(
+      (issue) => issue.code === "DUPLICATE_SEGMENT" && issue.objectIds.includes(OUTER_ID) && issue.objectIds.includes(ISLAND_ID),
+    )).toBe(true);
+
+    const overlapAnalysis = analyzeDocumentCutability(layeredDocumentWith([
+      rectangle(OUTER_ID, 10, 10, 80, 50),
+      rectangle(ISLAND_ID, 40, 10, 100, 30, true, SECOND_LAYER_ID),
+    ]));
+    expect(overlapAnalysis.status).toBe("ambiguous");
+    expect(overlapAnalysis.issues.some(
+      (issue) => issue.code === "OVERLAPPING_SEGMENT" && issue.objectIds.includes(OUTER_ID) && issue.objectIds.includes(ISLAND_ID),
+    )).toBe(true);
+
+    const intersectionAnalysis = analyzeDocumentCutability(layeredDocumentWith([
+      rectangle(OUTER_ID, 10, 10, 60, 60),
+      rectangle(ISLAND_ID, 40, 40, 90, 90, true, SECOND_LAYER_ID),
+    ]));
+    expect(intersectionAnalysis.status).toBe("ambiguous");
+    expect(intersectionAnalysis.issues.some(
+      (issue) => issue.code === "UNSUPPORTED_GEOMETRY" && issue.objectIds.includes(OUTER_ID) && issue.objectIds.includes(ISLAND_ID),
+    )).toBe(true);
+
+    const gapAnalysis = analyzeDocumentCutability(layeredDocumentWith([
+      rectangle(OUTER_ID, 10, 10, 40, 40),
+      rectangle(ISLAND_ID, 40.5, 10, 70.5, 40, true, SECOND_LAYER_ID),
+    ]));
+    expect(gapAnalysis.issues.some(
+      (issue) => issue.code === "GAP_TOO_SMALL" && issue.objectIds.includes(OUTER_ID) && issue.objectIds.includes(ISLAND_ID),
+    )).toBe(true);
+    expect(gapAnalysis.issues.some(
+      (issue) => issue.code === "CONTOURS_TOO_CLOSE" && issue.objectIds.includes(OUTER_ID) && issue.objectIds.includes(ISLAND_ID),
+    )).toBe(true);
+
+    const nestedAnalysis = analyzeDocumentCutability(layeredDocumentWith([
+      rectangle(OUTER_ID, 110, 10, 210, 110),
+      rectangle(ISLAND_ID, 135, 35, 185, 85, true, SECOND_LAYER_ID),
+    ]));
+    expect(nestedAnalysis.status).toBe("complete");
+    expect(nestedAnalysis.regions.find((region) => region.objectId === ISLAND_ID)).toMatchObject({
+      parentRegionId: `${OUTER_ID}:0`,
+      depth: 1,
+      disposition: "retained",
+    });
+    expect(nestedAnalysis.issues.some(
+      (issue) => issue.code === "DISCONNECTED_ISLAND" && issue.objectId === ISLAND_ID,
+    )).toBe(true);
   });
 
   it("does not treat adjacent ellipse flattening segments as a narrow feature", () => {

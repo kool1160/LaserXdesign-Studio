@@ -1193,6 +1193,14 @@ export function App() {
               >
                 Analyze all
               </button>
+              <button
+                type="button"
+                data-testid="run-selection-cutability-analysis"
+                disabled={busy || state.editor.selectionIds.length === 0}
+                onClick={() => void runCutability(state.editor.selectionIds)}
+              >
+                Analyze selection
+              </button>
             </div>
             {state.analysis.job !== null && (
               <div className="analysis-progress" data-testid="cutability-progress">
@@ -1222,6 +1230,9 @@ export function App() {
                 </strong>
                 <span data-testid="cutability-summary">
                   {cutability.errorCount} error(s) · {cutability.warningCount} warning(s) · cut-ready claim: no
+                </span>
+                <span data-testid="cutability-scope">
+                  One standard geometry scope: {cutability.analyzedObjectIds.length} object(s)
                 </span>
                 <label className="toggle-row">
                   <input

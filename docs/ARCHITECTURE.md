@@ -228,6 +228,10 @@ standard cutability worker. Saved template intent enters schema v7 separately
 from generated geometry. Runtime presets and
 `packages/sign-tools/sign-assets.json` must agree under the template asset
 audit. ADR 0021 records the schema, authority, history, and provenance policy.
+Layer membership remains organizational: automatic acceptance and Analyze all
+use one complete M08 geometry scope. Only an explicit object-ID selection may
+narrow analysis, and the published summary retains that exact scope and the
+full document fingerprint.
 
 ## State flow
 

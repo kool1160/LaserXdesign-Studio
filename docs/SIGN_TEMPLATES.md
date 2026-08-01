@@ -50,7 +50,10 @@ in the template.
   objects with materialized contours.
 - Candidate layers and objects are preview-only until acceptance.
 - One acceptance imports the complete result as one undoable command and sends
-  its object IDs through standard cutability analysis.
+  all accepted object IDs through one standard cutability analysis scope.
+- Generated layers organize editing and export; they do not declare separate
+  material pieces. A user may run the distinct Analyze selection workflow with
+  explicit object IDs, then return to Analyze all for whole-design conflicts.
 - Saving, applying, and deleting a user template are ordinary undoable project
   changes. Applying a saved template regenerates fresh object and layer IDs.
 
@@ -67,5 +70,6 @@ change.
 
 Templates do not imply a marketplace, licensed-logo entitlement, nesting,
 mechanical joint design, machine settings, CAM, G-code, DWG, or certified
-manufacturability. Multi-layer signs must be assigned to the intended material
-stack and reviewed before export.
+manufacturability. Multi-layer signs remain one standard geometry scope unless
+the user explicitly analyzes a selection; layer names alone never suppress
+cross-layer topology or spacing conflicts.

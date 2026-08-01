@@ -11,7 +11,7 @@ M09 is now the only active implementation milestone; Issue #10 is the active
 delivery gate.
 
 The M09 implementation candidate is isolated on `feat/m09-sign-tools`, based
-on current `main`. The complete local gate passes with 230 unit/integration
+on current `main`. The repaired complete local gate passes with 232 unit/integration
 tests and 25 packaged Windows E2E scenarios. Keep the candidate on that branch;
 do not merge, close Issue #10, or advance status to M10 before independent
 review and required exact-head Windows CI pass.
@@ -63,11 +63,11 @@ Common signs can be built quickly without drawing every helper feature manually.
   version-1 template parameters persist through strict schema v7 and v6-to-v7
   migration.
 - [x] Main-owned font layout and generation accept only strict renderer
-  parameters, and accepted material layers run independently through the
-  standard M08 cutability worker.
+  parameters. Acceptance and Analyze all run one standard whole-design M08
+  scope; only explicit selected object IDs narrow analysis.
 - [x] Representative packaged 24-inch badge, address, and family-name flows
   validate, export, persist/reopen a user template, and undo exactly.
-- [ ] Draft PR review and exact-head Windows CI are still required.
+- [ ] PR #25 requires exact-head re-review and Windows CI on the repair.
 
 ## Allowed M09 work
 

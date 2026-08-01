@@ -23,7 +23,10 @@ The application session owns the candidate, fresh IDs, and an exact project
 fingerprint. Preview is non-mutating and noninteractive. Acceptance rejects a
 stale fingerprint and dispatches one `objects.import` command for every
 candidate layer and object. The controller then runs the accepted object IDs
-through the standard M08 cutability worker. Rejecting a candidate changes no
+through one standard M08 cutability worker scope. Ordinary layers remain
+editing/export organization and never imply separate material pieces. Analyze
+selection is a distinct explicit object-ID scope; its summary retains the full
+document fingerprint and exact analyzed IDs. Rejecting a candidate changes no
 project or history state.
 
 Project schema v7 adds `document.templates`. A saved template is a strict,
@@ -64,6 +67,8 @@ authority boundary.
 Template schema changes require an explicit `templateVersion` migration. A
 style preset selects its audited font and shape; user text and exact dimensions
 remain editable parameters. Multi-layer results must be reviewed per intended
-material stack, and cutability output remains advisory with `cutReady: false`.
+material stack. Standard analysis still compares topology and spacing across
+all visible ordinary layers, and cutability output remains advisory with
+`cutReady: false`.
 M09 adds no nesting, full mechanical joints, CAM, G-code, DWG, machine control,
 or AI generation.
