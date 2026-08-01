@@ -357,22 +357,26 @@ secret or prompt content.
 ## M12 executable layers
 
 - domain/application tests cover optional manufacturing metadata, explicit
-  same-layer top-level registration IDs, fail-closed ambiguous/stale
-  references, one-command layer alignment, non-destructive one-transaction
-  registration-hole synchronization, exact undo/redo, and fresh-ID
-  materialization while multiple decorative ellipses remain unchanged;
+  same-layer top-level registration IDs, transformed world-circle recognition,
+  fail-closed oval/skew/non-uniform and ambiguous/stale references, one-command
+  layer alignment, non-destructive one-transaction registration-hole
+  synchronization, exact undo/redo, and fresh-ID materialization while
+  multiple decorative ellipses remain unchanged;
 - project-format tests prove strict schema-v8 round trips, persistence of
   registration identity, safe normalization of early schema-v8 metadata, safe
-  rejection of duplicate/stale/nested/non-ellipse/cross-layer references, and
-  deterministic v7-to-v8 migration without silently classifying any legacy
-  layer;
+  rejection of duplicate/stale/nested/non-ellipse/cross-layer references and
+  invalid transformed ellipses, save/reopen retention of valid transformed
+  circles, and deterministic v7-to-v8 migration without silently classifying
+  any legacy layer;
 - `fixtures/production/m12-package-goldens.json` independently pins two- and
   three-layer filenames, roles, shared millimeter origin/stock, and registration
   coordinates;
 - production-export tests inspect deterministic SVG/DXF text, full-stock SVG
   viewBoxes, document order, bounds, SHA-256/byte manifest records, designated-
-  only registration evidence amid multiple decorative ellipses, and complete
-  exclusion of non-cut preview layers;
+  only registration evidence amid multiple decorative ellipses, exact centers
+  and diameters for rotated/uniformly scaled circles, diameter-mismatch
+  warnings, rejection of same-minor/different-major ovals and distorted
+  transforms, and complete exclusion of non-cut preview layers;
 - storage tests prove complete folder commit, fail-closed conflicts, explicit
   replacement, rollback-safe staging, and partial-file failure reporting with
   no published success folder;
@@ -382,12 +386,13 @@ secret or prompt content.
   replay bridge analysis from whole, mapped-selection, and authoritative-layer
   scopes, export two real layers, and parse the actual manifest;
 - the packaged Windows scenario constructs face/backing/non-cut layers with
-  multiple decorative ellipses, coordinates only designated holes, proves
-  unrelated target geometry plus exact undo/redo and save/reopen identity,
-  drives Analyze all, Analyze selection, and Analyze this physical layer from
-  the renderer with distinct truthful labels and exact analyzed IDs, inspects
-  designated-only manifest evidence and exact-scale SVGs, and proves conflict
-  and replacement behavior;
+  multiple decorative ellipses, disables designation for an oval, designates a
+  rotated true circle, coordinates only designated holes, proves unrelated
+  target geometry plus exact undo/redo and save/reopen identity, drives Analyze
+  all, Analyze selection, and Analyze this physical layer from the renderer
+  with distinct truthful labels and exact analyzed IDs, inspects designated-
+  only manifest evidence and exact-scale SVGs, and proves conflict and
+  replacement behavior;
 - `pnpm audit:production` enforces explicit physical scope, preview exclusion,
   atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
 

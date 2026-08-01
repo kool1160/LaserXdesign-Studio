@@ -455,7 +455,7 @@ describe("schema version 8", () => {
       id: registrationHoleId,
       type: "ellipse",
       layerId: ARTWORK_LAYER,
-      transform: identityTransform(),
+      transform: { a: 0, b: 2, c: -2, d: 0, eMm: 5, fMm: -2 },
       center: { xMm: 80, yMm: 50 },
       radiusXmm: 3,
       radiusYmm: 3,
@@ -558,6 +558,28 @@ describe("schema version 8", () => {
     });
     metadata.registrationHoleIds = ["a23e4567-e89b-42d3-a456-426614174092"];
     expectProjectError(() => serializeProject(crossLayer), "INVALID_PROJECT");
+
+    for (const mutate of [
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.radiusXmm = 4;
+      },
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.transform = { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 };
+      },
+      (object: Extract<typeof project.document.objects[number], { type: "ellipse" }>) => {
+        object.transform = { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 };
+      },
+    ]) {
+      const invalid = structuredClone(project);
+      const object = invalid.document.objects.find(
+        (candidate) => candidate.id === registrationHoleId,
+      );
+      if (object?.type !== "ellipse") {
+        throw new Error("Expected registration circle geometry.");
+      }
+      mutate(object);
+      expectProjectError(() => serializeProject(invalid), "INVALID_PROJECT");
+    }
   });
 
   it("round trips a versioned saved sign template and migrates schema v6 with an empty library", () => {

@@ -31,10 +31,37 @@ test("layered sign analysis, registration, persistence, and production package",
       state = await window.laserx.getState();
       const faceHoleId = state.editor.selectionIds[0] as string;
       await window.laserx.editorAction({
+        type: "objects.set-bounds",
+        objectIds: [faceHoleId],
+        widthMm: 6,
+        heightMm: 6,
+        lockAspectRatio: false,
+      });
+      await window.laserx.editorAction({
         type: "objects.move",
         objectIds: [faceHoleId],
         deltaXmm: -120,
         deltaYmm: -40,
+      });
+      state = await window.laserx.getState();
+      const faceHole = state.project.document.objects.find(
+        (object) => object.id === faceHoleId,
+      );
+      if (faceHole?.type !== "ellipse") throw new Error("Expected a face circle.");
+      await window.laserx.editorAction({
+        type: "objects.rotate",
+        objectIds: [faceHoleId],
+        angleDeg: 37,
+        pivot: {
+          xMm:
+            faceHole.transform.a * faceHole.center.xMm +
+            faceHole.transform.c * faceHole.center.yMm +
+            faceHole.transform.eMm,
+          yMm:
+            faceHole.transform.b * faceHole.center.xMm +
+            faceHole.transform.d * faceHole.center.yMm +
+            faceHole.transform.fMm,
+        },
       });
       await window.laserx.editorAction({
         type: "layer.set-manufacturing",
@@ -62,6 +89,13 @@ test("layered sign analysis, registration, persistence, and production package",
       await window.laserx.editorAction({ type: "object.create", objectType: "ellipse" });
       state = await window.laserx.getState();
       const originalBackingHoleId = state.editor.selectionIds[0] as string;
+      await window.laserx.editorAction({
+        type: "objects.set-bounds",
+        objectIds: [originalBackingHoleId],
+        widthMm: 10,
+        heightMm: 10,
+        lockAspectRatio: false,
+      });
       await window.laserx.editorAction({
         type: "layer.set-manufacturing",
         layerId: backingId,
@@ -134,12 +168,12 @@ test("layered sign analysis, registration, persistence, and production package",
     ]));
     expect(layerIds.backingObjectIds).not.toContain(layerIds.originalBackingHoleId);
 
-    await page.evaluate(async ({ faceId, backingId, previewId, faceHoleId }) => {
+    await page.evaluate(async ({ faceId, backingId, previewId, ovalId }) => {
       const state = await window.laserx.getState();
-      const hole = state.project.document.objects.find(
-        (object) => object.id === faceHoleId && object.type === "ellipse",
+      const oval = state.project.document.objects.find(
+        (object) => object.id === ovalId,
       );
-      if (hole?.type !== "ellipse") throw new Error("Expected the designated face hole.");
+      if (oval?.type !== "ellipse") throw new Error("Expected a decorative oval.");
       await window.laserx.editorAction({ type: "layer.activate", layerId: faceId });
       await window.laserx.editorAction({
         type: "layer.set-visibility",
@@ -154,16 +188,52 @@ test("layered sign analysis, registration, persistence, and production package",
       await window.laserx.editorAction({
         type: "selection.point",
         point: {
-          xMm: hole.center.xMm + hole.transform.eMm,
-          yMm: hole.center.yMm + hole.transform.fMm,
+          xMm:
+            oval.transform.a * oval.center.xMm +
+            oval.transform.c * oval.center.yMm +
+            oval.transform.eMm,
+          yMm:
+            oval.transform.b * oval.center.xMm +
+            oval.transform.d * oval.center.yMm +
+            oval.transform.fMm,
         },
         toleranceMm: 1,
         mode: "replace",
       });
-    }, layerIds);
+    }, {
+      faceId: layerIds.faceId,
+      backingId: layerIds.backingId,
+      previewId: layerIds.previewId,
+      ovalId: layerIds.faceDecorativeIds[1] as string,
+    });
+    await expect(page.getByTestId("designate-registration-holes")).toBeDisabled();
+    await expect(page.getByText(/Registration holes must be true circles/u)).toBeVisible();
+
+    await page.evaluate(async (faceHoleId) => {
+      const state = await window.laserx.getState();
+      const hole = state.project.document.objects.find(
+        (object) => object.id === faceHoleId,
+      );
+      if (hole?.type !== "ellipse") throw new Error("Expected the designated face circle.");
+      await window.laserx.editorAction({
+        type: "selection.point",
+        point: {
+          xMm:
+            hole.transform.a * hole.center.xMm +
+            hole.transform.c * hole.center.yMm +
+            hole.transform.eMm,
+          yMm:
+            hole.transform.b * hole.center.xMm +
+            hole.transform.d * hole.center.yMm +
+            hole.transform.fMm,
+        },
+        toleranceMm: 1,
+        mode: "replace",
+      });
+    }, layerIds.faceHoleId);
     await expect(page.getByTestId("designate-registration-holes")).toBeEnabled();
     await page.getByTestId("designate-registration-holes").click();
-    await expect(page.getByText("Designated registration holes: 1")).toBeVisible();
+    await expect(page.getByText("Designated registration circles: 1")).toBeVisible();
     await page.evaluate(async ({ backingId, previewId }) => {
       await window.laserx.editorAction({
         type: "layer.set-visibility",

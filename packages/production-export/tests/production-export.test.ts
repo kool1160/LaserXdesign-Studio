@@ -212,6 +212,36 @@ describe("production package export", () => {
     );
   });
 
+  it("reports exact transformed-circle evidence and warns for a same-center diameter mismatch", () => {
+    const transformed = project();
+    for (const object of transformed.document.objects) {
+      if (object.id === FACE_HOLE_ID || object.id === BACK_HOLE_ID) {
+        object.transform = { a: 0, b: 2, c: -2, d: 0, eMm: 10, fMm: 5 };
+      }
+    }
+    const transformedPackage = buildProductionPackage(transformed);
+    expect(transformedPackage.manifest.layers.map(
+      (manifestLayer) => manifestLayer.registrationHoles,
+    )).toEqual([
+      [{ objectId: FACE_HOLE_ID, xMm: -90, yMm: 85, diameterMm: 12 }],
+      [{ objectId: BACK_HOLE_ID, xMm: -90, yMm: 85, diameterMm: 12 }],
+    ]);
+    expect(transformedPackage.manifest.warnings).not.toContainEqual(
+      expect.stringContaining("not numerically aligned"),
+    );
+
+    const mismatched = project();
+    const backingHole = mismatched.document.objects.find(
+      (object) => object.id === BACK_HOLE_ID,
+    );
+    if (backingHole?.type !== "ellipse") throw new Error("Expected backing circle.");
+    backingHole.radiusXmm = 4;
+    backingHole.radiusYmm = 4;
+    expect(buildProductionPackage(mismatched).manifest.warnings).toContain(
+      "Registration group main is not numerically aligned on layer Backing.",
+    );
+  });
+
   it("fails closed for stale or ambiguous registration references", () => {
     const stale = project();
     const face = stale.document.layers.find((item) => item.id === FACE_ID);
@@ -230,6 +260,37 @@ describe("production package export", () => {
     expect(() => buildProductionPackage(decorative)).toThrow(
       "must identify a top-level ellipse",
     );
+
+    const sameMinorDifferentMajor = project();
+    const faceOval = sameMinorDifferentMajor.document.objects.find(
+      (object) => object.id === FACE_HOLE_ID,
+    );
+    const backingOval = sameMinorDifferentMajor.document.objects.find(
+      (object) => object.id === BACK_HOLE_ID,
+    );
+    if (faceOval?.type !== "ellipse" || backingOval?.type !== "ellipse") {
+      throw new Error("Expected designated ellipse geometry.");
+    }
+    faceOval.radiusXmm = 4;
+    backingOval.radiusXmm = 5;
+    expect(() => buildProductionPackage(sameMinorDifferentMajor)).toThrow(
+      "true circle in world space",
+    );
+
+    for (const transform of [
+      { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+      { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 },
+    ]) {
+      const transformed = project();
+      const hole = transformed.document.objects.find(
+        (object) => object.id === FACE_HOLE_ID,
+      );
+      if (hole?.type !== "ellipse") throw new Error("Expected face circle.");
+      hole.transform = transform;
+      expect(() => buildProductionPackage(transformed)).toThrow(
+        "true circle in world space",
+      );
+    }
   });
 
   it("matches independently reviewed two- and three-layer package goldens", () => {

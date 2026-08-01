@@ -29,20 +29,28 @@ than the renderer's incidental current selection.
 Center alignment translates all editable objects on a target physical layer
 until its world-space bounds center matches the selected reference layer.
 Registration coordination requires the same nonempty registration-group name.
-The user designates selected top-level ellipse objects as holes; no ordinary
-circle, oval, decorative ring, cutout, badge element, or other ellipse is
-inferred. Coordination replaces only the target layer's designated objects
-with fresh-ID copies of the reference layer's designated objects and updates
-the target designation in the same undoable transaction. Unrelated geometry
-on both layers remains byte-for-byte unchanged. Duplicate, missing, nested,
-wrong-layer, non-ellipse, unnamed-group, and preview-only references fail
-closed before coordination or export.
+The user designates selected top-level ellipses only when their transformed
+geometry emits true world-space circles. Rotation, reflection, and uniform
+scale keep a circle eligible. A world-space oval, skew, or non-uniform
+distortion is not a diameter hole and fails closed before designation,
+coordination, save, or export. The system infers no ordinary circle, oval,
+decorative ring, cutout, badge element, or other ellipse as a hole.
+Coordination replaces only the target layer's designated circles with fresh-ID
+copies of the reference layer's designated circles and updates the target
+designation in the same undoable transaction.
+Unrelated geometry on both layers remains byte-for-byte unchanged. Duplicate,
+missing, nested, wrong-layer, non-ellipse, unnamed-group, and preview-only
+references also fail closed.
 
-The package manifest records only designated holes, including their source
-object IDs, world-millimeter centers, and diameters, and warns if another layer
-in the named group differs numerically. Decorative ellipses remain ordinary
-manufacturing geometry in that layer's SVG/DXF and object count, but never
-appear as registration evidence.
+For an ellipse with transformed radius vectors `u` and `v`, the domain tests
+the symmetric shape matrix `Q = u*u^T + v*v^T`; it is circular only when its
+diagonal terms agree and its off-diagonal term is zero within the domain
+tolerance. The package manifest derives the world-millimeter center and
+diameter from that same geometry, so alignment warnings compare the emitted
+circles rather than a bounding-box minor axis. Same-center ovals with the same
+minor axis but different major axes cannot masquerade as aligned holes.
+Decorative ellipses remain ordinary manufacturing geometry in that layer's
+SVG/DXF and object count, but never appear as registration evidence.
 
 The renderer’s exploded preview is a simple two-dimensional stack of physical
 layer bounds. Its visual offsets are presentation only and never alter stored

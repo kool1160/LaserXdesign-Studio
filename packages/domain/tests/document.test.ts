@@ -7,7 +7,9 @@ import {
   deriveStableId,
   fromMillimeters,
   getDocumentBounds,
+  getRegistrationCircleGeometry,
   identityTransform,
+  isRegistrationCircleObject,
   nonnegativeLengthToMillimeters,
   setProjectDisplayUnit,
   setManufacturingSettings,
@@ -155,6 +157,50 @@ describe("canonical document model", () => {
       maxXmm: 260,
       maxYmm: 100,
     });
+  });
+
+  it("recognizes only true world-space registration circles", () => {
+    const circle = {
+      id: "223e4567-e89b-42d3-a456-426614174020",
+      type: "ellipse",
+      layerId: LAYER_ID,
+      transform: identityTransform(),
+      center: { xMm: 10, yMm: 20 },
+      radiusXmm: 3,
+      radiusYmm: 3,
+    } satisfies DocumentObject;
+    expect(isRegistrationCircleObject(circle)).toBe(true);
+    expect(getRegistrationCircleGeometry(circle)).toEqual({
+      center: { xMm: 10, yMm: 20 },
+      diameterMm: 6,
+    });
+
+    const rotatedAndScaled = {
+      ...circle,
+      transform: { a: 0, b: 2, c: -2, d: 0, eMm: 5, fMm: -2 },
+    };
+    expect(isRegistrationCircleObject(rotatedAndScaled)).toBe(true);
+    expect(getRegistrationCircleGeometry(rotatedAndScaled)).toEqual({
+      center: { xMm: -35, yMm: 18 },
+      diameterMm: 12,
+    });
+
+    for (const invalid of [
+      { ...circle, radiusXmm: 4 },
+      {
+        ...circle,
+        transform: { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+      },
+      {
+        ...circle,
+        transform: { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 },
+      },
+    ]) {
+      expect(isRegistrationCircleObject(invalid)).toBe(false);
+      expect(() => getRegistrationCircleGeometry(invalid)).toThrow(
+        "true circle in world space",
+      );
+    }
   });
 
   it("persists viewport preferences canonically in millimeters", () => {

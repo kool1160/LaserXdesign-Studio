@@ -14,9 +14,13 @@ v7-to-v8 migration preserves all legacy layers without metadata.
 Registration-hole identity is an explicit ordered list of top-level ellipse
 object IDs on that metadata. The domain and project parser reject duplicate,
 stale, nested, wrong-layer, non-ellipse, unnamed-group, or preview-only
-references. Coordination replaces only designated target holes, assigns fresh
-IDs to copied source holes, and updates the target list within the same
-undoable transaction. Decorative ellipses remain unrelated geometry.
+references. A designated ellipse must emit a true circle in world space;
+world-space ovals, skew, and non-uniform distortion are rejected rather than
+being reduced to an ambiguous bounding-box diameter. Rotation, reflection,
+uniform scale, and any equivalent affine representation whose emitted geometry
+is circular remain valid. Coordination replaces only designated target holes,
+assigns fresh IDs to copied source holes, and updates the target list within
+the same undoable transaction. Decorative ellipses remain unrelated geometry.
 
 `packages/production-export` is a pure package-construction boundary over the
 authoritative project and existing SVG/DXF adapters. It filters one declared
@@ -38,6 +42,9 @@ Optional metadata preserves existing editing semantics and makes physical
 intent reviewable. Reusing the proven interchange adapters keeps scale and
 geometry rules in one place. A staged folder commit makes a multi-file export
 behave like one operation and makes partial failures explicit.
+Restricting diameter holes to emitted circles keeps coordination, manifest
+diameters, and mismatch warnings faithful without inventing a lossy ellipse
+diameter convention.
 
 ## Alternatives
 
@@ -53,8 +60,9 @@ behave like one operation and makes partial failures explicit.
 ## Consequences
 
 Registration groups alone do not classify geometry; users must explicitly
-designate each hole. Physical layer exports deliberately include hidden and
-decorative geometry on the selected part, while manifest registration evidence
-contains only designated IDs. An existing package requires explicit
-replacement. M12 adds no 3D, bends, welds, BOM/ERP, quoting, nesting, CAM
-sequencing, G-code, DWG, machine control, or installer behavior.
+designate each true world-space circle. Physical layer exports deliberately
+include hidden and decorative geometry on the selected part, while manifest
+registration evidence contains only validated designated IDs. An existing
+package requires explicit replacement. M12 adds no 3D, bends, welds, BOM/ERP,
+quoting, nesting, CAM sequencing, G-code, DWG, machine control, or installer
+behavior.

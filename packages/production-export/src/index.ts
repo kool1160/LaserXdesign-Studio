@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   PROJECT_SCHEMA_VERSION,
   copyDocument,
+  getRegistrationCircleGeometry,
   getRegistrationHoleObjects,
   getObjectBounds,
   type BoundsMm,
@@ -133,15 +134,12 @@ function registrationHoles(
 ): ProductionRegistrationHole[] {
   return getRegistrationHoleObjects(document, layerId)
     .map((object) => {
-      const bounds = getObjectBounds(object);
+      const geometry = getRegistrationCircleGeometry(object);
       return {
         objectId: object.id,
-        xMm: (bounds.minXmm + bounds.maxXmm) / 2,
-        yMm: (bounds.minYmm + bounds.maxYmm) / 2,
-        diameterMm: Math.min(
-          bounds.maxXmm - bounds.minXmm,
-          bounds.maxYmm - bounds.minYmm,
-        ),
+        xMm: geometry.center.xMm,
+        yMm: geometry.center.yMm,
+        diameterMm: geometry.diameterMm,
       };
     })
     .sort((left, right) =>

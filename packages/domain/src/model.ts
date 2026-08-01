@@ -914,6 +914,66 @@ export function findLayer(
   return document.layers.find((layer) => layer.id === layerId);
 }
 
+export interface RegistrationCircleGeometry {
+  center: PointMm;
+  diameterMm: number;
+}
+
+const REGISTRATION_CIRCLE_RELATIVE_TOLERANCE = 1e-9;
+
+function registrationEllipseShapeMatrix(object: EllipseObject): {
+  xxMm2: number;
+  xyMm2: number;
+  yyMm2: number;
+} {
+  const xAxisXmm = object.transform.a * object.radiusXmm;
+  const xAxisYmm = object.transform.b * object.radiusXmm;
+  const yAxisXmm = object.transform.c * object.radiusYmm;
+  const yAxisYmm = object.transform.d * object.radiusYmm;
+  return {
+    xxMm2: xAxisXmm ** 2 + yAxisXmm ** 2,
+    xyMm2: xAxisXmm * xAxisYmm + yAxisXmm * yAxisYmm,
+    yyMm2: xAxisYmm ** 2 + yAxisYmm ** 2,
+  };
+}
+
+export function isRegistrationCircleObject(
+  object: DocumentObject,
+): object is EllipseObject {
+  if (
+    object.type !== "ellipse" ||
+    !Number.isFinite(object.radiusXmm) ||
+    !Number.isFinite(object.radiusYmm) ||
+    object.radiusXmm <= 0 ||
+    object.radiusYmm <= 0
+  ) {
+    return false;
+  }
+  const shape = registrationEllipseShapeMatrix(object);
+  const magnitude = Math.max(shape.xxMm2, shape.yyMm2);
+  if (!Number.isFinite(magnitude) || magnitude <= 0) return false;
+  const tolerance = magnitude * REGISTRATION_CIRCLE_RELATIVE_TOLERANCE;
+  return (
+    Math.abs(shape.xxMm2 - shape.yyMm2) <= tolerance &&
+    Math.abs(shape.xyMm2) <= tolerance
+  );
+}
+
+export function getRegistrationCircleGeometry(
+  object: EllipseObject,
+): RegistrationCircleGeometry {
+  if (!isRegistrationCircleObject(object)) {
+    throw new RangeError(
+      "Registration geometry must be a true circle in world space; ovals, skew, and non-uniform distortion are not supported.",
+    );
+  }
+  const shape = registrationEllipseShapeMatrix(object);
+  return {
+    center: applyAffineTransform(object.center, object.transform),
+    diameterMm: 2 * Math.sqrt((shape.xxMm2 + shape.yyMm2) / 2),
+  };
+}
+
 export function getRegistrationHoleObjects(
   document: LaserxDocument,
   layerId: string,
@@ -944,6 +1004,11 @@ export function getRegistrationHoleObjects(
     if (object.layerId !== layerId || object.type !== "ellipse") {
       throw new RangeError(
         `Registration hole reference ${objectId} must identify a top-level ellipse on its manufacturing layer.`,
+      );
+    }
+    if (!isRegistrationCircleObject(object)) {
+      throw new RangeError(
+        `Registration hole reference ${objectId} must identify a true circle in world space; ovals, skew, and non-uniform distortion are not supported.`,
       );
     }
     return object;

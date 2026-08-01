@@ -2,6 +2,40 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-01 - M12 world-space registration-circle review repair
+
+- Date: 2026-08-01
+- Agent/task: Codex / PR #29 blocking re-review finding on `140b5c7`
+- Milestone: M12 - Layered Sign Workflow and Production Export
+- Delivered: Registration designation now accepts only top-level ellipses whose
+  emitted affine geometry is a true world-space circle. The domain derives a
+  transformed ellipse shape matrix, accepts rotation/reflection/uniform scale,
+  rejects ovals, skew, and non-uniform distortion, and exposes one shared
+  center/diameter calculation to validation and production export. The renderer
+  disables designation for invalid ellipses and describes the circle-only
+  contract. Manifest evidence and alignment warnings no longer reduce an oval
+  to its bounding-box minor axis.
+- Verification: Regressions cover transformed circle geometry, same-minor/
+  different-major ovals, skew and non-uniform transforms, invalid designation
+  without mutation, save/reopen, coordination, exact manifest geometry,
+  mismatch warnings, and packaged renderer behavior. Full `pnpm verify` passes
+  in 277 seconds with every policy/license audit, lint, typecheck, 270 unit/
+  integration tests, build/package, and all 29 serial packaged Windows Electron
+  E2E scenarios. The production dependency audit reports no known
+  vulnerabilities, Repository Guard passes 68 required files and 17
+  milestones, and patch checks are clean. Exact-head CI remains required before
+  re-review.
+- Decisions: A registration hole is a diameter-bearing circle in emitted world
+  geometry, independent of its local ellipse representation. All consumers use
+  that one domain contract; arbitrary ellipses remain ordinary manufacturing
+  geometry and cannot become registration evidence.
+- Known limitations: M12 does not model elliptical, slotted, or other
+  non-circular registration features. Existing no-CAM, no-3D,
+  no-machine-control, and no-M13-or-later boundaries are unchanged.
+- Next allowed work: Complete local and exact-head verification, publish the
+  repair to the existing draft PR #29, and stop for independent re-review. Do
+  not merge, close Issue #12, advance status, or begin M13+.
+
 ## 2026-08-01 - M12 truthful analysis-scope review repair
 
 - Date: 2026-08-01
@@ -60,9 +94,10 @@ Add concise dated entries for substantial work that needs durable handoff beyond
   early schema-v8 metadata defaults it to an empty list, and no migration or
   object name infers a hole. Manifest registration records now include the
   designated object ID with world-millimeter evidence.
-- Known limitations: Designation is limited to top-level ellipse objects in
-  M12. Assembly preview remains presentation-only 2D. Existing no-CAM, no-3D,
-  no-machine-control, and no-M13 boundaries are unchanged.
+- Known limitations: Designation is limited to top-level ellipses that emit
+  true world-space circles in M12. Assembly preview remains presentation-only
+  2D. Existing no-CAM, no-3D, no-machine-control, and no-M13 boundaries are
+  unchanged.
 - Next allowed work: Publish the repair to the existing draft PR #29, wait for
   all exact-head workflows, and stop for independent re-review. Do not merge,
   close Issue #12, advance status, or begin M13 or later work.
@@ -88,12 +123,13 @@ Add concise dated entries for substantial work that needs durable handoff beyond
   Repository Guard, patch-format checks, and exact-head remote CI remain part
   of publication.
 - Decisions: ADR 0022 keeps ordinary layers nonphysical by default, reuses the
-  existing exact-scale SVG/DXF adapters, records registration ellipses in
+  existing exact-scale SVG/DXF adapters, records registration circles in
   world millimeters, and keeps filesystem commits/rollback in Electron main.
-- Known limitations: Registration designation supports top-level ellipse
-  objects only. Assembly preview is presentation-only 2D. No PDF/raster assembly export, 3D,
-  bends, welds, BOM/ERP, quoting, nesting, CAM, G-code, DWG, machine control,
-  or M13 installer/release work is included.
+- Known limitations: Registration designation supports top-level ellipses only
+  when their emitted world geometry is circular. Assembly preview is
+  presentation-only 2D. No PDF/raster assembly export, 3D, bends, welds,
+  BOM/ERP, quoting, nesting, CAM, G-code, DWG, machine control, or M13
+  installer/release work is included.
 - Next allowed work: Publish the candidate to a draft M12 PR, wait for exact-
   head Windows CI, and stop for review. Do not merge, close Issue #12, advance
   `docs/status/CURRENT.md`, or begin M13.

@@ -59,6 +59,13 @@ describe("layered production workflow", () => {
     await controller.editorAction({ type: "object.create", objectType: "ellipse" });
     const faceHoleId = controller.state.editor.selectionIds[0] as string;
     await controller.editorAction({
+      type: "objects.set-bounds",
+      objectIds: [faceHoleId],
+      widthMm: 6,
+      heightMm: 6,
+      lockAspectRatio: false,
+    });
+    await controller.editorAction({
       type: "layer.set-manufacturing",
       layerId: faceId,
       manufacturing: {
@@ -80,6 +87,13 @@ describe("layered production workflow", () => {
     const backingDecorativeTwoId = controller.state.editor.selectionIds[0] as string;
     await controller.editorAction({ type: "object.create", objectType: "ellipse" });
     const originalBackingHoleId = controller.state.editor.selectionIds[0] as string;
+    await controller.editorAction({
+      type: "objects.set-bounds",
+      objectIds: [originalBackingHoleId],
+      widthMm: 10,
+      heightMm: 10,
+      lockAspectRatio: false,
+    });
     await controller.editorAction({
       type: "layer.set-manufacturing",
       layerId: backingId,

@@ -30,6 +30,8 @@ for (const marker of [
   "PROJECT_SCHEMA_VERSION = 8",
   "manufacturing?: ManufacturingLayerMetadata",
   "registrationHoleIds: string[]",
+  "isRegistrationCircleObject",
+  "getRegistrationCircleGeometry",
   "getRegistrationHoleObjects",
   '"non-cut-preview"',
 ]) requireText(domain, marker, "schema-v8 manufacturing layer contract");
@@ -47,6 +49,7 @@ for (const marker of [
   'originMm: { xMm: 0, yMm: 0 }',
   'name: "manifest.json"',
   "getRegistrationHoleObjects(document, layerId)",
+  "getRegistrationCircleGeometry(object)",
 ]) requireText(production, marker, "production package contract");
 
 for (const marker of [
@@ -78,12 +81,15 @@ for (const marker of [
 
 rejectText(renderer, /node:fs|node:path|writeFile|rename\(/u, "renderer source");
 
+requireText(renderer, "Designate selected circles as holes", "registration designation UI");
+
 for (const marker of [
   "An ordinary editing layer is not a physical part.",
   "no incomplete destination is called successful",
   "never emitted as SVG or DXF manufacturing artifacts",
   "no ordinary",
   "Decorative ellipses remain ordinary",
+  "true world-space circles",
 ]) requireText(documentation, marker, "production documentation");
 
 if (

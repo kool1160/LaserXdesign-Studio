@@ -24,4 +24,4 @@ M12 production fixtures:
 
 - `production/m12-package-goldens.json` — reviewed two- and three-layer
   filenames, physical roles, shared millimeter origin/stock, and numerically
-  identical explicitly designated registration holes.
+  identical explicitly designated true-circle registration holes.

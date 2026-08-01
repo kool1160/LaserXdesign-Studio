@@ -31,8 +31,10 @@ Owns process presets, limits, issue detection, retained/drop-out region classifi
 Owns deterministic physical-layer filtering, per-layer SVG/DXF artifacts,
 schema-1 manifests, explicit registration-object comparison, hashes, and the
 simple 2D assembly projection. It resolves only validated registration-hole
-IDs from domain metadata; decorative ellipses remain ordinary geometry. It
-never writes the filesystem or changes authoritative geometry.
+IDs that identify true world-space circles from domain metadata and derives
+manifest centers and diameters from the same transformed geometry. Decorative
+and distorted ellipses remain ordinary geometry. It never writes the
+filesystem or changes authoritative geometry.
 
 ### Adapters
 

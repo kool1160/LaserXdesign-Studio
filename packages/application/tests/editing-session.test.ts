@@ -155,7 +155,7 @@ describe("editing ProjectSession", () => {
           id: sourceHoleId,
           type: "ellipse",
           layerId: LAYER_ID,
-          transform: identityTransform(),
+          transform: { a: 0, b: 2, c: -2, d: 0, eMm: 50, fMm: 10 },
           center: { xMm: 25, yMm: 25 },
           radiusXmm: 3,
           radiusYmm: 3,
@@ -259,6 +259,7 @@ describe("editing ProjectSession", () => {
     expect(coordinatedHoleId).not.toBe(targetHoleId);
     expect(coordinatedDocument.objects.find((object) => object.id === coordinatedHoleId)).toMatchObject({
       type: "ellipse",
+      transform: { a: 0, b: 2, c: -2, d: 0, eMm: 50, fMm: 10 },
       center: { xMm: 25, yMm: 25 },
       radiusXmm: 3,
       radiusYmm: 3,
@@ -331,6 +332,63 @@ describe("editing ProjectSession", () => {
       }),
     ).toThrow("must be unique");
     expect(projectJson(session)).toBe(before);
+  });
+
+  it("rejects oval, skewed, and non-uniformly distorted registration geometry without mutation", () => {
+    const session = sessionWithFixture();
+    const invalidObjects = [
+      {
+        id: "d0000000-0000-4000-8000-000000000001",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        center: { xMm: 80, yMm: 50 },
+        radiusXmm: 4,
+        radiusYmm: 3,
+      },
+      {
+        id: "d0000000-0000-4000-8000-000000000002",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: { a: 2, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+        center: { xMm: 90, yMm: 50 },
+        radiusXmm: 3,
+        radiusYmm: 3,
+      },
+      {
+        id: "d0000000-0000-4000-8000-000000000003",
+        type: "ellipse" as const,
+        layerId: LAYER_ID,
+        transform: { a: 1, b: 0, c: 0.25, d: 1, eMm: 0, fMm: 0 },
+        center: { xMm: 100, yMm: 50 },
+        radiusXmm: 3,
+        radiusYmm: 3,
+      },
+    ];
+    session.executeEditorCommand({
+      type: "objects.insert",
+      objects: invalidObjects,
+    });
+    const before = projectJson(session);
+
+    for (const object of invalidObjects) {
+      expect(() =>
+        session.performEditorAction({
+          type: "layer.set-manufacturing",
+          layerId: LAYER_ID,
+          manufacturing: {
+            role: "face",
+            material: "mild-steel",
+            thicknessMm: 3,
+            process: "laser",
+            notes: "",
+            registrationGroup: "main",
+            registrationHoleIds: [object.id],
+          },
+        }),
+      ).toThrow("true circle in world space");
+      expect(projectJson(session)).toBe(before);
+    }
   });
 
   it("owns single, modifier, and marquee selection outside the document", () => {

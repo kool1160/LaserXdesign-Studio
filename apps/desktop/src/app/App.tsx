@@ -2,12 +2,14 @@ import {
   previewSelectedPathJoin,
   type EditorActionRequest,
 } from "@laserx/application";
-import type {
-  ManufacturingSettingField,
-  ManufacturingSettings,
-  ManufacturingLayerMetadata,
-  RasterTracePreset,
-  RasterTraceSettings,
+import {
+  isRegistrationCircleObject,
+  type PathObject,
+  type ManufacturingSettingField,
+  type ManufacturingSettings,
+  type ManufacturingLayerMetadata,
+  type RasterTracePreset,
+  type RasterTraceSettings,
 } from "@laserx/domain";
 import {
   MANUFACTURING_PRESETS,
@@ -25,7 +27,6 @@ import type {
   CommandResult,
   DesktopState,
 } from "../../electron/ipc-contract.js";
-import type { PathObject } from "@laserx/domain";
 import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
 import { SignToolsPanel } from "../components/SignToolsPanel.js";
@@ -457,7 +458,11 @@ export function App() {
   const selectionIds = state.editor.selectionIds;
   const selectedRegistrationHoleIds = selectionIds.filter((objectId) => {
     const object = document.objects.find((candidate) => candidate.id === objectId);
-    return object?.type === "ellipse" && object.layerId === activeLayer?.id;
+    return (
+      object !== undefined &&
+      object.layerId === activeLayer?.id &&
+      isRegistrationCircleObject(object)
+    );
   });
   const selectionBounds = state.editor.selectionBounds;
   const pathSelection = state.editor.pathSelection;
@@ -2529,7 +2534,7 @@ export function App() {
                           })
                         }
                       >
-                        Designate selected ellipses as holes
+                        Designate selected circles as holes
                       </button>
                       <button
                         type="button"
@@ -2545,7 +2550,10 @@ export function App() {
                       </button>
                     </div>
                     <small>
-                      Designated registration holes: {activeLayer.manufacturing.registrationHoleIds.length}
+                      Registration holes must be true circles in world space; ovals and distorted ellipses cannot be designated.
+                    </small>
+                    <small>
+                      Designated registration circles: {activeLayer.manufacturing.registrationHoleIds.length}
                     </small>
                     <label>
                       Material notes
