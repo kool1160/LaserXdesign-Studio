@@ -44,4 +44,4 @@ Full 3D rendering, bend design, weld symbols, BOM/ERP, quoting, nesting, and CAM
 - [x] Manufacturing-layer metadata and scope rules documented.
 - [x] Layer alignment golden fixtures pass.
 - [x] Production-package end-to-end test passes.
-- [ ] Status advances to M13.
+- [x] Status advances to M13.
