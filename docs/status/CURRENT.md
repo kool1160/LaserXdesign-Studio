@@ -2,100 +2,94 @@
 
 ## Active gate
 
-**M09 — Sign-Building Tools and Templates**
+**M10 — Prompt and Image-to-Sign AI Pipeline**
 
-M08 merged through PR #24 in merge commit
-`3edea67fa6170aa37624352d7eae141590fc35ed` after final review of exact feature
-head `c3068c2591cae93ef00434bd05e7b16850e32121`. Issue #9 is closed as completed.
-M09 is now the only active implementation milestone; Issue #10 is the active
+M09 merged through PR #25 in merge commit
+`dc0114d79dda84d938efb1b8366265a0a04a5235` after final review of exact feature
+head `2e7214c1805555f7ab330e1497c34bab72b8de54`. Issue #10 is closed as completed.
+M10 is now the only active implementation milestone; Issue #11 is the active
 delivery gate.
 
-The M09 implementation candidate is isolated on `feat/m09-sign-tools`, based
-on current `main`. The repaired complete local gate passes with 232 unit/integration
-tests and 25 packaged Windows E2E scenarios. Keep the candidate on that branch;
-do not merge, close Issue #10, or advance status to M10 before independent
-review and required exact-head Windows CI pass.
+Start M10 from current `main` in a new working directory and branch
+`feat/m10-ai-generation`. Do not reuse the M09 feature branch or worktree.
 
 Before implementation, read:
 
 1. `AGENTS.md`
 2. `docs/OPERATOR_PROTOCOL.md`
 3. `docs/status/CURRENT.md`
-4. `docs/milestones/M09-sign-tools.md`
-5. `docs/CUTABILITY_RULES.md`
+4. `docs/milestones/M10-ai-generation.md`
+5. `docs/decisions/0017-openai-first-provider-neutral-ai.md`
 6. `docs/ARCHITECTURE.md`
-7. `docs/UNITS_AND_COORDINATES.md`
+7. `docs/CUTABILITY_RULES.md`
 8. `docs/FILE_FORMATS.md`
 9. `docs/TESTING.md`
-10. ADR 0020 and prior geometry/interchange/font ADRs
 
-## M08 completion record
+## M09 completion record
 
-- [x] PR #24 reviewed and merged.
-- [x] Issue #9 closed as completed.
-- [x] Final reviewed head: `c3068c2591cae93ef00434bd05e7b16850e32121`.
-- [x] Merge commit: `3edea67fa6170aa37624352d7eae141590fc35ed`.
-- [x] Repository Guard run `30675370164` passed on the final head.
-- [x] M04, M05, M06, M07, and M08 exact-head runs `30675370171`,
-  `30675370177`, `30675370183`, `30675370188`, and `30675370189` passed.
-- [x] The final suite records 219 unit/integration tests and 22 packaged Windows
-  Electron E2E scenarios.
-- [x] Deterministic cutability analysis, region classification, ambiguity
-  handling, measured/configured issue evidence, manual and automatic bridge
-  previews, one-command repair acceptance, cache invalidation, cancellation,
-  and stale-result rejection are complete and reviewed.
-- [x] Cubic and ellipse flattening preserve the 0.01 mm world-space tolerance
-  under large uniform scale, nonuniform scale, shear, and nested transforms.
-- [x] No M09 sign generators, templates, M10 AI generation, CAM, G-code, DWG,
-  or machine-control work was included in M08.
+- [x] PR #25 reviewed and merged.
+- [x] Issue #10 closed as completed.
+- [x] Final reviewed head: `2e7214c1805555f7ab330e1497c34bab72b8de54`.
+- [x] Merge commit: `dc0114d79dda84d938efb1b8366265a0a04a5235`.
+- [x] Repository Guard run `30681725236` passed on the final head.
+- [x] M04, M05, M06, M07, M08, and M09 exact-head runs `30681725253`,
+  `30681725256`, `30681725235`, `30681725233`, `30681725240`, and
+  `30681725239` passed.
+- [x] The final reviewed suite records 230 unit/integration tests and 25 packaged
+  Windows Electron E2E scenarios.
+- [x] Preview-first sign generators, exact mounting holes, seven outer shapes,
+  sign-assembly tabs/slots, baseline/arc text, schema-v7 saved templates,
+  licensing/provenance audits, one-command editable acceptance, standard M08
+  analysis, export, save/reopen, and undo are complete and reviewed.
+- [x] Standard whole-design M08 semantics remain intact across layers; only
+  explicit object scopes narrow analysis.
+- [x] No M10 AI, CAM, G-code, DWG, or machine-control work was included in M09.
 
-## M09 user-visible outcome
+## M10 user-visible outcome
 
-Common signs can be built quickly without drawing every helper feature manually.
+A user can describe a sign or provide a reference image, choose from concepts,
+and receive editable normalized geometry that passes the same wording,
+normalization, and cutability checks as manual work.
 
-## M09 implementation candidate
+## Launch connection model
 
-- [x] Pure bounded border, backing-plate, seven-shape, mounting-hole, and
-  sign-assembly generators emit ordinary editable document objects.
-- [x] Baseline/arc text helpers and four parameterized template models use
-  audited bundled style/font provenance.
-- [x] Preview/reject is non-mutating; acceptance is one undoable import; saved
-  version-1 template parameters persist through strict schema v7 and v6-to-v7
-  migration.
-- [x] Main-owned font layout and generation accept only strict renderer
-  parameters. Acceptance and Analyze all run one standard whole-design M08
-  scope; only explicit selected object IDs narrow analysis.
-- [x] Representative packaged 24-inch badge, address, and family-name flows
-  validate, export, persist/reopen a user template, and undo exactly.
-- [ ] PR #25 requires exact-head re-review and Windows CI on the repair.
+- OpenAI is the first provider behind a provider-neutral adapter.
+- The user supplies their own OpenAI API access and is billed directly by OpenAI.
+- LaserX opens the official OpenAI Platform setup/billing flow and accepts a
+  dedicated LaserX API key.
+- The credential is stored only in the operating-system credential vault and
+  used only from Electron main.
+- LaserX does not embed a shared API key or resell AI credits at launch.
+- Future delegated OpenAI/ChatGPT authorization may replace manual key setup
+  without changing the generation pipeline.
+- All non-AI workflows remain fully usable while disconnected.
 
-## Allowed M09 work
+## Allowed M10 work
 
-- outline and border generation around selected geometry;
-- backing-plate generation;
-- rectangle, rounded rectangle, circle, oval, shield, badge, and banner outer
-  shapes;
-- exact mounting-hole patterns;
-- tabs and slots limited to sign assembly;
-- baseline and arc text-layout helpers;
-- monogram, address, family-name, and badge template parameter models;
-- licensed style presets with provenance records;
-- save-user-template workflow;
-- ordinary editable output through one undoable command;
-- validation through the standard M08 cutability engine;
-- documented template schema/versioning;
-- persistence, migration, export, licensing, integration, and packaged Windows
-  E2E coverage required by the milestone.
+- provider-neutral request/result and credential-acquisition interfaces;
+- OpenAI-first user-owned API billing;
+- secure connect, test, replace, disconnect, invalid-key, no-credit, rate-limit,
+  offline, cancellation, and retry states;
+- prompt fields for wording, dimensions, style, process, detail, bridges, holes,
+  layers, and backing plate;
+- reference-image consent and bounded attachment handling;
+- multiple non-mutating concept previews;
+- structured-vector output where available and M07 raster-trace fallback;
+- normalization, wording verification, editable object conversion, and mandatory
+  M08 cutability analysis before acceptance;
+- privacy, provenance, cost/usage transparency, mocked-provider tests, and safe
+  failure preserving the open project.
 
 ## Explicitly excluded
 
-Do not implement a marketplace, copyrighted-logo library, full mechanical-joint
-design, advanced nesting, locked template output, M10 AI generation, CAM,
+Do not implement protected-logo replication, autonomous export, hidden provider
+selection, unnecessary full-project disclosure, a shared distributed API key,
+LaserX-managed credit resale at launch, AI dependency for normal editing, CAM,
 G-code, DWG, or machine control.
 
-## M09 exit rule
+## M10 exit rule
 
-Do not advance to M10 until every acceptance test and exit item in
-`docs/milestones/M09-sign-tools.md` passes, the M09 pull request is reviewed,
-required Windows CI is green, the pull request is merged, Issue #10 is closed,
+Do not advance to M11 until every acceptance test and exit item in
+`docs/milestones/M10-ai-generation.md` passes, the M10 pull request is reviewed,
+required Windows CI is green, the pull request is merged, Issue #11 is closed,
 and this file records the verified merge commit.
