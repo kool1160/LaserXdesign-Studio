@@ -105,6 +105,12 @@ capability-based machine and controller adapters, with privileged device access,
 deterministic job preparation, simulation/review, explicit operator approval,
 and separately gated safety requirements.
 
+The post-Version-1 roadmap implements that expansion only through M15 and M16.
+M15 is simulator-first foundation work and cannot energize live motion or process
+outputs. M16 is limited to one explicitly approved controller, machine, process,
+and hardware-specific safety model after the owner authorizes live hardware work.
+The presence of those milestones does not authorize early machine-control code.
+
 The future extension model must allow a custom LaserX control board and other
 machine modules to expand the software beyond sign-file creation and beyond one
 cutting process. AI and the renderer may never command motion or process output
