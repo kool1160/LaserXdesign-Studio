@@ -7,91 +7,95 @@
 Issue #13 remains the active delivery gate. M13 is not complete and M14 is not
 active.
 
-## Hands-on repair prerequisite — completed
+## M13 implementation — reviewed and merged
 
-The owner-observed repair prerequisite was independently reviewed and merged
-through PR #32.
+The Windows installer and beta-hardening implementation was independently
+reviewed and merged through PR #33.
 
-- Final reviewed head: `5fb466f1d1c784c4d2d2bc14aab6f5167793b150`
-- READY review: `4839027689`
-- Merge commit: `a58eb7049349c02522c4caea05d59c17f54992fe`
-- Repository Guard run: `30754236851`
-- M04–M12 exact-head workflows: all completed successfully
-- Unit/integration tests: 288
-- Packaged Windows Electron E2E scenarios: 31/31
-- Exact-head Windows artifact: `8835466777`
+- Final reviewed head: `6cdfaf4fbf68e8c078b4b0b0cda095ea1fcad30f`
+- READY review: `4839609133`
+- Merge commit: `1231a0127a59fe87b38824d3fa11039c3a028422`
+- Repository Guard run: `30763625121`
+- M04–M13 exact-head workflows: all completed successfully
+- Verification: 290 unit/integration tests and 31/31 applicable packaged Windows Electron E2E scenarios
+- Exact-head M13 workflow: `30763625120`
+- Exact-head Windows artifact: `8838329615`
 - Artifact digest:
-  `sha256:d590340d837089c6a301788808a9e119659e4df2fe89a7ec6a024363399a78fc`
+  `sha256:d3457ac6e470285e4efd4a5231b021f4aed34078fc542e2b388a4b7e8de9e601`
 
-The merged prerequisite delivers:
+The merged implementation delivers:
 
-1. bounded, fail-closed DXF spline conversion, explicit partial-import findings,
-   previewable deterministic repairs, all three stock-fit choices, initial
-   viewport framing, and one undoable import/stock transaction;
-2. material-specific U.S. gauges, fractional-inch, metric, and custom stock
-   designations with inch/mm context, canonical `thicknessMm`, schema-v9
-   persistence, no-inference legacy migration, and production-manifest v2;
-3. a focused application-owned credential modal with cancel, timeout, retry,
-   prior-state restoration, Windows `safeStorage`, and packaged proof that the
-   application cannot remain globally busy indefinitely.
+1. an assisted per-user x64 NSIS installer with stable LaserX identity, Start
+   Menu shortcut, optional desktop shortcut, upgrade behavior, and clean
+   uninstall;
+2. production runtime data under `%APPDATA%\LaserX Design Studio`, with default
+   uninstall preserving actual app-created settings, encrypted credentials,
+   recovery, logs, session data, and crash dumps, plus explicit deletion when
+   selected;
+3. clean-installed launch, high-DPI, keyboard, representative
+   SVG/analyze/save/DXF, upgrade, recovery, and uninstall validation;
+4. fail-closed Authenticode policy using an exact reviewed signer thumbprint,
+   least-privilege signing-secret scope, packaged-identity inspection,
+   schema-2 provenance, exact-tag validation, and a controlled prerelease
+   workflow;
+5. local-only diagnostics, documented privacy/recovery behavior, release notes,
+   known issues, beta feedback, dependency/security audits, and deferred
+   auto-update.
 
-Issue #13 intentionally remains open because installer, signing, packaging,
-recovery, performance, accessibility, security, migration, and controlled beta
-release work are still outstanding.
+The CI artifacts use a disposable self-signed identity and prove mechanics only.
+They are not a trusted production beta.
 
-## Remaining M13 work — authorized
+## Remaining M13 boundary — owner-controlled production release
 
-The remaining M13 implementation may now begin from current `main` in a fresh
-working directory and branch. Do not reuse PR #32's branch or worktree.
+No additional feature implementation is authorized. The remaining M13 work is
+the controlled production release boundary:
 
-Suggested branch:
+1. configure GitHub Actions secrets `WIN_CSC_LINK` and
+   `WIN_CSC_KEY_PASSWORD` with the real Windows code-signing identity;
+2. configure repository variable `WINDOWS_CODE_SIGNING_THUMBPRINT` with the
+   reviewed exact production signer thumbprint;
+3. verify the exact release source and create tag `v0.13.0-beta.1` only through
+   owner-authorized advancement;
+4. manually dispatch **M13 Controlled Beta Release** with confirmation
+   `PUBLISH REVIEWED BETA`;
+5. verify the production-signed installer and executable, clean lifecycle,
+   source commit, signer identity, provenance, hashes, workflow run, and
+   published prerelease assets;
+6. record the final release evidence, close Issue #13, and update this status.
 
-`feat/m13-windows-installer-beta`
+Until those steps succeed:
 
-Read before implementation:
+- M13 remains open;
+- the CI self-signed artifact remains evidence only;
+- no Version 1 beta release is considered published;
+- M14 remains blocked;
+- Codex must not begin M14.
 
-1. `AGENTS.md`
-2. `docs/OPERATOR_PROTOCOL.md`
-3. `docs/status/CURRENT.md`
-4. `docs/milestones/M13-windows-installer-beta-hardening.md`
-5. Issue #13
-6. `docs/ARCHITECTURE.md`
-7. `docs/FILE_FORMATS.md`
-8. `docs/TESTING.md`
-9. `docs/DESKTOP_DESIGN_SYSTEM.md`
-10. `docs/SECURITY.md`
-11. relevant packaging, release, migration, recovery, and credential ADRs/tests
+## Workstream ownership
 
-## Allowed M13 work
+`docs/WORKSTREAM_OWNERSHIP.md` remains authoritative.
 
-- signed Windows `.exe` installer and documented signing process;
-- Start Menu and optional desktop shortcuts;
-- clean uninstall and explicit user-data behavior;
-- Windows-owned storage for app data, credentials, autosaves, logs, caches, and
-  settings;
-- product metadata, semantic versioning, changelog, and release notes;
-- versioned artifacts, provenance, checksums, and reproducible-build evidence;
-- clean install, launch, upgrade, primary-workflow, and uninstall validation;
-- crash handling and recoverable sessions;
-- startup, viewport, selection, tracing, geometry, analysis, save, and export
-  performance budgets;
-- cancellation, progress, memory, accessibility, high-DPI, security,
-  dependency, migration, and beta feedback gates;
-- telemetry/crash-reporting decision with explicit privacy behavior;
-- optional auto-update only if separately accepted.
+After M13 is fully completed, published, closed, and recorded, Codex stops in
+`OWNER_HANDOFF_REQUIRED`. It must not begin M14 without new explicit owner
+authorization.
+
+Claude remains the designated lead for the physical 3D sign-preview workstream.
+Current Claude authority is isolated parallel research only under Issue #34 and
+branch `experiment/m14-physical-3d-preview-lab`. Nothing from that experiment is
+merge-authorized while M14 is blocked.
 
 ## Explicitly excluded
 
 Do not add broad CAD, universal file-format support, DWG, general-purpose
-materials databases, new AI providers, physical 3D implementation, CAM,
-nesting, G-code, machine control, marketplace, licensing, account-platform, or
-unrelated feature expansion. M14 owns the approved physical 3D sign viewer,
-real-world beta validation, and stable Version 1.0 publication decision.
+materials databases, new AI providers, physical 3D production implementation,
+CAM, nesting, G-code, machine control, marketplace, licensing,
+account-platform, or unrelated feature expansion. M14 owns the approved
+physical 3D sign viewer, real-world beta validation, and stable Version 1.0
+publication decision.
 
 ## M13 exit rule
 
-Do not advance to M14 until every remaining M13 acceptance item passes, the
-final M13 pull request is reviewed on its exact head, required CI is green, all
-required M13 work is merged, Issue #13 is closed, the controlled beta is tagged
-and published, and this file records the verified installer and release
-evidence.
+Do not advance to M14 until the production-signed controlled beta is
+successfully published from the exact reviewed source, final provenance and
+checksums are recorded, Issue #13 is closed, this file records the verified
+release evidence, and the owner explicitly decides the post-M13 handoff.
