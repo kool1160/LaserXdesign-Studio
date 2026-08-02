@@ -88,9 +88,9 @@ Per the evaluation template: *"Choose Three.js + React Three Fiber for the rende
 ## Final decision
 
 - **Selected renderer:** Three.js.
-- **Selected helper libraries:** React Three Fiber (`@react-three/fiber`); Drei only if a specific Phase 2 interaction/view-preset need arises (not installed in this slice — no dependency added without a concrete use).
+- **Selected helper libraries:** React Three Fiber (`@react-three/fiber`); `@react-three/drei`, narrowly for `OrbitControls` only — the orbit/pan/zoom need materialized in this Phase 2 slice, matching the condition set out above. No other Drei export is imported.
 - **CAD kernel:** rejected for the current scope. Re-open only if a specific approved M14 requirement (not present today) proves unreachable through planar extrusion.
-- **Exact dependency versions and licenses:** not yet installed — no 3D dependency is added in this Phase 1 slice (see below); Three.js/R3F installation is deferred to the Phase 2 browser-lab slice, at which point exact pinned versions and licenses will be recorded here.
+- **Exact dependency versions and licenses:** installed in this Phase 2 slice 1, scoped to `apps/physical-3d-preview-lab/package.json` only (production desktop dependencies untouched) — see "Phase 2 slice 1 — dependencies and measured facts" below.
 - **Architecture:** `Validated LaserxProject snapshot -> physical-layer selection (replicated production-export predicate) -> single-layer-scoped analyzeDocumentCutability -> region topology reinterpreted with extrusion polarity -> PhysicalPreviewScene (pure, serializable) -> [Phase 2] React Three Fiber adapter -> THREE.Shape/ExtrudeGeometry per layer`.
 - **Known unsupported geometry (this slice):** any layer whose scoped `analyzeDocumentCutability` returns `status: "ambiguous"` (open contours, self-intersections, duplicate/overlapping segments, zero-area/degenerate contours) — the layer contributes findings and zero shapes rather than an invented or repaired solid.
 - **Performance budget proposal:** deferred to Phase 3 measurement against representative fixtures; no number is asserted without a measurement behind it.
@@ -107,3 +107,49 @@ Single-physical-layer scene builder in `packages/physical-preview-3d`:
 - Computes a dependency-free deterministic fingerprint (FNV-1a-style, same technique as `@laserx/domain`'s `deriveStableId`) rather than `node:crypto` — `physical-preview-3d` is consumed by a plain Vite/React browser app (`apps/physical-3d-preview-lab`), not Electron's Node-enabled main process, so a Node-only hash primitive would break browser bundling. This was caught before it became a Phase 2 integration bug.
 
 Deferred to a later slice, unchanged from the approved plan: multi-layer assembled/exploded Z-stacking, the React Three Fiber adapter, and the `apps/physical-3d-preview-lab` UI.
+
+## Phase 2 slice 1 — dependencies and measured facts
+
+Completed 2026-08-02, same session, on the same branch. Scope: the smallest real browser-rendering vertical slice per the READY review — one fixture, one physical layer, front + perspective views, orbit/pan/zoom, reset, exact dimension readouts, WebGL-unavailable fallback.
+
+### Exact pinned dependency versions and licenses
+
+All added to `apps/physical-3d-preview-lab/package.json` only. `apps/desktop/package.json` was not touched; `pnpm-lock.yaml` gained new entries only for these packages and their own transitive dependencies.
+
+| Package | Version | License | Role |
+|---|---|---|---|
+| `three` | `0.185.1` | MIT | Renderer, `Shape`/`ExtrudeGeometry`, scene graph |
+| `@react-three/fiber` | `9.7.0` | MIT | React reconciler for Three.js (`Canvas`, hooks) |
+| `@react-three/drei` | `10.7.7` | MIT | Narrowly for `OrbitControls` only |
+| `@types/three` | `0.185.3` | MIT | Type declarations (`three` does not bundle its own) |
+| `react` / `react-dom` | `19.2.8` | MIT | Matches `apps/desktop`'s pinned version exactly |
+| `@vitejs/plugin-react`, `vite`, `vitest`, `typescript`, `@playwright/test`, `playwright`, `@types/node`, `@types/react`, `@types/react-dom` | same versions as `apps/desktop` | MIT/Apache-2.0 | Build/test tooling, kept version-aligned with the rest of the workspace |
+
+Peer-dependency compatibility verified before pinning: `@react-three/fiber@9.7.0` requires `react`/`react-dom` `>=19 <19.3` and `three >=0.156`; `@react-three/drei@10.7.7` requires `react`/`react-dom` `^19`, `@react-three/fiber ^9.0.0`, and `three >=0.159`. `react@19.2.8` and `three@0.185.1` satisfy all of these.
+
+### Measured bundle size (`pnpm --filter @laserx/physical-3d-preview-lab build`, Vite 8.2.0 production build)
+
+```text
+dist/index.html                     0.44 kB │ gzip:   0.30 kB
+dist/assets/index-*.css             0.72 kB │ gzip:   0.42 kB
+dist/assets/index-*.js          1,276.81 kB │ gzip: 350.13 kB
+build time: 839ms
+```
+
+Vite's default 500 kB chunk-size warning fires; this slice does not code-split (a single fixture, single view). Code-splitting (e.g. lazy-loading Three.js/R3F behind a dynamic `import()`) is a reasonable Phase 3 optimization if bundle size becomes a concrete constraint — not applied here to avoid unmeasured complexity in a first slice.
+
+### Measured startup timing
+
+Measured with Playwright (headless Chromium, same version pinned above) against `vite preview` (the production build) on `http://127.0.0.1:4173`, this development machine, three consecutive navigations in one browser context:
+
+| Run | `window.onload` | Canvas visible (mount → WebGL ready) |
+|---|---|---|
+| Cold (first navigation, empty cache) | 190 ms | 281 ms |
+| Warm (reload, cached) | 30 ms | 88 ms |
+| Warm (reload again) | 34 ms | 76 ms |
+
+These are local-machine, single-sample measurements, not a CI-tracked performance budget — reported honestly as what was actually measured, not fabricated or extrapolated. A repeatable, representative-fixture performance budget remains Phase 3 work per the existing plan.
+
+### Verified against the fixture
+
+`fixtures/physical-preview/single-layer-face-plate.laserx` (200×120 mm stock, one `face` layer, mild steel, 3 mm, a 160×80 mm rectangle with one 30 mm-diameter through-hole) renders correctly in both front and perspective views: exact readout `160.0 mm × 80.0 mm × 3.0 mm`, the through-hole is visually faithful (confirmed by screenshot during manual verification, not committed), and the WebGL-unavailable fallback renders without throwing when `HTMLCanvasElement.prototype.getContext` is stubbed to return `null`.
