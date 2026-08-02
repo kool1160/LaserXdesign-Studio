@@ -127,12 +127,12 @@ export function AiGenerationPanel({ state, busy, run }: AiGenerationPanelProps) 
       </div>
       {state.ai.credentialPrompt.active ? (
         <small data-testid="ai-credential-timeout">
-          The visible Windows credential dialog closes automatically after {Math.ceil(state.ai.credentialPrompt.timeoutMs / 1_000)} seconds. Cancel restores the previous connection.
+          The application-owned LaserX credential window closes automatically after {Math.ceil(state.ai.credentialPrompt.timeoutMs / 1_000)} seconds. Cancel restores the previous connection.
         </small>
       ) : null}
 
       <p className="privacy-note">
-        The API key stays in the operating-system vault and main process. Prompts and an attached image go to OpenAI only when you choose Generate; manual editing remains available while disconnected.
+        The API key passes only through the isolated credential window and main process, then stays in the operating-system vault. Prompts and an attached image go to OpenAI only when you choose Generate; manual editing remains available while disconnected.
       </p>
 
       <form className="document-form ai-generation-form" onSubmit={generate}>

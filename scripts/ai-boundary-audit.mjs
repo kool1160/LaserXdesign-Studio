@@ -30,6 +30,8 @@ function rejectText(source, pattern, label) {
 
 const provider = await readFile(resolve(root, "packages/ai/src/index.ts"), "utf8");
 const credentials = await readFile(resolve(root, "apps/desktop/electron/ai-credentials.ts"), "utf8");
+const credentialWindow = await readFile(resolve(root, "apps/desktop/electron/credential-window.ts"), "utf8");
+const credentialPreload = await readFile(resolve(root, "apps/desktop/electron/credential-preload.ts"), "utf8");
 const main = await readFile(resolve(root, "apps/desktop/electron/main.ts"), "utf8");
 const renderer = await combined(await sourceFiles("apps/desktop/src"));
 const preload = await readFile(resolve(root, "apps/desktop/electron/preload.ts"), "utf8");
@@ -55,11 +57,20 @@ for (const marker of [
 for (const marker of [
   "#safeStorage.encryptString",
   "#safeStorage.decryptString",
-  "UseSystemPasswordChar = $true",
-  'stdio: ["ignore", "pipe", "pipe"]',
   "CredentialAcquisitionTimeoutError",
-  "signal.removeEventListener",
 ]) requireText(credentials, marker, "credential boundary");
+
+for (const marker of [
+  "modal: true",
+  "parentWindow",
+  "contextIsolation: true",
+  "nodeIntegration: false",
+  "sandbox: true",
+  "devTools: false",
+  "setAlwaysOnTop",
+  "event.sender === credentialWindow.webContents",
+  "signal.removeEventListener",
+]) requireText(credentialWindow, marker, "application-owned credential window");
 
 for (const marker of [
   "cancelAiConnection",
@@ -69,6 +80,8 @@ for (const marker of [
 requireText(main, 'process.env.LASERX_TEST_AI_MOCK === "1"', "mock-provider gate");
 rejectText(renderer, /https:\/\/api\.openai\.com|\bfetch\s*\(|\bAuthorization\b|Bearer\s|safeStorage|encryptString|decryptString/u, "renderer source");
 rejectText(preload, /https:\/\/api\.openai\.com|\bfetch\s*\(|\bAuthorization\b|Bearer\s|safeStorage|encryptString|decryptString/u, "preload source");
+rejectText(credentialPreload, /https:\/\/api\.openai\.com|\bfetch\s*\(|\bAuthorization\b|Bearer\s|safeStorage|encryptString|decryptString/u, "credential preload source");
+rejectText(credentials + credentialWindow + main, /powershell(?:\.exe)?|System\.Windows\.Forms|\bspawn\s*\(/iu, "credential production boundary");
 rejectText(projectFormat, /aiConcept|providerId|requestId|referenceImage|prompt/u, "project schema source");
 rejectText(production, /\bsk-[A-Za-z0-9_-]{16,}\b/u, "production source");
 
@@ -84,4 +97,4 @@ for (const term of [
   "They never call OpenAI",
 ]) requireText(pipeline, term, "AI pipeline documentation");
 
-console.log("AI boundary audit passed: main-only credentials/network, transient provenance, schema-v9 isolation, and documented mock/real-provider paths.");
+console.log("AI boundary audit passed: isolated app-owned credential modal, main-only provider network, transient provenance, schema-v9 isolation, and documented mock/real-provider paths.");

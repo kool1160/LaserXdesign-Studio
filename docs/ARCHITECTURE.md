@@ -64,7 +64,20 @@ beside canonical `thicknessMm`; migration from v8 deliberately records null.
 Vector import adapters publish bounded repair findings and geometry-linked
 locations. The application layer owns the non-mutating three-way stock-fit
 preview and includes any accepted stock resize in the same undoable import
-command as the geometry.
+command as the geometry. Resize-stock fitting may fit an empty project tightly;
+on a non-empty project it preserves the current stock extent and unions every
+existing authoritative object bound without moving or scaling existing objects.
+DXF duplicate identity is an exact, same-layer canonical comparison independent
+of closed-path start index and path direction; the 0.1 mm endpoint-closure
+tolerance is never reused as identity.
+
+The M13 credential interaction is a main-created modal `BrowserWindow` bound to
+the LaserX parent window. It loads only repository-owned inline UI through a
+dedicated minimal preload, has no normal application preload/state, Node,
+navigation, network, DevTools, or project access, and accepts submit/cancel IPC
+only from its own `webContents`. Electron main destroys the window on submit,
+cancel, or controller timeout, tests the ephemeral key, and writes it only
+through the existing `safeStorage` vault boundary.
 
 ## Process boundary
 

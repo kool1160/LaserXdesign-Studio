@@ -1,4 +1,5 @@
 import type { VectorImportCandidate } from "@laserx/domain";
+import { parseProject, serializeProject } from "@laserx/project-format";
 import { describe, expect, it } from "vitest";
 
 import { ProjectSession } from "../src/index.js";
@@ -137,6 +138,78 @@ describe("vector import preview", () => {
     const committed = session.commitVectorImport();
     expect(committed.project.document.dimensions).toEqual(before.document.dimensions);
     expect(committed.editor.history.undoDepth).toBe(1);
+  });
+
+  it("never shrinks non-empty stock or moves existing edge geometry during resize preview, cancel, commit, undo, redo, and reopen", () => {
+    const session = new ProjectSession(dependencies());
+    const layerId = session.state.project.document.activeLayerId;
+    session.executeEditorCommand({
+      type: "objects.import",
+      layers: [],
+      objects: [
+        {
+          id: "123e4567-e89b-42d3-a456-100000000001",
+          type: "rectangle",
+          layerId,
+          transform: { a: 1, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+          origin: { xMm: 0, yMm: 0 },
+          widthMm: 20,
+          heightMm: 20,
+        },
+        {
+          id: "123e4567-e89b-42d3-a456-100000000002",
+          type: "rectangle",
+          layerId,
+          transform: { a: 1, b: 0, c: 0, d: 1, eMm: 0, fMm: 0 },
+          origin: { xMm: 569.6, yMm: 264.8 },
+          widthMm: 40,
+          heightMm: 40,
+        },
+      ],
+    });
+    const beforeImport = session.state;
+    const wide = candidate();
+    wide.format = "dxf";
+    wide.sourceUnit = "millimeters";
+    wide.paths = [{
+      layerName: "Wide import",
+      closed: true,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 800, yMm: 0 },
+        { xMm: 800, yMm: 100 },
+        { xMm: 0, yMm: 100 },
+      ],
+    }];
+    wide.findings = [];
+
+    const firstPreview = session.previewVectorImport(wide, "wide.dxf");
+    expect(firstPreview.project).toEqual(beforeImport.project);
+    expect(firstPreview.editor.importPreview).toMatchObject({
+      fitMode: "resize-stock",
+      proposedDocumentDimensionsMm: { widthMm: 825.4, heightMm: 304.8 },
+    });
+    expect(firstPreview.editor.importPreview?.bounds?.minXmm).toBeCloseTo(12.7, 9);
+    expect(firstPreview.editor.importPreview?.bounds?.minYmm).toBeCloseTo(102.4, 9);
+    expect(firstPreview.editor.importPreview?.bounds?.maxXmm).toBeCloseTo(812.7, 9);
+    expect(firstPreview.editor.importPreview?.bounds?.maxYmm).toBeCloseTo(202.4, 9);
+    expect(session.cancelVectorImport().project).toEqual(beforeImport.project);
+    expect(session.state.editor.history).toEqual(beforeImport.editor.history);
+
+    session.previewVectorImport(wide, "wide.dxf");
+    const committed = session.commitVectorImport();
+    const committedDocument = committed.project.document;
+    expect(committedDocument.dimensions).toEqual({ widthMm: 825.4, heightMm: 304.8 });
+    expect(committedDocument.objects.slice(0, 2)).toEqual(
+      beforeImport.project.document.objects,
+    );
+    expect(committed.editor.history.undoDepth)
+      .toBe(beforeImport.editor.history.undoDepth + 1);
+
+    expect(session.undo().project.document).toEqual(beforeImport.project.document);
+    expect(session.redo().project.document).toEqual(committedDocument);
+    expect(parseProject(serializeProject(session.state.project)).document)
+      .toEqual(committedDocument);
   });
 
   it("rejects a stale preview after another project edit", () => {

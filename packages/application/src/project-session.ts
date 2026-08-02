@@ -413,6 +413,7 @@ function fittedImportObjects(
   sourceObjects: readonly PathObject[],
   sourceBounds: BoundsMm,
   documentDimensions: { widthMm: number; heightMm: number },
+  existingBounds: BoundsMm | null,
   fitMode: VectorImportFitMode,
   marginMm: number,
 ): {
@@ -422,10 +423,31 @@ function fittedImportObjects(
 } {
   const artworkWidth = sourceBounds.maxXmm - sourceBounds.minXmm;
   const artworkHeight = sourceBounds.maxYmm - sourceBounds.minYmm;
+  if (
+    fitMode === "resize-stock" &&
+    existingBounds !== null &&
+    (existingBounds.minXmm < -1e-9 || existingBounds.minYmm < -1e-9)
+  ) {
+    throw new RangeError(
+      "Existing project geometry extends left or below the fixed stock origin. Choose a non-resizing import fit or move that geometry explicitly first.",
+    );
+  }
   const dimensions = fitMode === "resize-stock"
     ? {
-        widthMm: Math.max(0.001, artworkWidth + marginMm * 2),
-        heightMm: Math.max(0.001, artworkHeight + marginMm * 2),
+        widthMm: Math.max(
+          0.001,
+          artworkWidth + marginMm * 2,
+          ...(existingBounds === null
+            ? []
+            : [documentDimensions.widthMm, existingBounds.maxXmm]),
+        ),
+        heightMm: Math.max(
+          0.001,
+          artworkHeight + marginMm * 2,
+          ...(existingBounds === null
+            ? []
+            : [documentDimensions.heightMm, existingBounds.maxYmm]),
+        ),
       }
     : { ...documentDimensions };
   const availableWidth = Math.max(0.001, dimensions.widthMm - marginMm * 2);
@@ -462,6 +484,13 @@ function fittedImportObjects(
           }),
     })),
   };
+}
+
+function canResizeStockWithoutMovingExistingGeometry(
+  existingBounds: BoundsMm | null,
+): boolean {
+  return existingBounds === null ||
+    (existingBounds.minXmm >= -1e-9 && existingBounds.minYmm >= -1e-9);
 }
 
 function copyRasterTracePreview(
@@ -1180,13 +1209,20 @@ export class ProjectSession implements ProjectCommandDispatcher {
       sourceBounds.minYmm < 0 ||
       sourceBounds.maxXmm + DEFAULT_VECTOR_IMPORT_MARGIN_MM > document.dimensions.widthMm ||
       sourceBounds.maxYmm + DEFAULT_VECTOR_IMPORT_MARGIN_MM > document.dimensions.heightMm;
-    const fitMode: VectorImportFitMode = oversizedAtOriginalScale
+    const existingBounds = getSelectionBounds(
+      document,
+      document.objects.map((object) => object.id),
+    );
+    const fitMode: VectorImportFitMode =
+      oversizedAtOriginalScale &&
+      canResizeStockWithoutMovingExistingGeometry(existingBounds)
       ? "resize-stock"
       : "keep";
     const fitted = fittedImportObjects(
       objects,
       sourceBounds,
       document.dimensions,
+      existingBounds,
       fitMode,
       DEFAULT_VECTOR_IMPORT_MARGIN_MM,
     );
@@ -1250,6 +1286,10 @@ export class ProjectSession implements ProjectCommandDispatcher {
       preview.sourceObjects,
       preview.sourceBounds,
       this.#project.document.dimensions,
+      getSelectionBounds(
+        this.#project.document,
+        this.#project.document.objects.map((object) => object.id),
+      ),
       fitMode,
       marginMm,
     );

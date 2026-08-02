@@ -14,8 +14,8 @@ import {
 } from "electron";
 import {
   ElectronCredentialVault,
-  WindowsCredentialAcquisition,
 } from "./ai-credentials.js";
+import { ApplicationCredentialAcquisition } from "./credential-window.js";
 import {
   DeterministicAiProvider,
   FixedCredentialAcquisition,
@@ -636,8 +636,10 @@ async function createWindow(): Promise<void> {
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   const useDeterministicAi = process.env.LASERX_TEST_AI_MOCK === "1";
-  const waitForCredentialCancellation =
-    process.env.LASERX_TEST_AI_CREDENTIAL_MODE === "wait";
+  const testCredentialMode = process.env.LASERX_TEST_AI_CREDENTIAL_MODE;
+  const waitForCredentialCancellation = testCredentialMode === "wait";
+  const useApplicationCredentialWindow =
+    !useDeterministicAi || testCredentialMode === "application";
   const testCredential = "laserx-e2e-credential-placeholder";
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
@@ -665,14 +667,17 @@ async function createWindow(): Promise<void> {
           ),
         }
       : {}),
-    credentialVault: useDeterministicAi
+    credentialVault: useDeterministicAi && !useApplicationCredentialWindow
       ? new MemoryCredentialVault(waitForCredentialCancellation ? null : testCredential)
       : new ElectronCredentialVault(app.getPath("userData"), safeStorage),
     credentialAcquisition: waitForCredentialCancellation
       ? new WaitingCredentialAcquisition()
-      : useDeterministicAi
+      : useDeterministicAi && !useApplicationCredentialWindow
         ? new FixedCredentialAcquisition(testCredential)
-      : new WindowsCredentialAcquisition(),
+        : new ApplicationCredentialAcquisition({
+            parentWindow: () => mainWindow,
+            preloadPath: resolve(__dirname, "credential-preload.cjs"),
+          }),
     credentialConnectionTimeoutMs: Number(
       process.env.LASERX_TEST_AI_CREDENTIAL_TIMEOUT_MS ?? 120_000,
     ),

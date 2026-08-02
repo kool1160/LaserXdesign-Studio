@@ -858,7 +858,7 @@ const interchangeFindingSchema = z.strictObject({
     ]),
     summary: z.string().min(1),
     changeCount: z.number().int().positive(),
-    toleranceMm: positiveNumber.max(1),
+    toleranceMm: z.number().min(0).max(1),
     appliedToPreview: z.literal(true),
   }).nullable(),
 });

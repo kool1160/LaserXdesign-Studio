@@ -179,15 +179,21 @@ explicit millimeter or inch assumption. Other units are rejected clearly.
 Nonzero Z/elevation, 3D/polyface flags, and unsupported entities warn
 and skip.
 
-Before commit, DXF preview removes exact/zero-length duplicate nodes, closes
-endpoint gaps no larger than the documented 0.1 mm repair tolerance, and
-removes duplicate paths. Every applied repair is listed with its tolerance and
-linked preview object when one remains; skipped entities remain explicit, so a
-partial import cannot look complete. The user then chooses one of three stock
-fits: resize stock while preserving source scale, keep stock and uniformly
-scale/center artwork, or keep both and allow overflow. Margin and resulting
-stock/artwork scale remain visible. Acceptance commits the repaired geometry
-and any chosen stock resize as one undoable `objects.import` command.
+Before commit, DXF preview removes exact/zero-length duplicate nodes and closes
+endpoint gaps no larger than the documented 0.1 mm repair tolerance. Duplicate
+paths use a separate zero-tolerance canonical identity: coordinates and layer
+must match exactly, open direction is ignored, and closed start index and
+direction are normalized deterministically. Nearby paths and handled paths with
+uncertain identity are retained. Every applied repair is listed with its own
+tolerance and linked to the surviving preview object; skipped entities remain
+explicit, so a partial import cannot look complete. The user then chooses one
+of three stock fits: resize stock while preserving source scale, keep stock and
+uniformly scale/center artwork, or keep both and allow overflow. Margin and
+resulting stock/artwork scale remain visible. Tight stock fitting is allowed for
+an empty project. For a non-empty project, resize-stock never shrinks the
+current document and expands as needed to contain the unchanged existing
+geometry plus the centered import. Acceptance commits the repaired geometry and
+any chosen stock resize as one undoable `objects.import` command.
 
 DXF export writes AutoCAD 2013 ASCII (`AC1027`), `$INSUNITS = 4`
 (millimeters), a layer table, `LINE` for open two-point paths, and

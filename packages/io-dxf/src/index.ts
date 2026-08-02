@@ -561,9 +561,52 @@ function repairImportedPaths(
   const paths: InterchangePath[] = [];
   const findings: InterchangeFinding[] = [];
   const indexMap = new Map<number, number>();
-  const pathKeys = new Set<string>();
+  const pathKeys = new Map<string, number>();
   const duplicateNodeToleranceMm = Math.min(toleranceMm, 0.000001);
-  const coordinateKey = (value: number) => String(Math.round(value / toleranceMm));
+  const coordinateKey = (value: number) => Object.is(value, -0) ? "0" : String(value);
+  const leastRotation = (values: readonly string[]): string => {
+    const length = values.length;
+    if (length === 0) return "";
+    let first = 0;
+    let second = 1;
+    let offset = 0;
+    while (first < length && second < length && offset < length) {
+      const firstValue = values[(first + offset) % length] as string;
+      const secondValue = values[(second + offset) % length] as string;
+      if (firstValue === secondValue) {
+        offset += 1;
+        continue;
+      }
+      if (firstValue > secondValue) {
+        first += offset + 1;
+        if (first <= second) first = second + 1;
+      } else {
+        second += offset + 1;
+        if (second <= first) second = first + 1;
+      }
+      offset = 0;
+    }
+    const start = Math.min(first, second);
+    return Array.from(
+      { length },
+      (_unused, index) => values[(start + index) % length] as string,
+    ).join(";");
+  };
+  const exactPathKey = (
+    sourcePath: InterchangePath,
+    points: readonly PointMm[],
+    closed: boolean,
+  ): string | null => {
+    if (sourcePath.handles !== undefined) return null;
+    const forward = points.map((point) =>
+      `${coordinateKey(point.xMm)},${coordinateKey(point.yMm)}`,
+    );
+    const reverse = [...forward].reverse();
+    const geometry = closed
+      ? [leastRotation(forward), leastRotation(reverse)].sort()[0] as string
+      : [forward.join(";"), reverse.join(";")].sort()[0] as string;
+    return `${JSON.stringify(sourcePath.layerName)}:${closed ? "c" : "o"}:${geometry}`;
+  };
   for (let sourceIndex = 0; sourceIndex < sourcePaths.length; sourceIndex += 1) {
     const sourcePath = sourcePaths[sourceIndex] as InterchangePath;
     const cleaned: PointMm[] = [];
@@ -613,28 +656,29 @@ function repairImportedPaths(
     if (cleaned.length < (closed ? 3 : 2)) continue;
     const findingLocation = cleaned[0];
     if (findingLocation === undefined) continue;
-    const key = `${closed ? "c" : "o"}:${cleaned.map((point) =>
-      `${coordinateKey(point.xMm)},${coordinateKey(point.yMm)}`).join(";")}`;
-    if (pathKeys.has(key)) {
+    const key = exactPathKey(sourcePath, cleaned, closed);
+    const duplicatePathIndex = key === null ? undefined : pathKeys.get(key);
+    if (duplicatePathIndex !== undefined) {
+      indexMap.set(sourceIndex, duplicatePathIndex);
       findings.push({
         code: "duplicate-path-removed",
         severity: "repair",
-        message: `Path ${String(sourceIndex + 1)} duplicated earlier geometry and was removed from the preview.`,
+        message: `Path ${String(sourceIndex + 1)} exactly duplicated earlier same-layer geometry and was removed from the preview.`,
         source: `Path ${String(sourceIndex + 1)}`,
-        pathIndex: null,
+        pathIndex: duplicatePathIndex,
         locationMm: { ...findingLocation },
         repair: {
           action: "remove-duplicate-path",
-          summary: "Removed one duplicate path.",
+          summary: "Removed one exact canonical duplicate path.",
           changeCount: 1,
-          toleranceMm,
+          toleranceMm: 0,
           appliedToPreview: true,
         },
       });
       continue;
     }
-    pathKeys.add(key);
     const pathIndex = paths.length;
+    if (key !== null) pathKeys.set(key, pathIndex);
     indexMap.set(sourceIndex, pathIndex);
     paths.push({ ...sourcePath, closed, points: cleaned });
     if (removedNodes > 0) {
@@ -649,7 +693,7 @@ function repairImportedPaths(
           action: "remove-duplicate-nodes",
           summary: `Removed ${String(removedNodes)} duplicate node(s).`,
           changeCount: removedNodes,
-          toleranceMm,
+          toleranceMm: duplicateNodeToleranceMm,
           appliedToPreview: true,
         },
       });
@@ -895,7 +939,7 @@ export function importDxf(
     assumptions: [
       ...units.assumptions,
       ...(repairsApplied
-        ? [`Preview repairs use a fixed ${String(repairToleranceMm)} mm tolerance and are committed only with explicit import acceptance.`]
+        ? [`Endpoint closure uses a fixed ${String(repairToleranceMm)} mm tolerance; duplicate-path identity uses exact canonical coordinates and layer identity. Repairs are committed only with explicit import acceptance.`]
         : []),
     ],
   };

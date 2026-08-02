@@ -180,6 +180,52 @@ describe("DXF interchange", () => {
     expect(candidate.assumptions.join(" ")).toMatch(/fixed 0.1 mm tolerance/u);
   });
 
+  it("removes only exact same-layer canonical duplicates and retains nearby paths deterministically", () => {
+    const polyline = (
+      layer: string,
+      points: readonly (readonly [number, number])[],
+    ): string =>
+      `0\nLWPOLYLINE\n8\n${layer}\n90\n${String(points.length)}\n70\n1\n` +
+      points.map(([xMm, yMm]) => `10\n${String(xMm)}\n20\n${String(yMm)}\n`).join("");
+    const square = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ] as const;
+    const source = dxf(
+      polyline("Cut", square) +
+      polyline("Cut", [[10, 10], [0, 10], [0, 0], [10, 0]]) +
+      polyline("Cut", [[0, 0], [0, 10], [10, 10], [10, 0]]) +
+      polyline("Cut", [[0.04, 0], [10.04, 0], [10.04, 10], [0.04, 10]]) +
+      polyline("Cut", [[0.06, 0], [10.06, 0], [10.06, 10], [0.06, 10]]) +
+      polyline("Other", square),
+    );
+
+    const first = importDxf(source);
+    const second = importDxf(source);
+    expect(second).toEqual(first);
+    expect(first.paths).toHaveLength(4);
+    expect(first.paths.map((path) => path.layerName)).toEqual([
+      "Cut",
+      "Cut",
+      "Cut",
+      "Other",
+    ]);
+    expect(first.paths[1]?.points[0]?.xMm).toBe(0.04);
+    expect(first.paths[2]?.points[0]?.xMm).toBe(0.06);
+    const duplicateFindings = first.findings?.filter(
+      (finding) => finding.code === "duplicate-path-removed",
+    );
+    expect(duplicateFindings).toHaveLength(2);
+    expect(duplicateFindings?.every((finding) =>
+      finding.pathIndex === 0 &&
+      finding.repair?.action === "remove-duplicate-path" &&
+      finding.repair.toleranceMm === 0,
+    )).toBe(true);
+    expect(first.assumptions.join(" ")).toMatch(/exact canonical coordinates and layer identity/u);
+  });
+
   it("keeps circles at or below tolerance as valid three-node contours", () => {
     const candidate = importDxf(dxf(
       "0\nCIRCLE\n8\nCut\n10\n0\n20\n0\n40\n0.005\n",

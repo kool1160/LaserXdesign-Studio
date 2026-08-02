@@ -882,8 +882,8 @@ export class DesktopController {
         ...previous,
         status: "connecting",
         message: replacing
-          ? "Waiting for a replacement key in the secure Windows prompt."
-          : "Waiting for a key in the secure Windows prompt.",
+          ? "Waiting for a replacement key in the secure LaserX credential window."
+          : "Waiting for a key in the secure LaserX credential window.",
         retryAfterMs: null,
       };
       this.#emit();

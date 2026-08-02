@@ -2,6 +2,29 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-02 - M13 PR #32 exact-head review repair
+
+- Date: 2026-08-02
+- Agent/task: Codex / PR #32 four-blocker review repair
+- Milestone: M13 - Windows Installer, Packaging, and Beta Hardening
+- Delivered: Removed Issue #13 auto-close wording. Replaced the external
+  PowerShell/WinForms process with a parent-bound, focused, application-owned
+  modal credential window using an isolated minimal preload and sender-checked
+  IPC. Made resize-stock preserve current stock and all existing nonnegative
+  geometry without moving/scaling it. Replaced 0.1 mm duplicate bucketing with
+  exact same-layer canonical identity supporting reversed and rotated paths.
+- Regression evidence: Added real packaged credential-window visibility,
+  focus, cancel, timeout, success, encrypted-envelope, failed replacement, and
+  restored-control coverage; non-empty resize cancel/commit/Undo/Redo/reopen
+  coverage; and deterministic exact/nearby/reversed/rotated duplicate fixtures.
+- Verification: Root `pnpm verify` passed all seven audits, lint, full workspace
+  typecheck, 281 unit/integration tests, build/package, and 31/31 serial
+  packaged Windows E2E scenarios. `pnpm audit --prod` reports no known
+  vulnerabilities; repository guard verified 68 required files and 17
+  milestones; the scoped patch passes `git diff --check`.
+- Gate restraint: PR #32 remains draft, Issue #13 remains open, and
+  installer/signing work remains blocked pending exact-head re-review and merge.
+
 ## 2026-08-02 - M13 hands-on repair gate implementation
 
 - Date: 2026-08-02

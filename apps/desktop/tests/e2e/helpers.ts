@@ -68,7 +68,7 @@ export interface TestLaunch {
 export interface LaunchEnvironment {
   aiMock?: boolean;
   aiDelayMs?: string;
-  aiCredentialMode?: "wait";
+  aiCredentialMode?: "application" | "wait";
   aiCredentialTimeoutMs?: string;
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;

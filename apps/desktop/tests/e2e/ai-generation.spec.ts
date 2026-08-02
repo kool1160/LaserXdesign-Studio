@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
@@ -77,32 +78,74 @@ test("mocked AI concepts stay previews until wording verification and one-comman
   }
 });
 
-test("packaged credential connection cancels, times out, and restores global controls", async () => {
+test("packaged application credential window focuses, cancels, times out, stores securely, and restores a working key after failure", async () => {
   const launched = await launchPackaged(undefined, "discard", {
     aiMock: true,
-    aiCredentialMode: "wait",
-    aiCredentialTimeoutMs: "800",
+    aiCredentialMode: "application",
+    aiCredentialTimeoutMs: "5000",
   });
   try {
     const page = await launched.electronApp.firstWindow();
     await expect(page.getByTestId("ai-connection-message")).toContainText("Connect");
 
+    const canceledWindowPromise = launched.electronApp.waitForEvent("window");
     await page.getByTestId("connect-ai").click();
+    const canceledWindow = await canceledWindowPromise;
+    await expect(canceledWindow.getByTestId("credential-dialog")).toBeVisible();
+    await expect(canceledWindow.getByTestId("credential-input")).toBeFocused();
+    await expect.poll(() => canceledWindow.evaluate(() => document.hasFocus())).toBe(true);
     await expect(page.getByTestId("cancel-ai-connection")).toBeVisible();
-    await expect(page.getByTestId("ai-credential-timeout")).toContainText("1 seconds");
+    await expect(page.getByTestId("ai-credential-timeout")).toContainText("5 seconds");
     await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "true");
-    await page.getByTestId("cancel-ai-connection").click();
+    await canceledWindow.getByTestId("credential-cancel").click();
     await expect(page.getByTestId("error-message")).toContainText("canceled");
     await expect(page.getByTestId("cancel-ai-connection")).toBeHidden();
     await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "false");
     await expect(page.getByTestId("connect-ai")).toBeEnabled();
 
+    const timedOutWindowPromise = launched.electronApp.waitForEvent("window");
     await page.getByTestId("connect-ai").click();
+    const timedOutWindow = await timedOutWindowPromise;
+    await expect(timedOutWindow.getByTestId("credential-dialog")).toBeVisible();
     await expect(page.getByTestId("error-message")).toContainText("timed out", {
-      timeout: 5_000,
+      timeout: 10_000,
     });
+    await expect.poll(() => timedOutWindow.isClosed()).toBe(true);
     await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "false");
     await expect(page.getByTestId("connect-ai")).toBeEnabled();
+
+    const acceptedCredential = "laserx-e2e-credential-valid-1234567890";
+    const acceptedWindowPromise = launched.electronApp.waitForEvent("window");
+    await page.getByTestId("connect-ai").click();
+    const acceptedWindow = await acceptedWindowPromise;
+    await acceptedWindow.getByTestId("credential-input").fill(acceptedCredential);
+    await acceptedWindow.getByTestId("credential-submit").click();
+    await expect(page.getByTestId("ai-connection-message")).toContainText("stored");
+    await expect(page.getByTestId("replace-ai")).toBeEnabled();
+    const encryptedEnvelope = await readFile(
+      join(launched.userDataPath, "credentials", "ai-provider.json"),
+      "utf8",
+    );
+    expect(encryptedEnvelope).not.toContain(acceptedCredential);
+    expect(JSON.stringify(await page.evaluate(() => window.laserx.getState())))
+      .not.toContain(acceptedCredential);
+
+    const rejectedWindowPromise = launched.electronApp.waitForEvent("window");
+    await page.getByTestId("replace-ai").click();
+    const rejectedWindow = await rejectedWindowPromise;
+    await rejectedWindow.getByTestId("credential-input")
+      .fill("laserx-e2e-credential-rejected");
+    await rejectedWindow.getByTestId("credential-submit").click();
+    await expect(page.getByTestId("error-message")).toContainText(
+      "deterministic test provider rejected",
+    );
+    await expect(page.getByTestId("replace-ai")).toBeEnabled();
+    expect(await readFile(
+      join(launched.userDataPath, "credentials", "ai-provider.json"),
+      "utf8",
+    )).toBe(encryptedEnvelope);
+    await expect(page.getByTestId("ai-connection-message")).toContainText("stored");
+    await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "false");
   } finally {
     await killAndRemove(launched);
   }

@@ -34,8 +34,13 @@ export class DeterministicAiProvider implements AiProvider {
   }
 
   public testConnection(credential: string, signal?: AbortSignal): Promise<void> {
-    void credential;
     signal?.throwIfAborted();
+    if (credential === "laserx-e2e-credential-rejected") {
+      return Promise.reject(new AiProviderError(
+        "invalid-key",
+        "The deterministic test provider rejected this key.",
+      ));
+    }
     return Promise.resolve();
   }
 
