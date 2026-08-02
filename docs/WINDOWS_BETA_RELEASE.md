@@ -65,7 +65,7 @@ remote crash upload, or automatic diagnostic submission. A user who chooses to
 share a diagnostic must review it first and must never send an API key or a
 private customer project unintentionally.
 
-## Performance safeguards
+## Performance budgets and safeguards
 
 The release gate uses these gross safeguards on the documented Windows CI
 reference runner:
@@ -141,15 +141,15 @@ artifact upload, and publication steps cannot read them. Never place the PFX or
 password in the repository, workflow YAML, logs, release notes, or provenance
 file. The public certificate thumbprint is recorded as the expected signer.
 
-### Future public release procedure
+### Exact release procedure for a future public release
 
 1. Review and merge the exact public-release source with required checks green.
 2. Configure the Windows signing secrets and reviewed signer variable.
 3. Create the exact reviewed version tag through owner-authorized advancement.
 4. Manually dispatch **M13 Controlled Beta Release** or its future replacement.
 5. Force trusted signing, validate the exact approved signer, run the full clean
-   lifecycle, and write public provenance with expected and observed signer
-   identities.
+   lifecycle, and write `laserx-release-provenance.json` with expected and
+   observed signer identities.
 6. Compare the manifest source commit to the reviewed tag and retain workflow,
    artifact, checksum, and publication evidence.
 7. Publish only after every trusted-signing and distribution requirement passes.
