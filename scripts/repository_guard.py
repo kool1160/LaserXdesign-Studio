@@ -200,8 +200,16 @@ def check_instruction_links(errors: list[str]) -> None:
         if term not in milestone_index:
             errors.append(f"docs/MILESTONES.md is missing required roadmap row: {term}")
 
-    if "Status advances to M14" not in m13:
-        errors.append("M13 must advance to M14 rather than stopping at maintenance/planning")
+    required_m13_exit_terms = (
+        "status advances only after the private validation evidence is recorded and the owner explicitly advances",
+        "M14 physical 3D sign viewer remains blocked until M14 activation",
+    )
+    for term in required_m13_exit_terms:
+        if term not in m13:
+            errors.append(
+                "M13 exit must remain owner-gated without implicitly activating M14: "
+                f"missing {term}"
+            )
 
 
 def check_secrets(errors: list[str]) -> None:
