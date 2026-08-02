@@ -7,24 +7,75 @@
 M12 merged through PR #29 in merge commit
 `e950a6397ad31cf225893a7fc5f9a0704fe07e64` after final review of exact feature
 head `3770ecbf9f459898a9e848b7a8e338b3c69e567d`. Issue #12 is closed as completed.
-M13 is now the next milestone and Issue #13 is its delivery gate.
+M13 is active and Issue #13 is its delivery gate.
 
-## Owner hold — M12 hands-on checkpoint
+## Hold released — hands-on repair gate active
 
-Do not begin M13 implementation yet. The owner explicitly requested time to run
-and evaluate the exact reviewed M12 Windows build before installer and release
-hardening begins.
+The owner released the M12 hands-on hold on 2026-08-02.
 
-The approved hands-on build is the artifact
+Do **not** begin installer implementation first. The first mandatory M13 slice is
+the owner-observed hands-on repair prerequisite documented in
+`docs/milestones/M13-windows-installer-beta-hardening.md` and Issue #13.
+
+That repair slice must be implemented from current `main` in a new working
+directory and branch, reviewed on its exact final head, pass required Windows
+CI, and merge before installer/signing work begins.
+
+### Required repair outcomes
+
+1. **DXF import repair and stock fitting**
+   - convert supported DXF spline geometry into bounded editable paths instead
+     of silently skipping it;
+   - present actionable, geometry-linked import findings and previewable repair
+     proposals;
+   - cover zero-length segments, duplicate consecutive nodes, exact duplicates,
+     nearly coincident endpoints, and almost-closed contours;
+   - offer `Resize stock to fit artwork`, `Scale artwork to current stock`, and
+     `Keep current stock and artwork size`;
+   - default oversized imports to stock resize with explicit margin, preserved
+     source scale, centered artwork, and viewport fit;
+   - never silently scale or discard manufacturing geometry while claiming a
+     complete import.
+
+2. **U.S. stock thickness workflow**
+   - material-specific sheet gauges;
+   - common fractional-inch plate choices;
+   - millimeter and custom values;
+   - visible shop designation plus inch and millimeter equivalents;
+   - canonical `thicknessMm` for calculations;
+   - persisted stock designation in project data and production manifests
+     through a documented migration;
+   - legacy projects remain valid without an invented designation.
+
+3. **Packaged AI credential connection**
+   - replace the indefinitely awaited hidden PowerShell prompt with a visible,
+     application-owned secure Windows interaction;
+   - provide cancel, timeout, retry, and clear failure behavior;
+   - restore controls and prior connection state after cancellation or failure;
+   - retain the operating-system encryption and secret-isolation boundary;
+   - prove through packaged Windows coverage that connection cannot leave the
+     application globally busy indefinitely.
+
+## M12 hands-on evidence
+
+The approved checkpoint build was the artifact
 `laserx-m12-windows-layered-production` from M12 workflow run `30721257565`,
 artifact ID `8824972711`, produced from exact head
 `3770ecbf9f459898a9e848b7a8e338b3c69e567d`. Its recorded digest is
 `sha256:af0b80cc316096aefdee64bc37f5eb11d2636fb80ce7ea1ce852e2b2b6345982`.
 
-Until the owner explicitly releases this hold, `Continue LaserX` must stop as
-`BLOCKED` and report that M13 is waiting on the M12 hands-on checkpoint. Do not
-open an M13 implementation branch or PR, change installer configuration, or
-begin unrelated cleanup during the hold.
+The owner observed:
+
+- DXF spline entities were skipped with no repair path;
+- imported artwork could extend far outside the fixed 12 × 12 inch stock with
+  no stock-fitting decision;
+- shop-facing thickness selection exposed millimeters rather than U.S. gauge
+  and fractional-inch stock;
+- `Connect existing key` could remain in a global busy state for more than one
+  minute because the external credential prompt did not complete visibly.
+
+These are release-blocking manufacturing or severe usability defects for the
+M13 beta gate.
 
 ## M12 completion record
 
@@ -33,38 +84,14 @@ begin unrelated cleanup during the hold.
 - [x] Final reviewed head: `3770ecbf9f459898a9e848b7a8e338b3c69e567d`.
 - [x] Merge commit: `e950a6397ad31cf225893a7fc5f9a0704fe07e64`.
 - [x] Repository Guard run `30721257591` passed on the final head.
-- [x] M04, M05, M06, M07, M08, M09, M10, M11, and M12 exact-head runs
-  `30721257582`, `30721257566`, `30721257613`, `30721257599`,
-  `30721257596`, `30721257570`, `30721257597`, `30721257571`, and
-  `30721257565` passed.
+- [x] M04 through M12 exact-head workflows passed.
 - [x] The final reviewed suite records 270 unit/integration tests and 29 packaged
   Windows Electron E2E scenarios.
-- [x] Schema v8 persists explicit manufacturing-layer metadata and true
-  world-space registration-circle identities without reclassifying legacy
-  editing layers.
-- [x] Registration coordination preserves unrelated geometry, uses fresh target
-  IDs, remains exactly undoable, survives save/reopen, and fails closed for
-  stale, ambiguous, oval, skewed, or non-uniformly distorted references.
-- [x] Whole-design, selection, and physical-layer cutability results retain
-  truthful atomic scope through cache reuse, cancellation, failure, and bridge
-  repair.
-- [x] Production packages emit deterministic exact-scale SVG/DXF artifacts with
-  shared origin, manifests, hashes, material notes, registration evidence,
-  preview-layer exclusion, atomic staging, explicit replacement, rollback, and
-  partial-failure reporting.
-- [x] M14–M16 governance remains present and no M13–M16 implementation was
-  included in M12.
+- [x] Schema v8 manufacturing-layer, registration-circle, scoped-analysis, and
+  deterministic production-package behavior merged without M13–M16
+  implementation.
 
-## M13 user-visible outcome
-
-A dependable, branded Windows beta can be installed and launched like normal
-software, upgraded and uninstalled safely, recovered after common failures,
-and distributed through a controlled versioned release process.
-
-## Before M13 implementation
-
-After the owner releases the hold, start M13 from current `main` in a new
-working directory and branch. Do not reuse the M12 feature branch or worktree.
+## Before implementation
 
 Read:
 
@@ -77,35 +104,31 @@ Read:
 7. `docs/FILE_FORMATS.md`
 8. `docs/TESTING.md`
 9. `docs/DESKTOP_DESIGN_SYSTEM.md`
+10. relevant DXF, project-format, manufacturing, and AI credential ADRs/tests
 
-## Allowed M13 work
+Use a new branch such as:
 
-- signed Windows installer and documented signing process;
-- Start Menu and optional desktop shortcuts;
-- clean uninstall and explicit user-data behavior;
-- Windows-owned storage for app data, credentials, autosaves, logs, caches, and
-  settings;
-- product metadata, semantic versioning, changelog, and release notes;
-- versioned artifacts, provenance, checksums, and reproducible-build evidence;
-- clean install, launch, upgrade, primary-workflow, and uninstall validation;
-- crash handling and recoverable sessions;
-- startup, viewport, selection, tracing, geometry, analysis, save, and export
-  performance budgets;
-- cancellation, progress, memory, accessibility, high-DPI, security,
-  dependency, migration, and beta feedback gates;
-- telemetry/crash-reporting decision with explicit privacy behavior;
-- optional auto-update only if separately accepted.
+`fix/m13-hands-on-repair-gate`
+
+Do not reuse the M12 branch or worktree.
+
+## Installer work remains sequenced behind the repair gate
+
+After the hands-on repair PR is independently reviewed and merged, continue the
+remaining M13 installer, packaging, recovery, performance, accessibility,
+security, migration, and beta-release work from current `main` in a new branch.
 
 ## Explicitly excluded
 
-Do not add major design, AI, layered-production, CAM, nesting, G-code, DWG,
-machine-control, marketplace, licensing, account-platform, or stable Version
-1.0 scope in M13. M14 owns real-world beta validation and the stable Version
-1.0 publication decision.
+The repair gate does not authorize broad CAD, universal file-format support,
+DWG, general-purpose materials databases, new AI providers, 3D implementation,
+CAM, nesting, G-code, machine control, marketplace, licensing, or unrelated
+cleanup. M14 owns the approved physical 3D sign viewer and stable Version 1.0
+release work.
 
 ## M13 exit rule
 
-Do not advance to M14 until every M13 acceptance test and exit item passes, the
-M13 pull request is reviewed on its exact final head, required CI is green, the
-pull request is merged, Issue #13 is closed, and this file records the verified
-merge and beta release evidence.
+Do not advance to M14 until the hands-on repair prerequisite and every remaining
+M13 acceptance item pass, the final M13 pull request is reviewed on its exact
+head, required CI is green, all required M13 work is merged, Issue #13 is
+closed, and this file records the verified beta release evidence.
