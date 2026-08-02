@@ -8,10 +8,8 @@ if ([string]::IsNullOrWhiteSpace($thumbprint)) {
   exit 0
 }
 
-foreach ($store in @("My", "Root")) {
-  $path = "Cert:\CurrentUser\$store\$thumbprint"
-  if (Test-Path -LiteralPath $path) {
-    Remove-Item -LiteralPath $path -Force
-  }
+$path = "Cert:\CurrentUser\My\$thumbprint"
+if (Test-Path -LiteralPath $path) {
+  Remove-Item -LiteralPath $path -Force
 }
 Write-Output "Removed disposable CI-only code-signing certificate $thumbprint."

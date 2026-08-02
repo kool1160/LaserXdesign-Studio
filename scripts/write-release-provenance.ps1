@@ -27,13 +27,25 @@ $records = foreach ($path in $artifacts) {
     throw "Release artifact is missing: $path"
   }
   $signature = Get-AuthenticodeSignature -LiteralPath $path
-  if ($signature.Status -ne "Valid" -or $null -eq $signature.SignerCertificate) {
+  $ciThumbprint = $env:LASERX_CI_SIGNING_THUMBPRINT
+  $isCiSignature = -not [string]::IsNullOrWhiteSpace($ciThumbprint) -and
+    $null -ne $signature.SignerCertificate -and
+    $signature.SignerCertificate.Thumbprint -ceq $ciThumbprint -and
+    $signature.Status -notin @("NotSigned", "HashMismatch")
+  $isProductionSignature = [string]::IsNullOrWhiteSpace($ciThumbprint) -and
+    $signature.Status -eq "Valid" -and
+    $null -ne $signature.SignerCertificate
+  if (-not $isCiSignature -and -not $isProductionSignature) {
     throw "Release artifact is not validly Authenticode signed: $path ($($signature.Status))"
   }
   $item = Get-Item -LiteralPath $path
+  $artifactPrefix = $artifactRoot.TrimEnd("\", "/") + [IO.Path]::DirectorySeparatorChar
+  if (-not $item.FullName.StartsWith($artifactPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Release artifact escaped the requested artifact directory: $($item.FullName)"
+  }
   [ordered]@{
     fileName = $item.Name
-    relativePath = [IO.Path]::GetRelativePath($artifactRoot, $item.FullName).Replace("\", "/")
+    relativePath = $item.FullName.Substring($artifactPrefix.Length).Replace("\", "/")
     byteLength = $item.Length
     sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
     signature = [ordered]@{

@@ -98,6 +98,10 @@ for (const marker of [
   "remove-ci-signing-certificate.ps1",
 ]) requireText(workflow, marker, "M13 exact-head workflow");
 for (const marker of [
+  "LASERX_CI_SIGNING_THUMBPRINT",
+  'signature.Status -in @(\"NotSigned\", \"HashMismatch\")',
+]) requireText(await text("scripts/validate-windows-installer.ps1"), marker, "CI signature boundary");
+for (const marker of [
   "workflow_dispatch",
   "WIN_CSC_LINK",
   "WIN_CSC_KEY_PASSWORD",

@@ -52,7 +52,8 @@ application and NSIS installer with credentials injected through
 `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`. The certificate and password are CI
 secrets and may not be committed, uploaded as evidence, printed, or copied into
 release provenance. Pull-request signing uses a disposable self-signed identity
-created, trusted, and removed on the isolated runner; it is never a release
+created and removed on the isolated runner. CI verifies its exact embedded
+thumbprint without adding it to a root trust store; it is never a release
 publisher.
 
 Renderer session data, logs, crash dumps, recovery, recents, and encrypted

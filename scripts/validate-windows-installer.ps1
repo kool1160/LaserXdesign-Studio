@@ -80,7 +80,16 @@ function Invoke-Uninstaller {
 function Assert-Signed {
   param([Parameter(Mandatory = $true)][string]$Path)
   $signature = Get-AuthenticodeSignature -LiteralPath $Path
-  if ($signature.Status -ne "Valid") {
+  $ciThumbprint = $env:LASERX_CI_SIGNING_THUMBPRINT
+  if (-not [string]::IsNullOrWhiteSpace($ciThumbprint)) {
+    if ($null -eq $signature.SignerCertificate -or
+        $signature.SignerCertificate.Thumbprint -cne $ciThumbprint -or
+        $signature.Status -in @("NotSigned", "HashMismatch")) {
+      throw "CI Authenticode validation failed for $Path with status $($signature.Status)."
+    }
+    return
+  }
+  if ($signature.Status -ne "Valid" -or $null -eq $signature.SignerCertificate) {
     throw "Authenticode validation failed for $Path with status $($signature.Status)."
   }
 }

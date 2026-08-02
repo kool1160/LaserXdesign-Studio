@@ -36,9 +36,10 @@ Production packaging sets `forceCodeSigning` and receives an exportable Windows
 code-signing certificate only through `WIN_CSC_LINK` and
 `WIN_CSC_KEY_PASSWORD`. Certificates and passwords are never stored in the
 repository or release artifact. Pull-request CI uses a disposable, explicitly
-CI-only self-signed certificate trusted only on its temporary runner to prove
-the signing, installer, upgrade, and signature-verification wiring. That test
-identity is not a distribution identity.
+CI-only self-signed certificate on its temporary runner. It verifies the exact
+embedded signer thumbprint and rejects unsigned or hash-mismatched artifacts
+without adding the test identity to a root trust store. That identity is not a
+distribution identity.
 
 Every release build records the exact source commit, semantic beta version,
 x64 platform, byte sizes, SHA-256 hashes, Authenticode subjects, thumbprints,
@@ -56,9 +57,9 @@ upgrade and uninstall predictable while protecting user projects and recovery
 data.
 
 Separating disposable CI signing from production signing proves the complete
-technical path without confusing a locally trusted test certificate with a
-public publisher identity. Manual tagged publication preserves the exact-head
-review and owner-advancement gate.
+technical path without confusing a self-signed test certificate with a public
+publisher identity. Manual tagged publication preserves the exact-head review
+and owner-advancement gate.
 
 ## Alternatives
 
