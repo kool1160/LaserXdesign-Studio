@@ -122,17 +122,16 @@ function stringValue(entity: DxfEntity, code: number, fallback: string): string 
 }
 
 function hasUnsupportedElevation(entity: DxfEntity): boolean {
-  const elevated = [30, 31, 32, 33, 38].some((code) => {
-    const value = numberValue(entity, code);
-    return value !== undefined && Math.abs(value) > 1e-9;
-  });
-  const extrusionX = numberValue(entity, 210);
-  const extrusionY = numberValue(entity, 220);
-  const extrusionZ = numberValue(entity, 230);
+  const elevated = [30, 31, 32, 33, 38].some((code) =>
+    numberValues(entity, code).some((value) => value !== 0)
+  );
+  const extrusionX = numberValues(entity, 210);
+  const extrusionY = numberValues(entity, 220);
+  const extrusionZ = numberValues(entity, 230);
   const nonPlanarExtrusion =
-    (extrusionX !== undefined && Math.abs(extrusionX) > 1e-9) ||
-    (extrusionY !== undefined && Math.abs(extrusionY) > 1e-9) ||
-    (extrusionZ !== undefined && Math.abs(extrusionZ - 1) > 1e-9);
+    extrusionX.some((value) => value !== 0) ||
+    extrusionY.some((value) => value !== 0) ||
+    extrusionZ.some((value) => value !== 1);
   return elevated || nonPlanarExtrusion;
 }
 
@@ -782,11 +781,11 @@ export function importDxf(
     if (entity.type === "VERTEX" || entity.type === "SEQEND") {
       continue;
     }
-    if (hasUnsupportedElevation(entity)) {
-      warnings.push(warning("unsupported-3d-entity", `${sourceLabel} has non-zero Z/elevation and was skipped. Project it to the XY plane at Z=0 in CAD, then reimport.`, sourceLabel));
-      continue;
-    }
     try {
+      if (hasUnsupportedElevation(entity)) {
+        warnings.push(warning("unsupported-3d-entity", `${sourceLabel} has non-zero Z/elevation and was skipped. Project it to the XY plane at Z=0 in CAD, then reimport.`, sourceLabel));
+        continue;
+      }
       switch (entity.type) {
         case "LINE":
           pointBudget.reserve(2);
@@ -930,7 +929,7 @@ export function importDxf(
           break;
         }
         default:
-          warnings.push(warning("unsupported-dxf-entity", `${sourceLabel} is not supported and was skipped. Convert it to LINE, LWPOLYLINE, ARC, CIRCLE, ELLIPSE, or SPLINE geometry in CAD, then reimport.`, sourceLabel));
+          warnings.push(warning("unsupported-dxf-entity", `${sourceLabel} is not supported and was skipped. Convert it to LINE, LWPOLYLINE, ARC, CIRCLE, or SPLINE geometry in CAD, then reimport.`, sourceLabel));
       }
     } catch (error) {
       if (error instanceof DxfGeometryPointLimitError) {

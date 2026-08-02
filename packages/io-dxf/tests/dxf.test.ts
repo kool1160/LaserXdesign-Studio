@@ -165,6 +165,56 @@ describe("DXF interchange", () => {
     ]));
   });
 
+  it("validates every repeated spline control-point Z value before conversion", () => {
+    const splineWithZ = (zValues: readonly string[]): string =>
+      "0\nSPLINE\n8\nSpline Z\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      `10\n0\n20\n0\n30\n${zValues[0] ?? "0"}\n` +
+      `10\n5\n20\n10\n30\n${zValues[1] ?? "0"}\n` +
+      `10\n10\n20\n0\n30\n${zValues[2] ?? "0"}\n`;
+
+    const planar = importDxf(dxf(splineWithZ(["0", "0", "0"])));
+    expect(planar.paths).toHaveLength(1);
+    expect(planar.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted", pathIndex: 0 }),
+    ]));
+
+    const nonPlanar = importDxf(dxf(
+      "0\nLINE\n8\nCut\n10\n0\n20\n0\n11\n10\n21\n0\n" +
+      splineWithZ(["0", "2", "0"]),
+    ));
+    expect(nonPlanar.paths).toHaveLength(1);
+    expect(nonPlanar.warnings).toHaveLength(1);
+    expect(nonPlanar.warnings[0]).toMatchObject({
+      code: "unsupported-3d-entity",
+      source: "SPLINE 2",
+    });
+    expect(nonPlanar.warnings[0]?.message).toMatch(/Z=0 in CAD, then reimport/u);
+
+    const nonFinite = importDxf(dxf(splineWithZ(["0", "NaN", "0"])));
+    expect(nonFinite.paths).toHaveLength(0);
+    expect(nonFinite.warnings[0]).toMatchObject({
+      code: "invalid-dxf-entity",
+      source: "SPLINE 1",
+    });
+    expect(nonFinite.warnings[0]?.message).toMatch(/non-finite group 30 value/u);
+  });
+
+  it("fails closed for repeated non-planar spline fit, tangent, and extrusion Z records", () => {
+    const planarSpline =
+      "0\nSPLINE\n8\nAuxiliary Z\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "10\n0\n20\n0\n30\n0\n10\n5\n20\n10\n30\n0\n10\n10\n20\n0\n30\n0\n";
+    for (const code of [31, 32, 33, 210, 220] as const) {
+      const candidate = importDxf(dxf(`${planarSpline}${String(code)}\n0\n${String(code)}\n1\n`));
+      expect(candidate.paths, `group ${String(code)}`).toHaveLength(0);
+      expect(candidate.warnings[0]?.code, `group ${String(code)}`).toBe("unsupported-3d-entity");
+    }
+    const extrusionZ = importDxf(dxf(`${planarSpline}230\n1\n230\n0.5\n`));
+    expect(extrusionZ.paths).toHaveLength(0);
+    expect(extrusionZ.warnings[0]?.code).toBe("unsupported-3d-entity");
+  });
+
   it("samples every non-empty knot span of a multi-span spline", () => {
     const candidate = importDxf(dxf(
       "0\nSPLINE\n8\nMulti span\n70\n0\n71\n2\n72\n8\n73\n5\n" +
@@ -317,6 +367,18 @@ describe("DXF interchange", () => {
       "invalid-dxf-entity",
       "unsupported-3d-entity",
     ]);
+  });
+
+  it("recommends only DXF entity types the importer actually supports", () => {
+    const candidate = importDxf(dxf(
+      "0\nELLIPSE\n8\nUnsupported\n10\n0\n20\n0\n11\n10\n21\n0\n40\n0.5\n",
+    ));
+    expect(candidate.paths).toHaveLength(0);
+    expect(candidate.warnings).toEqual([{
+      code: "unsupported-dxf-entity",
+      source: "ELLIPSE 1",
+      message: "ELLIPSE 1 is not supported and was skipped. Convert it to LINE, LWPOLYLINE, ARC, CIRCLE, or SPLINE geometry in CAD, then reimport.",
+    }]);
   });
 
   it("exports explicit millimeter units and preserves 600 mm closure on round trip", () => {

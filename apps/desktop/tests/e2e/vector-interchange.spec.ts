@@ -86,6 +86,9 @@ test("packaged DXF preview converts splines, locates repairs, and applies an exp
     "0\nLWPOLYLINE\n8\nRepair\n90\n4\n70\n0\n" +
     "10\n0\n20\n0\n10\n400\n20\n0\n10\n400\n20\n200\n10\n0.05\n20\n0.04\n" +
     "0\nHATCH\n8\nUnsupported\n" +
+    "0\nSPLINE\n8\nNonplanar\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+    "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+    "10\n0\n20\n0\n30\n0\n10\n20\n20\n30\n30\n5\n10\n40\n20\n0\n30\n0\n" +
     "0\nENDSEC\n0\nEOF\n",
     "utf8",
   );
@@ -97,7 +100,8 @@ test("packaged DXF preview converts splines, locates repairs, and applies an exp
   await expect(page.getByTestId("import-findings")).toContainText("Closed an endpoint gap");
   await expect(page.getByTestId("import-warnings")).toHaveCount(0);
   await expect(page.getByText(/HATCH \d+ is not supported and was skipped/u)).toHaveCount(1);
-  await expect(page.getByTestId("import-partial-warning")).toContainText("1 source entity was skipped");
+  await expect(page.getByTestId("import-findings")).toContainText("Z=0 in CAD, then reimport");
+  await expect(page.getByTestId("import-partial-warning")).toContainText("2 source entities were skipped");
   await expect(page.getByTestId("commit-vector-import")).toHaveText("Accept partial import");
   await expect(page.getByTestId("cancel-vector-import")).toHaveText("Cancel import");
   await page.getByRole("button", { name: "Locate path" }).first().click();
