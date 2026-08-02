@@ -35,17 +35,20 @@ client.
 Production packaging sets `forceCodeSigning` and receives an exportable Windows
 code-signing certificate only through `WIN_CSC_LINK` and
 `WIN_CSC_KEY_PASSWORD`. Certificates and passwords are never stored in the
-repository or release artifact. Pull-request CI uses a disposable, explicitly
-CI-only self-signed certificate on its temporary runner. It verifies the exact
-embedded signer thumbprint and rejects unsigned or hash-mismatched artifacts
-without adding the test identity to a root trust store. That identity is not a
+repository or release artifact and are scoped only to the signing build steps.
+Production validation requires both a trusted signature and the exact reviewed
+certificate thumbprint. Pull-request CI uses a disposable, explicitly CI-only
+self-signed certificate on its temporary runner. It verifies the exact embedded
+signer thumbprint and rejects unsigned or hash-mismatched artifacts without
+adding the test identity to a root trust store. That identity is not a
 distribution identity.
 
 Every release build records the exact source commit, semantic beta version,
 x64 platform, byte sizes, SHA-256 hashes, Authenticode subjects, thumbprints,
-and certificate expiration in a versioned provenance manifest. Publication is
-a manual, review-gated workflow against an existing version tag. The workflow
-fails rather than publishing an unsigned artifact.
+expected and observed signer identities, and certificate expiration in a
+versioned provenance manifest. Publication is a manual, review-gated workflow
+against an existing version tag. The workflow fails rather than publishing an
+unsigned artifact or one signed by a different valid certificate.
 
 ## Rationale
 

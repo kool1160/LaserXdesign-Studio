@@ -73,6 +73,7 @@ import {
 } from "./ipc-contract.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
 
+app.setName("LaserX Design Studio");
 const testUserDataPath = process.env.LASERX_USER_DATA_PATH;
 const runtimePaths = configureRuntimePaths(app, testUserDataPath);
 const runtimeLogger = new AppLogger(runtimePaths.userData);

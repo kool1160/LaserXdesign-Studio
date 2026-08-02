@@ -29,7 +29,7 @@ The production root is `%APPDATA%\LaserX Design Studio`:
 | --- | --- |
 | recent projects | `recent-projects.json` |
 | autosave/recovery | `recovery\active.laserx.autosave` |
-| encrypted OpenAI credential envelope | `credentials\openai.json` |
+| encrypted OpenAI credential envelope | `credentials\ai-provider.json` |
 | application logs | `logs\main.log` |
 | renderer session/cache data | `session\` |
 | local crash dumps | `crash-dumps\` |
@@ -83,23 +83,31 @@ cannot be published. Production signing uses:
 
 - `WIN_CSC_LINK`: a CI-secret URL, path, or base64-encoded exportable PFX;
 - `WIN_CSC_KEY_PASSWORD`: the matching CI-secret password.
+- `WINDOWS_CODE_SIGNING_THUMBPRINT`: a reviewed repository variable containing
+  the production certificate's complete 40-character SHA-1 thumbprint.
 
 Then `package:installer:signed` turns on `forceCodeSigning`; missing or invalid
-credentials fail the build. Never place the PFX or password in the repository,
-workflow YAML, logs, release notes, or provenance file.
+credentials fail the build. The PFX and password are exposed only to the two
+electron-builder signing steps. Setup, install, validation, provenance,
+artifact upload, and publication steps cannot read them. Never place the PFX or
+password in the repository, workflow YAML, logs, release notes, or provenance
+file. The public certificate thumbprint is recorded as the expected signer.
 
 ## Exact release procedure
 
 1. Merge only an exact-head reviewed M13 implementation with required checks
    green.
-2. Set both Windows signing secrets in GitHub Actions.
+2. Set both Windows signing secrets and the reviewed
+   `WINDOWS_CODE_SIGNING_THUMBPRINT` repository variable in GitHub Actions.
 3. Create the exact reviewed `v0.13.0-beta.1` tag only through owner-authorized
    advancement.
 4. Manually dispatch **M13 Controlled Beta Release** for that tag.
 5. The workflow installs locked dependencies, runs `pnpm verify`, forces
    signing, validates both installer and packaged executable signatures, runs
-   clean install/upgrade/Start Menu/desktop option/uninstall tests, and writes
-   `laserx-release-provenance.json`.
+   clean install/upgrade/Start Menu/desktop option/uninstall tests, rejects a
+   valid signature from any certificate other than the reviewed signer, and
+   writes `laserx-release-provenance.json` with expected and observed signer
+   identities.
 6. Compare the manifest source commit to the reviewed tag, retain the workflow
    run and artifact digest, and only then publish the prerelease assets.
 

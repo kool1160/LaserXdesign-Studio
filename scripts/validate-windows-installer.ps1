@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot "authenticode-policy.ps1")
+
 if ($env:CI -ne "true" -and $env:LASERX_ALLOW_INSTALL_TEST -ne "1") {
   throw "Installer validation changes the current user's installed applications. Run only on an isolated CI user or set LASERX_ALLOW_INSTALL_TEST=1 explicitly."
 }
@@ -24,6 +26,7 @@ $startMenuShortcut = Join-Path ([Environment]::GetFolderPath("StartMenu")) "Prog
 $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "$productName.lnk"
 $userDataPath = Join-Path ([Environment]::GetFolderPath("ApplicationData")) $productName
 $sentinelPath = Join-Path $userDataPath "m13-upgrade-preservation.txt"
+$signingPolicy = Get-LaserxSigningPolicy
 
 function Invoke-Installer {
   param(
@@ -97,22 +100,45 @@ function Invoke-Uninstaller {
 function Assert-Signed {
   param([Parameter(Mandatory = $true)][string]$Path)
   $signature = Get-AuthenticodeSignature -LiteralPath $Path
-  $ciThumbprint = $env:LASERX_CI_SIGNING_THUMBPRINT
-  if (-not [string]::IsNullOrWhiteSpace($ciThumbprint)) {
-    if ($null -eq $signature.SignerCertificate -or
-        $signature.SignerCertificate.Thumbprint -cne $ciThumbprint -or
-        $signature.Status -in @("NotSigned", "HashMismatch")) {
-      throw "CI Authenticode validation failed for $Path with status $($signature.Status)."
+  Assert-LaserxAuthenticodeSignature -Signature $signature -Path $Path -Policy $signingPolicy | Out-Null
+}
+
+function Assert-AppLaunch {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  $launched = Start-Process -FilePath $Path -PassThru
+  try {
+    $windowReady = $false
+    for ($attempt = 0; $attempt -lt 100; $attempt += 1) {
+      Start-Sleep -Milliseconds 100
+      $launched.Refresh()
+      if ($launched.HasExited) {
+        throw "$Label exited before the main window appeared."
+      }
+      if ($launched.MainWindowHandle -ne 0) {
+        $windowReady = $true
+        break
+      }
     }
-    return
+    if (-not $windowReady) {
+      throw "$Label did not show a main window within 10 seconds."
+    }
   }
-  if ($signature.Status -ne "Valid" -or $null -eq $signature.SignerCertificate) {
-    throw "Authenticode validation failed for $Path with status $($signature.Status)."
+  finally {
+    if (-not $launched.HasExited) {
+      Stop-Process -Id $launched.Id -Force
+      $launched.WaitForExit(5000) | Out-Null
+    }
   }
 }
 
 try {
   Remove-Item Env:LASERX_USER_DATA_PATH -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $userDataPath) {
+    throw "Installer validation requires a clean application-data root, but one already exists: $userDataPath"
+  }
   Assert-Signed -Path $upgradeInstallerPath
   Assert-Signed -Path $currentInstallerPath
   Invoke-Installer -Path $upgradeInstallerPath
@@ -120,7 +146,15 @@ try {
     throw "A fresh silent install created the optional desktop shortcut without selection."
   }
 
-  New-Item -ItemType Directory -Path $userDataPath -Force | Out-Null
+  $upgradeExecutable = Get-InstalledExecutable
+  Assert-Signed -Path $upgradeExecutable
+  Assert-AppLaunch -Path $upgradeExecutable -Label "The clean-installed upgrade fixture"
+  foreach ($runtimeDirectory in @("session", "logs", "crash-dumps")) {
+    $runtimePath = Join-Path $userDataPath $runtimeDirectory
+    if (-not (Test-Path -LiteralPath $runtimePath -PathType Container)) {
+      throw "The clean-installed application did not create its default runtime directory: $runtimePath"
+    }
+  }
   Set-Content -LiteralPath $sentinelPath -Value "preserve across upgrade and default uninstall" -Encoding utf8NoBOM
 
   Invoke-Installer -Path $currentInstallerPath -DesktopShortcut
@@ -139,35 +173,25 @@ try {
     throw "Upgrade removed existing per-user data."
   }
 
-  $launched = Start-Process -FilePath $startMenuShortcut -PassThru
-  try {
-    $windowReady = $false
-    for ($attempt = 0; $attempt -lt 100; $attempt += 1) {
-      Start-Sleep -Milliseconds 100
-      $launched.Refresh()
-      if ($launched.HasExited) {
-        throw "The Start Menu launch exited before the main window appeared."
-      }
-      if ($launched.MainWindowHandle -ne 0) {
-        $windowReady = $true
-        break
-      }
-    }
-    if (-not $windowReady) {
-      throw "The Start Menu launch did not show a main window within 10 seconds."
-    }
-  }
-  finally {
-    if (-not $launched.HasExited) {
-      Stop-Process -Id $launched.Id -Force
-      $launched.WaitForExit(5000) | Out-Null
-    }
-  }
+  Assert-AppLaunch -Path $startMenuShortcut -Label "The Start Menu launch"
 
   $env:LASERX_INSTALLED_EXECUTABLE_PATH = $installedExecutable
+  $env:LASERX_EXPECTED_USER_DATA_PATH = $userDataPath
   & pnpm.cmd --filter @laserx/desktop exec playwright test tests/e2e/m13-installed-beta.spec.ts
   if ($LASTEXITCODE -ne 0) {
     throw "The clean-installed primary workflow failed."
+  }
+  foreach ($relativePath in @(
+      "recent-projects.json",
+      "credentials\ai-provider.json",
+      "logs\main.log",
+      "session",
+      "crash-dumps"
+    )) {
+    $createdPath = Join-Path $userDataPath $relativePath
+    if (-not (Test-Path -LiteralPath $createdPath)) {
+      throw "The clean-installed application did not create expected user data: $createdPath"
+    }
   }
 
   Invoke-Uninstaller
@@ -176,8 +200,18 @@ try {
       throw "Uninstall left a shortcut behind: $shortcut"
     }
   }
-  if (-not (Test-Path -LiteralPath $sentinelPath -PathType Leaf)) {
-    throw "Default uninstall removed user data instead of preserving it."
+  foreach ($relativePath in @(
+      "m13-upgrade-preservation.txt",
+      "recent-projects.json",
+      "credentials\ai-provider.json",
+      "logs\main.log",
+      "session",
+      "crash-dumps"
+    )) {
+    $preservedPath = Join-Path $userDataPath $relativePath
+    if (-not (Test-Path -LiteralPath $preservedPath)) {
+      throw "Default uninstall removed application-created user data: $preservedPath"
+    }
   }
 
   Invoke-Installer -Path $currentInstallerPath
@@ -190,6 +224,7 @@ try {
 }
 finally {
   Remove-Item Env:LASERX_INSTALLED_EXECUTABLE_PATH -ErrorAction SilentlyContinue
+  Remove-Item Env:LASERX_EXPECTED_USER_DATA_PATH -ErrorAction SilentlyContinue
   try {
     if ($null -ne (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
         Where-Object { $_.DisplayName -eq $productName } |
