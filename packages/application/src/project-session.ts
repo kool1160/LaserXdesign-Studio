@@ -95,6 +95,8 @@ export interface VectorImportPreview {
   objects: PathObject[];
   warnings: InterchangeWarning[];
   findings: VectorImportPreviewFinding[];
+  skippedEntityCount: number;
+  partialImport: boolean;
   assumptions: string[];
   bounds: BoundsMm | null;
   fitMode: VectorImportFitMode;
@@ -398,6 +400,8 @@ function copyImportPreview(
           locationMm: item.locationMm === null ? null : { ...item.locationMm },
           repair: item.repair === null ? null : { ...item.repair },
         })),
+        skippedEntityCount: preview.skippedEntityCount,
+        partialImport: preview.partialImport,
         assumptions: [...preview.assumptions],
         bounds: preview.bounds === null ? null : { ...preview.bounds },
         fitMode: preview.fitMode,
@@ -1236,6 +1240,32 @@ export class ProjectSession implements ProjectCommandDispatcher {
       fittedPreviewDocument,
       fitted.objects.map((object) => object.id),
     );
+    const candidateFindings = candidate.findings ?? [];
+    const findingKeys = new Set(
+      candidateFindings.map(
+        (item) => `${item.code}\u0000${item.message}\u0000${item.source ?? ""}`,
+      ),
+    );
+    const authoritativeFindings: InterchangeFinding[] = [
+      ...candidateFindings,
+      ...candidate.warnings
+        .filter(
+          (item) =>
+            !findingKeys.has(
+              `${item.code}\u0000${item.message}\u0000${item.source ?? ""}`,
+            ),
+        )
+        .map((item) => ({
+          ...item,
+          severity: "warning" as const,
+          pathIndex: null,
+          locationMm: null,
+          repair: null,
+        })),
+    ];
+    const skippedEntityCount = candidate.warnings.filter((item) =>
+      /\bskipped\b/iu.test(item.message)
+    ).length;
     this.#importPreview = {
       sourceName: sourceName.trim() || `Imported ${candidate.format.toUpperCase()}`,
       format: candidate.format,
@@ -1245,7 +1275,7 @@ export class ProjectSession implements ProjectCommandDispatcher {
       layers: newLayers,
       objects: fitted.objects,
       warnings: candidate.warnings.map((item) => ({ ...item })),
-      findings: (candidate.findings ?? []).map((item) => ({
+      findings: authoritativeFindings.map((item) => ({
         ...item,
         locationMm: item.locationMm === null ? null : { ...item.locationMm },
         repair: item.repair === null ? null : { ...item.repair },
@@ -1253,6 +1283,8 @@ export class ProjectSession implements ProjectCommandDispatcher {
           ? null
           : (objects[item.pathIndex]?.id ?? null),
       })),
+      skippedEntityCount,
+      partialImport: skippedEntityCount > 0,
       assumptions: [...candidate.assumptions],
       bounds,
       fitMode,

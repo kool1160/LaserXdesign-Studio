@@ -168,6 +168,34 @@ test("layered sign analysis, registration, persistence, and production package",
     ]));
     expect(layerIds.backingObjectIds).not.toContain(layerIds.originalBackingHoleId);
 
+    await expect(
+      page.getByLabel("Stock thickness designation", { exact: true }).locator(
+        'option[value="gauge:mild-steel:14 ga"]',
+      ),
+    ).toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Stock thickness designation", { exact: true }).selectOption(
+      "gauge:mild-steel:14 ga",
+    );
+    await expect(page.getByTestId("manufacturing-stock-thickness-summary"))
+      .toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Display units").getByRole("button", { name: "in" }).click();
+    await expect(page.getByLabel("Thickness inches", { exact: true })).toHaveValue("0.0747");
+    await page.getByLabel("Thickness inches", { exact: true }).fill("0.125");
+    await expect(page.getByTestId("manufacturing-stock-thickness-summary"))
+      .toHaveText("Custom · 0.125 in · 3.175 mm");
+
+    await page.evaluate(async (layerId) => {
+      await window.laserx.editorAction({ type: "layer.activate", layerId });
+    }, layerIds.faceId);
+    await page.getByLabel("Layer stock thickness designation").selectOption(
+      "gauge:mild-steel:14 ga",
+    );
+    await expect(page.getByTestId("layer-stock-thickness-summary"))
+      .toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Layer thickness inches").fill("0.08");
+    await expect(page.getByTestId("layer-stock-thickness-summary"))
+      .toHaveText("Custom · 0.08 in · 2.032 mm");
+
     await page.evaluate(async ({ faceId, backingId, previewId, ovalId }) => {
       const state = await window.laserx.getState();
       const oval = state.project.document.objects.find(

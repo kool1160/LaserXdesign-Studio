@@ -71,7 +71,12 @@ describe("vector import preview", () => {
       fitMode: "resize-stock",
       marginMm: 12.7,
       proposedDocumentDimensionsMm: { widthMm: 635, heightMm: 330.2 },
+      skippedEntityCount: 1,
+      partialImport: true,
     });
+    expect(previewed.editor.importPreview?.findings.filter(
+      (finding) => finding.message === "Text skipped.",
+    )).toHaveLength(1);
     expect(previewed.editor.importPreview?.bounds?.minXmm).toBeCloseTo(12.7, 9);
     expect(previewed.editor.importPreview?.bounds?.minYmm).toBeCloseTo(12.7, 9);
     expect(previewed.editor.importPreview?.bounds?.maxXmm).toBeCloseTo(622.3, 9);

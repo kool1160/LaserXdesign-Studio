@@ -38,6 +38,17 @@ test("previews, commits, undoes, and exports physical-scale vector geometry", as
   await expect(page.getByTestId("import-preview-summary")).toContainText("600-mm.svg: 1 path(s)");
   await expect(page.getByTestId("import-preview-summary")).toContainText("600.000 × 300.000 mm");
   await expect(page.getByTestId("import-preview-overlay")).toBeVisible();
+  await expect(page.locator('[data-import-object="incoming"]')).toHaveCount(1);
+  const viewportBounds = await page.getByTestId("viewport").boundingBox();
+  const stockBounds = await page.getByTestId("stock-region").boundingBox();
+  expect(viewportBounds).not.toBeNull();
+  expect(stockBounds).not.toBeNull();
+  if (viewportBounds !== null && stockBounds !== null) {
+    expect(stockBounds.x).toBeGreaterThanOrEqual(viewportBounds.x);
+    expect(stockBounds.y).toBeGreaterThanOrEqual(viewportBounds.y);
+    expect(stockBounds.x + stockBounds.width).toBeLessThanOrEqual(viewportBounds.x + viewportBounds.width);
+    expect(stockBounds.y + stockBounds.height).toBeLessThanOrEqual(viewportBounds.y + viewportBounds.height);
+  }
   await expect(page.getByTestId("dirty-indicator")).toHaveCount(0);
   if (process.env.LASERX_CAPTURE_SCREENSHOT === "1") {
     await page.locator(".app-shell").screenshot({
@@ -54,6 +65,11 @@ test("previews, commits, undoes, and exports physical-scale vector geometry", as
   await expect(page.getByTestId("export-summary")).toContainText("Exported 1 path(s) as DXF in millimeters");
   await expect.poll(async () => readFile(exportPath, "utf8")).toContain("$INSUNITS\n70\n4\n");
 
+  await page.getByTestId("preview-vector-import").click();
+  await expect(page.locator('[data-import-object="existing"]')).toHaveCount(1);
+  await expect(page.locator('[data-import-object="incoming"]')).toHaveCount(1);
+  await page.getByTestId("cancel-vector-import").click();
+
   await page.getByTestId("undo").click();
   await expect(page.getByTestId("selection-count")).toContainText("No objects selected");
 });
@@ -69,6 +85,7 @@ test("packaged DXF preview converts splines, locates repairs, and applies an exp
     "41\n1\n41\n1\n41\n1\n10\n0\n20\n0\n10\n200\n20\n300\n10\n400\n20\n0\n" +
     "0\nLWPOLYLINE\n8\nRepair\n90\n4\n70\n0\n" +
     "10\n0\n20\n0\n10\n400\n20\n0\n10\n400\n20\n200\n10\n0.05\n20\n0.04\n" +
+    "0\nHATCH\n8\nUnsupported\n" +
     "0\nENDSEC\n0\nEOF\n",
     "utf8",
   );
@@ -78,6 +95,11 @@ test("packaged DXF preview converts splines, locates repairs, and applies an exp
   await page.getByTestId("preview-vector-import").click();
   await expect(page.getByTestId("import-findings")).toContainText("SPLINE");
   await expect(page.getByTestId("import-findings")).toContainText("Closed an endpoint gap");
+  await expect(page.getByTestId("import-warnings")).toHaveCount(0);
+  await expect(page.getByText(/HATCH \d+ is not supported and was skipped/u)).toHaveCount(1);
+  await expect(page.getByTestId("import-partial-warning")).toContainText("1 source entity was skipped");
+  await expect(page.getByTestId("commit-vector-import")).toHaveText("Accept partial import");
+  await expect(page.getByTestId("cancel-vector-import")).toHaveText("Cancel import");
   await page.getByRole("button", { name: "Locate path" }).first().click();
   await expect.poll(async () =>
     (await page.evaluate(() => window.laserx.getState())).editor.importPreview?.focusedObjectId,
@@ -85,6 +107,10 @@ test("packaged DXF preview converts splines, locates repairs, and applies an exp
 
   await page.getByLabel("Import stock fitting choice").selectOption("scale-artwork");
   await expect(page.getByTestId("import-fit-result")).toContainText("artwork scale");
+  await page.getByTestId("zoom-in").click();
+  const userZoom = await page.getByTestId("zoom-readout").textContent();
+  await page.waitForTimeout(150);
+  await expect(page.getByTestId("zoom-readout")).toHaveText(userZoom ?? "");
   await page.getByTestId("commit-vector-import").click();
   await expect(page.getByTestId("selection-count")).toContainText("2 objects selected");
   await page.getByTestId("undo").click();

@@ -57,6 +57,7 @@ interface ViewportProps {
     proposedDocumentDimensionsMm?: { widthMm: number; heightMm: number } | undefined;
     focusedObjectId?: string | null | undefined;
   } | null;
+  importPreviewFitKey: string | null;
   previewGeometryVisible: boolean;
   rasterBackground: {
     dataUrl: string;
@@ -169,6 +170,7 @@ export function Viewport({
   selectionBounds,
   pathSelection,
   importPreview,
+  importPreviewFitKey,
   previewGeometryVisible,
   rasterBackground,
   manufacturingPreview,
@@ -176,6 +178,7 @@ export function Viewport({
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
+  const fittedImportPreviewKeyRef = useRef<string | null>(null);
   const [size, setSize] = useState<ViewportSizeCssPx>({
     widthCssPx: 1,
     heightCssPx: 1,
@@ -215,7 +218,11 @@ export function Viewport({
   }, []);
 
   useEffect(() => {
-    if (size.widthCssPx > 1 && size.heightCssPx > 1) {
+    if (
+      importPreview === null &&
+      size.widthCssPx > 1 &&
+      size.heightCssPx > 1
+    ) {
       setViewport(fitDocumentToView(document, size));
     }
   }, [
@@ -223,6 +230,7 @@ export function Viewport({
     document.dimensions.widthMm,
     document.dimensions.heightMm,
     document.objects.length,
+    importPreview,
     size.heightCssPx,
     size.widthCssPx,
   ]);
@@ -249,28 +257,96 @@ export function Viewport({
     size.widthCssPx,
   ]);
 
+  const previewDocument = useMemo(
+    () =>
+      importPreview === null
+        ? null
+        : {
+            ...document,
+            dimensions:
+              importPreview.proposedDocumentDimensionsMm ?? document.dimensions,
+            layers: [
+              ...document.layers,
+              ...importPreview.layers.filter(
+                (layer) =>
+                  !document.layers.some(
+                    (documentLayer) => documentLayer.id === layer.id,
+                  ),
+              ),
+            ],
+            objects: [...document.objects, ...importPreview.objects],
+          },
+    [document, importPreview],
+  );
+  const derivedImportPreviewFitKey = useMemo(
+    () =>
+      importPreview === null
+        ? null
+        : importPreviewFitKey ??
+          [
+            importPreview.proposedDocumentDimensionsMm?.widthMm,
+            importPreview.proposedDocumentDimensionsMm?.heightMm,
+            ...importPreview.objects.flatMap((object) => [
+              object.id,
+              object.transform.a,
+              object.transform.b,
+              object.transform.c,
+              object.transform.d,
+              object.transform.eMm,
+              object.transform.fMm,
+            ]),
+          ].join(":"),
+    [importPreview, importPreviewFitKey],
+  );
+
+  useEffect(() => {
+    if (previewDocument === null || derivedImportPreviewFitKey === null) {
+      fittedImportPreviewKeyRef.current = null;
+      return;
+    }
+    if (
+      size.widthCssPx <= 1 ||
+      size.heightCssPx <= 1 ||
+      fittedImportPreviewKeyRef.current === derivedImportPreviewFitKey
+    ) {
+      return;
+    }
+    setViewport(fitDocumentToView(previewDocument, size));
+    fittedImportPreviewKeyRef.current = derivedImportPreviewFitKey;
+  }, [derivedImportPreviewFitKey, previewDocument, size]);
+
   const scene = useMemo(
     () => createViewportScene(document, viewport, size, selectionIds),
     [document, selectionIds, size, viewport],
   );
+  const previewSelectionIds = useMemo(
+    () =>
+      importPreview?.focusedObjectId === null ||
+      importPreview?.focusedObjectId === undefined
+        ? []
+        : [importPreview.focusedObjectId],
+    [importPreview?.focusedObjectId],
+  );
   const previewScene = useMemo(
     () =>
-      importPreview === null
+      previewDocument === null
         ? null
         : createViewportScene(
-            {
-              ...document,
-              dimensions: importPreview.proposedDocumentDimensionsMm ?? document.dimensions,
-              layers: [...document.layers, ...importPreview.layers],
-              objects: importPreview.objects,
-            },
+            previewDocument,
             viewport,
             size,
-            importPreview.focusedObjectId === null || importPreview.focusedObjectId === undefined
-              ? []
-              : [importPreview.focusedObjectId],
+            previewSelectionIds,
           ),
-    [document, importPreview, size, viewport],
+    [previewDocument, previewSelectionIds, size, viewport],
+  );
+  const previewIsVisible = previewScene !== null && previewGeometryVisible;
+  const displayedScene = previewIsVisible ? previewScene : scene;
+  const displayedSelectionIds = previewIsVisible
+    ? previewSelectionIds
+    : selectionIds;
+  const incomingObjectIds = useMemo(
+    () => new Set(importPreview?.objects.map((object) => object.id) ?? []),
+    [importPreview?.objects],
   );
   const rasterProjection = useMemo(() => {
     if (rasterBackground === null) return null;
@@ -492,14 +568,18 @@ export function Viewport({
         <button
           type="button"
           data-testid="fit-view"
-          onClick={() => setViewport(fitDocumentToView(document, size))}
+          onClick={() =>
+            setViewport(fitDocumentToView(previewDocument ?? document, size))
+          }
         >
           Fit
         </button>
         <button
           type="button"
           data-testid="reset-view"
-          onClick={() => setViewport(resetDocumentView(document, size))}
+          onClick={() =>
+            setViewport(resetDocumentView(previewDocument ?? document, size))
+          }
         >
           Reset
         </button>
@@ -675,7 +755,7 @@ export function Viewport({
           aria-label="Cartesian sign workspace"
         >
           <g className="grid-lines" data-testid="viewport-grid">
-            {scene.gridLines.map((line) =>
+            {displayedScene.gridLines.map((line) =>
               line.axis === "x" ? (
                 <line
                   key={`x-${String(line.valueMm)}`}
@@ -698,10 +778,10 @@ export function Viewport({
           <rect
             className="stock-region"
             data-testid="stock-region"
-            x={scene.stock.xCssPx}
-            y={scene.stock.yCssPx}
-            width={scene.stock.widthCssPx}
-            height={scene.stock.heightCssPx}
+            x={displayedScene.stock.xCssPx}
+            y={displayedScene.stock.yCssPx}
+            width={displayedScene.stock.widthCssPx}
+            height={displayedScene.stock.heightCssPx}
           />
           {manufacturingProjection !== null && (
             <g
@@ -720,7 +800,7 @@ export function Viewport({
             </g>
           )}
           <g className="guides" data-testid="viewport-guides">
-            {scene.guides.map((guide) =>
+            {displayedScene.guides.map((guide) =>
               guide.axis === "x" ? (
                 <line
                   key={guide.id}
@@ -740,19 +820,35 @@ export function Viewport({
               ),
             )}
           </g>
-          <g className="placeholder-objects">
-            {scene.objects.map((object) =>
+          <g
+            className="placeholder-objects"
+            data-testid={previewIsVisible ? "import-preview-overlay" : undefined}
+          >
+            {displayedScene.objects.map((object) =>
               object.kind === "compound" ? (
                 <path
                   key={object.key}
-                  className={
-                    selectionIds.includes(object.objectId)
-                      ? "selected-object"
+                  className={`${
+                    displayedSelectionIds.includes(object.objectId)
+                      ? "selected-object "
                       : ""
-                  }
+                  }${
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming-import-object"
+                        : "existing-import-object"
+                      : ""
+                  }`}
                   data-object-id={object.objectId}
                   data-source-id={object.sourceId}
                   data-compound-index={object.compoundIndex}
+                  data-import-object={
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming"
+                        : "existing"
+                      : undefined
+                  }
                   data-testid="compound-text-path"
                   d={compoundPathData(object.contours)}
                   fillRule={object.fillRule}
@@ -761,25 +857,51 @@ export function Viewport({
               ) : object.closed ? (
                 <polygon
                   key={object.key}
-                  className={
-                    selectionIds.includes(object.objectId)
-                      ? "selected-object"
+                  className={`${
+                    displayedSelectionIds.includes(object.objectId)
+                      ? "selected-object "
                       : ""
-                  }
+                  }${
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming-import-object"
+                        : "existing-import-object"
+                      : ""
+                  }`}
                   data-object-id={object.objectId}
                   data-source-id={object.sourceId}
+                  data-import-object={
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming"
+                        : "existing"
+                      : undefined
+                  }
                   points={pointsAttribute(object.points)}
                 />
               ) : (
                 <polyline
                   key={object.key}
-                  className={
-                    selectionIds.includes(object.objectId)
-                      ? "selected-object"
+                  className={`${
+                    displayedSelectionIds.includes(object.objectId)
+                      ? "selected-object "
                       : ""
-                  }
+                  }${
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming-import-object"
+                        : "existing-import-object"
+                      : ""
+                  }`}
                   data-object-id={object.objectId}
                   data-source-id={object.sourceId}
+                  data-import-object={
+                    previewIsVisible
+                      ? incomingObjectIds.has(object.objectId)
+                        ? "incoming"
+                        : "existing"
+                      : undefined
+                  }
                   points={pointsAttribute(object.points)}
                 />
               ),
@@ -797,34 +919,6 @@ export function Viewport({
               preserveAspectRatio="none"
               pointerEvents="none"
             />
-          )}
-          {previewScene !== null && previewGeometryVisible && (
-            <g
-              className="import-preview"
-              data-testid="import-preview-overlay"
-              pointerEvents="none"
-            >
-              {previewScene.objects.map((object) =>
-                object.kind === "compound" ? (
-                  <path
-                    key={`preview-${object.key}`}
-                    d={compoundPathData(object.contours)}
-                    fillRule={object.fillRule}
-                    clipRule={object.fillRule}
-                  />
-                ) : object.closed ? (
-                  <polygon
-                    key={`preview-${object.key}`}
-                    points={pointsAttribute(object.points)}
-                  />
-                ) : (
-                  <polyline
-                    key={`preview-${object.key}`}
-                    points={pointsAttribute(object.points)}
-                  />
-                ),
-              )}
-            </g>
           )}
           {manufacturingProjection?.bridgePolygon !== null &&
             manufacturingProjection?.bridgePolygon !== undefined && (
@@ -919,16 +1013,16 @@ export function Viewport({
               ))}
             </g>
           )}
-          {scene.selection !== null && pathOverlay === null && (
+          {displayedScene.selection !== null && pathOverlay === null && (
             <g className="selection-overlay" data-testid="selection-overlay">
               <rect
                 className="selection-box"
-                x={scene.selection.bounds.xCssPx}
-                y={scene.selection.bounds.yCssPx}
-                width={scene.selection.bounds.widthCssPx}
-                height={scene.selection.bounds.heightCssPx}
+                x={displayedScene.selection.bounds.xCssPx}
+                y={displayedScene.selection.bounds.yCssPx}
+                width={displayedScene.selection.bounds.widthCssPx}
+                height={displayedScene.selection.bounds.heightCssPx}
               />
-              {scene.selection.handles.map((handle) => (
+              {displayedScene.selection.handles.map((handle) => (
                 <circle
                   key={handle.kind}
                   className={`transform-handle ${handle.kind}`}
@@ -968,7 +1062,7 @@ export function Viewport({
                 width={RULER_SIZE_CSS_PX}
                 height={size.heightCssPx}
               />
-              {scene.horizontalTicks.map((tick) => (
+              {displayedScene.horizontalTicks.map((tick) => (
                 <g key={`rx-${String(tick.valueMm)}`}>
                   <line
                     x1={tick.screenPositionCssPx}
@@ -983,7 +1077,7 @@ export function Viewport({
                   )}
                 </g>
               ))}
-              {scene.verticalTicks.map((tick) => (
+              {displayedScene.verticalTicks.map((tick) => (
                 <g key={`ry-${String(tick.valueMm)}`}>
                   <line
                     x1={tick.major ? 10 : 17}

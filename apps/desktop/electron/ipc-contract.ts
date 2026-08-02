@@ -923,6 +923,8 @@ export const desktopStateSchema = z.strictObject({
         objects: z.array(documentObjectSchema),
         warnings: z.array(interchangeWarningSchema),
         findings: z.array(interchangeFindingSchema),
+        skippedEntityCount: z.number().int().nonnegative(),
+        partialImport: z.boolean(),
         assumptions: z.array(z.string()),
         bounds: boundsSchema.nullable(),
         fitMode: z.enum(["resize-stock", "scale-artwork", "keep"]),

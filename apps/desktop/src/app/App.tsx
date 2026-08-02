@@ -3,6 +3,8 @@ import {
   type EditorActionRequest,
 } from "@laserx/application";
 import {
+  MILLIMETERS_PER_INCH,
+  formatStockThickness,
   isRegistrationCircleObject,
   stockThicknessChoicesForMaterial,
   type PathObject,
@@ -165,6 +167,11 @@ export function App() {
     state?.project.document.settings.viewport.gridSpacingMm,
   ]);
 
+  const savedManufacturingSettingsKey =
+    state === null
+      ? null
+      : JSON.stringify(state.project.document.settings.manufacturing);
+
   useEffect(() => {
     if (state !== null) {
       setManufacturingSettings({
@@ -174,7 +181,7 @@ export function App() {
         ],
       });
     }
-  }, [state?.project.id, state?.project.document.settings.manufacturing]);
+  }, [savedManufacturingSettingsKey, state?.project.id]);
 
   useEffect(() => {
     if (state?.editor.selectionBounds === null || state === null) {
@@ -499,6 +506,13 @@ export function App() {
     Number(joinTolerance),
   );
   const unit = document.settings.displayUnit;
+  const stockThicknessInputUnit = unit === "inches" ? "in" : "mm";
+  const stockThicknessForDisplay = (thicknessMm: number): number =>
+    unit === "inches"
+      ? Number((thicknessMm / MILLIMETERS_PER_INCH).toFixed(6))
+      : thicknessMm;
+  const stockThicknessFromDisplay = (thickness: number): number =>
+    unit === "inches" ? thickness * MILLIMETERS_PER_INCH : thickness;
   const unitLabel = unit === "inches" ? "in" : "mm";
   const cutability = state.analysis.cutability;
   const focusedCutabilityIssue = cutability?.issues.find(
@@ -841,12 +855,10 @@ export function App() {
                     ))}
                   </ul>
                 )}
-                {state.editor.importPreview.warnings.length > 0 && (
-                  <ul data-testid="import-warnings">
-                    {state.editor.importPreview.warnings.map((item, index) => (
-                      <li key={`${item.code}-${String(index)}`}>{item.message}</li>
-                    ))}
-                  </ul>
+                {state.editor.importPreview.partialImport && (
+                  <strong data-testid="import-partial-warning">
+                    Partial import: {String(state.editor.importPreview.skippedEntityCount)} source {state.editor.importPreview.skippedEntityCount === 1 ? "entity was" : "entities were"} skipped. Review the finding guidance, then cancel or explicitly accept the partial result.
+                  </strong>
                 )}
                 <div className="manufacturing-settings-grid" data-testid="import-stock-fit">
                   <label>
@@ -914,6 +926,9 @@ export function App() {
                             Locate path
                           </button>
                         )}
+                        {finding.objectId === null && finding.repair === null && (
+                          <small> No in-document location is available; follow the source-file guidance or cancel the import.</small>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -925,7 +940,9 @@ export function App() {
                     disabled={busy}
                     onClick={() => void run(() => window.laserx.commitVectorImport())}
                   >
-                    Accept preview and import
+                    {state.editor.importPreview.partialImport
+                      ? "Accept partial import"
+                      : "Accept import"}
                   </button>
                   <button
                     type="button"
@@ -934,7 +951,7 @@ export function App() {
                     disabled={busy}
                     onClick={() => void run(() => window.laserx.cancelVectorImport())}
                   >
-                    Cancel
+                    Cancel import
                   </button>
                 </div>
               </div>
@@ -1295,17 +1312,17 @@ export function App() {
                 </select>
               </label>
               <label>
-                Canonical thickness (mm)
+                Custom thickness ({stockThicknessInputUnit})
                 <input
-                  aria-label="Thickness millimeters"
+                  aria-label={`Thickness ${unit}`}
                   type="number"
                   min="0.001"
-                  step="0.001"
-                  value={manufacturingSettings.thicknessMm}
+                  step={unit === "inches" ? "0.0001" : "0.001"}
+                  value={stockThicknessForDisplay(manufacturingSettings.thicknessMm)}
                   disabled={busy}
                   onChange={(event) => setManufacturingSettings((current) => ({
                     ...current,
-                    thicknessMm: Number(event.target.value),
+                    thicknessMm: stockThicknessFromDisplay(Number(event.target.value)),
                     stockThicknessDesignation: {
                       kind: "custom",
                       label: "Custom",
@@ -1319,6 +1336,12 @@ export function App() {
                   }))}
                 />
               </label>
+              <span data-testid="manufacturing-stock-thickness-summary">
+                {formatStockThickness(
+                  manufacturingSettings.thicknessMm,
+                  manufacturingSettings.stockThicknessDesignation,
+                )}
+              </span>
               {([
                 ["Kerf", "kerfWidthMm"],
                 ["Min feature", "minimumFeatureWidthMm"],
@@ -1795,6 +1818,11 @@ export function App() {
               state.editor.rasterTracePreview ??
               state.editor.signToolPreview ??
               state.editor.aiConceptPreview
+            }
+            importPreviewFitKey={
+              state.editor.importPreview === null
+                ? null
+                : `${state.editor.importPreview.sourceName}:${state.editor.importPreview.fitMode}:${String(state.editor.importPreview.marginMm)}`
             }
             previewGeometryVisible={
               state.editor.rasterTracePreview === null ||
@@ -2664,16 +2692,16 @@ export function App() {
                         </select>
                       </label>
                       <label>
-                        Thickness (mm)
+                        Custom thickness ({stockThicknessInputUnit})
                         <input
-                          aria-label="Layer thickness millimeters"
+                          aria-label={`Layer thickness ${unit}`}
                           type="number"
                           min="0.001"
-                          step="0.1"
-                          value={activeLayer.manufacturing.thicknessMm}
+                          step={unit === "inches" ? "0.0001" : "0.001"}
+                          value={stockThicknessForDisplay(activeLayer.manufacturing.thicknessMm)}
                           onChange={(event) =>
                             updateActiveLayerManufacturing({
-                              thicknessMm: Number(event.target.value),
+                              thicknessMm: stockThicknessFromDisplay(Number(event.target.value)),
                               stockThicknessDesignation: {
                                 kind: "custom",
                                 label: "Custom",
@@ -2683,6 +2711,12 @@ export function App() {
                           }
                         />
                       </label>
+                      <span data-testid="layer-stock-thickness-summary">
+                        {formatStockThickness(
+                          activeLayer.manufacturing.thicknessMm,
+                          activeLayer.manufacturing.stockThicknessDesignation,
+                        )}
+                      </span>
                       <label>
                         Process
                         <select

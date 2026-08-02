@@ -165,6 +165,62 @@ describe("DXF interchange", () => {
     ]));
   });
 
+  it("samples every non-empty knot span of a multi-span spline", () => {
+    const candidate = importDxf(dxf(
+      "0\nSPLINE\n8\nMulti span\n70\n0\n71\n2\n72\n8\n73\n5\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n2\n40\n3\n40\n3\n40\n3\n" +
+      "10\n0\n20\n0\n10\n10\n20\n30\n10\n20\n20\n-20\n" +
+      "10\n30\n20\n30\n10\n40\n20\n0\n",
+    ));
+    const points = candidate.paths[0]?.points ?? [];
+    expect(points.length).toBeGreaterThan(10);
+    expect(points[0]).toMatchObject({ xMm: 0, yMm: 0 });
+    expect(points.at(-1)).toMatchObject({ xMm: 40, yMm: 0 });
+    expect(points.some((point) => point.xMm > 15 && point.xMm < 25 && point.yMm < 5))
+      .toBe(true);
+  });
+
+  it("defines closed and periodic splines by coincident sampled endpoints", () => {
+    const closedSpline = (flags: 1 | 2, layer: string): string =>
+      `0\nSPLINE\n8\n${layer}\n70\n${String(flags)}\n71\n1\n72\n7\n73\n5\n` +
+      "40\n0\n40\n0\n40\n1\n40\n2\n40\n3\n40\n4\n40\n4\n" +
+      "10\n0\n20\n0\n10\n10\n20\n0\n10\n10\n20\n10\n" +
+      "10\n0\n20\n10\n10\n0\n20\n0\n";
+    const candidate = importDxf(dxf(
+      closedSpline(1, "Closed") + closedSpline(2, "Periodic"),
+    ));
+    expect(candidate.paths).toHaveLength(2);
+    expect(candidate.paths).toEqual(expect.arrayContaining([
+      expect.objectContaining({ layerName: "Closed", closed: true }),
+      expect.objectContaining({ layerName: "Periodic", closed: true }),
+    ]));
+    expect(candidate.paths.every((path) => path.points.length === 4)).toBe(true);
+  });
+
+  it("fails visibly instead of inventing closure or accepting over-tolerance splines", () => {
+    const openEndedClosed = importDxf(dxf(
+      "0\nSPLINE\n8\nBad closed\n70\n1\n71\n1\n72\n5\n73\n3\n" +
+      "40\n0\n40\n0\n40\n1\n40\n2\n40\n2\n" +
+      "10\n0\n20\n0\n10\n10\n20\n10\n10\n20\n20\n0\n",
+    ));
+    expect(openEndedClosed.paths).toHaveLength(0);
+    expect(openEndedClosed.warnings[0]?.message).toMatch(/refusing an implicit straight closing segment/u);
+    expect(openEndedClosed.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted" }),
+    ]));
+
+    const overTolerance = importDxf(dxf(
+      "0\nSPLINE\n8\nHigh curvature\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "10\n0\n20\n0\n10\n0.000001\n20\n1000000\n10\n1\n20\n0\n",
+    ), { curveToleranceMm: 1e-15 });
+    expect(overTolerance.paths).toHaveLength(0);
+    expect(overTolerance.warnings[0]?.message).toMatch(/requested tolerance|subdivision limit|4,096/u);
+    expect(overTolerance.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted" }),
+    ]));
+  });
+
   it("shows bounded near-closure and duplicate-node repairs in the preview", () => {
     const candidate = importDxf(dxf(
       "0\nLWPOLYLINE\n8\nRepair\n90\n5\n70\n0\n" +

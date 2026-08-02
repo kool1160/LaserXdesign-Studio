@@ -497,8 +497,9 @@ function parseSpline(
     parameter,
   );
   const start = evaluate(startParameter);
-  const end = evaluate(endParameter);
   const points: PointMm[] = [start];
+  const maximumSubdivisionDepth = 18;
+  const maximumPreviewPoints = 4_096;
   const appendAdaptive = (
     fromParameter: number,
     from: PointMm,
@@ -506,7 +507,7 @@ function parseSpline(
     to: PointMm,
     depth: number,
   ): void => {
-    if (points.length >= 4_096) {
+    if (points.length >= maximumPreviewPoints) {
       throw new RangeError("SPLINE requires more than 4,096 preview points at the requested tolerance.");
     }
     const quarterParameter = fromParameter + (toParameter - fromParameter) * 0.25;
@@ -520,27 +521,60 @@ function parseSpline(
       pointToSegmentDistance(middle, from, to),
       pointToSegmentDistance(threeQuarter, from, to),
     );
-    if (deviation <= toleranceMm || depth >= 18) {
+    if (deviation <= toleranceMm) {
       points.push(to);
       return;
+    }
+    if (depth >= maximumSubdivisionDepth) {
+      throw new RangeError(
+        `SPLINE could not satisfy the ${String(toleranceMm)} mm preview tolerance within the subdivision limit.`,
+      );
     }
     appendAdaptive(fromParameter, from, middleParameter, middle, depth + 1);
     appendAdaptive(middleParameter, middle, toParameter, to, depth + 1);
   };
-  appendAdaptive(startParameter, start, endParameter, end, 0);
-  const closed = (((numberValue(entity, 70) ?? 0) & 1) === 1);
+  let sampledSpanCount = 0;
+  for (let knotIndex = degree; knotIndex < controlPoints.length; knotIndex += 1) {
+    const spanStart = knots[knotIndex] as number;
+    const spanEnd = knots[knotIndex + 1] as number;
+    if (!(spanEnd > spanStart)) {
+      continue;
+    }
+    const spanStartPoint = evaluate(spanStart);
+    const previousPoint = points.at(-1);
+    if (
+      previousPoint === undefined ||
+      Math.hypot(
+        previousPoint.xMm - spanStartPoint.xMm,
+        previousPoint.yMm - spanStartPoint.yMm,
+      ) > toleranceMm
+    ) {
+      throw new RangeError(
+        "SPLINE has a discontinuous knot span that cannot be represented as one editable path.",
+      );
+    }
+    appendAdaptive(spanStart, spanStartPoint, spanEnd, evaluate(spanEnd), 0);
+    sampledSpanCount += 1;
+  }
+  if (sampledSpanCount === 0) {
+    throw new RangeError("SPLINE has no non-empty knot spans to sample.");
+  }
+  const flags = numberValue(entity, 70) ?? 0;
+  const explicitlyClosed = (flags & 1) === 1;
+  const periodic = (flags & 2) === 2;
+  const closed = explicitlyClosed || periodic;
   const firstPoint = points[0];
   const lastPoint = points.at(-1);
-  if (
-    closed &&
-    firstPoint !== undefined &&
-    lastPoint !== undefined &&
-    points.length > 1 &&
-    Math.hypot(
+  if (closed && firstPoint !== undefined && lastPoint !== undefined) {
+    const endpointGapMm = Math.hypot(
       lastPoint.xMm - firstPoint.xMm,
       lastPoint.yMm - firstPoint.yMm,
-    ) <= toleranceMm
-  ) {
+    );
+    if (endpointGapMm > toleranceMm) {
+      throw new RangeError(
+        `${periodic ? "Periodic" : "Closed"} SPLINE endpoints are ${String(endpointGapMm)} mm apart; refusing an implicit straight closing segment.`,
+      );
+    }
     points.pop();
   }
   if (points.length < (closed ? 3 : 2)) {
@@ -749,7 +783,7 @@ export function importDxf(
       continue;
     }
     if (hasUnsupportedElevation(entity)) {
-      warnings.push(warning("unsupported-3d-entity", `${sourceLabel} has non-zero Z/elevation and was skipped.`, sourceLabel));
+      warnings.push(warning("unsupported-3d-entity", `${sourceLabel} has non-zero Z/elevation and was skipped. Project it to the XY plane at Z=0 in CAD, then reimport.`, sourceLabel));
       continue;
     }
     try {
@@ -847,7 +881,7 @@ export function importDxf(
         case "POLYLINE": {
           const flags = numberValue(entity, 70) ?? 0;
           if ((flags & 8) !== 0 || (flags & 16) !== 0 || (flags & 64) !== 0) {
-            warnings.push(warning("unsupported-3d-polyline", `${sourceLabel} is a 3D/polyface mesh and was skipped.`, sourceLabel));
+            warnings.push(warning("unsupported-3d-polyline", `${sourceLabel} is a 3D/polyface mesh and was skipped. Convert it to 2D LINE or LWPOLYLINE geometry at Z=0 in CAD, then reimport.`, sourceLabel));
             break;
           }
           const vertices: Array<PointMm & { bulge: number }> = [];
@@ -862,7 +896,7 @@ export function importDxf(
             }
             if (hasUnsupportedElevation(child)) {
               vertices.length = 0;
-              warnings.push(warning("unsupported-3d-polyline", `${sourceLabel} has non-zero vertex Z and was skipped.`, sourceLabel));
+              warnings.push(warning("unsupported-3d-polyline", `${sourceLabel} has non-zero vertex Z and was skipped. Project all vertices to Z=0 in CAD, then reimport.`, sourceLabel));
               break;
             }
             vertices.push({
@@ -896,7 +930,7 @@ export function importDxf(
           break;
         }
         default:
-          warnings.push(warning("unsupported-dxf-entity", `${sourceLabel} is not supported and was skipped.`, sourceLabel));
+          warnings.push(warning("unsupported-dxf-entity", `${sourceLabel} is not supported and was skipped. Convert it to LINE, LWPOLYLINE, ARC, CIRCLE, ELLIPSE, or SPLINE geometry in CAD, then reimport.`, sourceLabel));
       }
     } catch (error) {
       if (error instanceof DxfGeometryPointLimitError) {
@@ -905,7 +939,7 @@ export function importDxf(
       warnings.push(
         warning(
           "invalid-dxf-entity",
-          `${sourceLabel} was skipped: ${error instanceof Error ? error.message : String(error)}`,
+          `${sourceLabel} was skipped: ${error instanceof Error ? error.message : String(error)} Repair or flatten it to supported 2D geometry in CAD, then reimport.`,
           sourceLabel,
         ),
       );
@@ -928,13 +962,6 @@ export function importDxf(
     findings: [
       ...mappedFindings,
       ...repaired.findings,
-      ...warnings.map((item): InterchangeFinding => ({
-        ...item,
-        severity: "warning",
-        pathIndex: null,
-        locationMm: null,
-        repair: null,
-      })),
     ],
     assumptions: [
       ...units.assumptions,

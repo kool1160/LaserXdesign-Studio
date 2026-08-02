@@ -173,6 +173,28 @@ const FRACTIONAL_STOCK_INCH: readonly (readonly [label: string, inches: number])
 
 const METRIC_STOCK_MM = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12] as const;
 
+function formatStockInches(thicknessMm: number): string {
+  return (thicknessMm / MILLIMETERS_PER_INCH)
+    .toFixed(6)
+    .replace(/(?:\.0+|(?<decimal>\.\d*?)0+)$/u, "$<decimal>");
+}
+
+/** Human-readable stock thickness with both inch and millimeter context. */
+export function formatStockThickness(
+  thicknessMm: number,
+  designation: StockThicknessDesignation | null | undefined,
+): string {
+  const millimeters = `${thicknessMm.toFixed(3)} mm`;
+  const inches = `${formatStockInches(thicknessMm)} in`;
+  if (designation?.kind === "fractional-inch") {
+    return `${designation.label} · ${millimeters}`;
+  }
+  if (designation?.kind === "millimeter") {
+    return `${designation.label} · ${inches}`;
+  }
+  return `${designation?.label ?? "Custom"} · ${inches} · ${millimeters}`;
+}
+
 export function stockThicknessChoicesForMaterial(
   material: ManufacturingMaterial,
 ): StockThicknessChoice[] {
@@ -185,7 +207,10 @@ export function stockThicknessChoicesForMaterial(
     ? []
     : GAUGE_THICKNESSES_INCH[gaugeMaterial].map(([label, inches]) => ({
         id: `gauge:${gaugeMaterial}:${label}`,
-        label: `${label} (${(inches * MILLIMETERS_PER_INCH).toFixed(3)} mm)`,
+        label: formatStockThickness(
+          inches * MILLIMETERS_PER_INCH,
+          { kind: "gauge", label, material: gaugeMaterial },
+        ),
         thicknessMm: inches * MILLIMETERS_PER_INCH,
         designation: { kind: "gauge", label, material: gaugeMaterial },
       }));
@@ -193,13 +218,19 @@ export function stockThicknessChoicesForMaterial(
     ...gaugeChoices,
     ...FRACTIONAL_STOCK_INCH.map(([label, inches]) => ({
       id: `fractional-inch:${label}`,
-      label: `${label} (${(inches * MILLIMETERS_PER_INCH).toFixed(3)} mm)`,
+      label: formatStockThickness(
+        inches * MILLIMETERS_PER_INCH,
+        { kind: "fractional-inch", label, material: null },
+      ),
       thicknessMm: inches * MILLIMETERS_PER_INCH,
       designation: { kind: "fractional-inch" as const, label, material: null },
     })),
     ...METRIC_STOCK_MM.map((millimeters) => ({
       id: `millimeter:${String(millimeters)}`,
-      label: `${String(millimeters)} mm`,
+      label: formatStockThickness(
+        millimeters,
+        { kind: "millimeter", label: `${String(millimeters)} mm`, material: null },
+      ),
       thicknessMm: millimeters,
       designation: { kind: "millimeter" as const, label: `${String(millimeters)} mm`, material: null },
     })),

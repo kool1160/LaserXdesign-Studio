@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MANUFACTURING_SETTINGS,
   copyManufacturingSettings,
+  formatStockThickness,
   stockThicknessChoicesForMaterial,
 } from "../src/index.js";
 
@@ -20,6 +21,29 @@ describe("U.S. stock thickness designations", () => {
     expect(mild.thicknessMm).not.toBe(stainless.thicknessMm);
     expect(mild.designation.material).toBe("mild-steel");
     expect(stainless.designation.material).toBe("stainless-steel");
+  });
+
+  it("formats gauge, fractional, metric, and custom stock with dual-unit context", () => {
+    const choices = [
+      ...stockThicknessChoicesForMaterial("mild-steel"),
+      ...stockThicknessChoicesForMaterial("stainless-steel"),
+      ...stockThicknessChoicesForMaterial("aluminum"),
+    ];
+    expect(choices.find((choice) => choice.id === "gauge:mild-steel:14 ga")?.label)
+      .toBe("14 ga · 0.0747 in · 1.897 mm");
+    expect(choices.find((choice) => choice.id === "gauge:stainless-steel:14 ga")?.label)
+      .toBe("14 ga · 0.078125 in · 1.984 mm");
+    expect(choices.find((choice) => choice.id === "gauge:aluminum:14 ga")?.label)
+      .toBe("14 ga · 0.0641 in · 1.628 mm");
+    expect(choices.find((choice) => choice.id === "fractional-inch:1/8 in")?.label)
+      .toBe("1/8 in · 3.175 mm");
+    expect(choices.find((choice) => choice.id === "millimeter:3")?.label)
+      .toBe("3 mm · 0.11811 in");
+    expect(formatStockThickness(2.345, {
+      kind: "custom",
+      label: "Custom",
+      material: null,
+    })).toBe("Custom · 0.092323 in · 2.345 mm");
   });
 
   it("accepts matching gauge, fractional, millimeter, and custom choices", () => {
