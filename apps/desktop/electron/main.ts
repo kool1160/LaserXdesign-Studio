@@ -16,6 +16,8 @@ import {
   ElectronCredentialVault,
 } from "./ai-credentials.js";
 import { ApplicationCredentialAcquisition } from "./credential-window.js";
+import { AppLogger } from "./logger.js";
+import { configureRuntimePaths } from "./runtime-paths.js";
 import {
   DeterministicAiProvider,
   FixedCredentialAcquisition,
@@ -72,9 +74,8 @@ import {
 import { ElectronRasterCodec } from "./raster-codec.js";
 
 const testUserDataPath = process.env.LASERX_USER_DATA_PATH;
-if (testUserDataPath !== undefined) {
-  app.setPath("userData", resolve(testUserDataPath));
-}
+const runtimePaths = configureRuntimePaths(app, testUserDataPath);
+const runtimeLogger = new AppLogger(runtimePaths.userData);
 const testScaleFactor = process.env.LASERX_TEST_DEVICE_SCALE_FACTOR;
 if (testScaleFactor !== undefined) {
   app.commandLine.appendSwitch("force-device-scale-factor", testScaleFactor);
@@ -83,6 +84,7 @@ if (testScaleFactor !== undefined) {
 let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
+let handlingFatalFailure = false;
 let rejectNextGetState =
   process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
@@ -117,6 +119,75 @@ function requireMainWindow(): BrowserWindow {
     throw new Error("The application window is not available.");
   }
   return mainWindow;
+}
+
+async function writeRuntimeEvent(message: string): Promise<void> {
+  try {
+    await runtimeLogger.info(message);
+  } catch {
+    // Fatal handling must continue even when the diagnostic destination fails.
+  }
+}
+
+async function preserveEmergencyRecovery(): Promise<void> {
+  if (controller === null) {
+    return;
+  }
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      controller.prepareEmergencyRecovery(),
+      new Promise<void>((resolveTimeout) => {
+        timeout = setTimeout(resolveTimeout, 5_000);
+        timeout.unref();
+      }),
+    ]);
+  } catch {
+    await writeRuntimeEvent("recovery-emergency-snapshot-failed");
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+async function recoverFromRendererFailure(reason: string): Promise<void> {
+  if (handlingFatalFailure) {
+    return;
+  }
+  handlingFatalFailure = true;
+  await writeRuntimeEvent(`renderer-process-gone:${reason}`);
+  await preserveEmergencyRecovery();
+  try {
+    await dialog.showMessageBox({
+      type: "error",
+      title: "LaserX needs to restart",
+      message: "The design window stopped unexpectedly.",
+      detail:
+        "LaserX attempted to preserve a recovery snapshot without changing your last explicit save and will restart now.",
+      buttons: ["Restart LaserX"],
+      defaultId: 0,
+      noLink: true,
+    });
+  } finally {
+    allowClose = true;
+    app.relaunch();
+    app.exit(1);
+  }
+}
+
+async function exitAfterMainFailure(): Promise<void> {
+  if (handlingFatalFailure) {
+    return;
+  }
+  handlingFatalFailure = true;
+  try {
+    await writeRuntimeEvent("main-process-uncaught-exception");
+    await preserveEmergencyRecovery();
+  } finally {
+    allowClose = true;
+    app.exit(1);
+  }
 }
 
 const dialogs: DesktopDialogs = {
@@ -621,6 +692,11 @@ async function createWindow(): Promise<void> {
   mainWindow.webContents.on("will-navigate", (event) => {
     event.preventDefault();
   });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    if (details.reason !== "clean-exit") {
+      void recoverFromRendererFailure(details.reason);
+    }
+  });
   mainWindow.on("close", (event) => {
     if (allowClose) {
       return;
@@ -728,4 +804,8 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", () => {
   app.quit();
+});
+
+process.once("uncaughtException", () => {
+  void exitAfterMainFailure();
 });

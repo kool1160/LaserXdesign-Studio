@@ -1,0 +1,101 @@
+name: M13 Windows Installer Beta
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/m13-windows-installer-beta"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-signed-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+
+      - name: Run repository guard
+        run: py -3 scripts/repository_guard.py
+
+      - name: Verify clean patch formatting
+        run: git diff --check
+
+      - name: Verify branded asset generation
+        shell: pwsh
+        run: |
+          pnpm --filter @laserx/desktop brand:assets
+          git diff --exit-code -- apps/desktop/public/laserx-icon.png
+          if ($LASTEXITCODE -ne 0) {
+            throw "Generated LaserX icon is out of date."
+          }
+
+      - name: Verify all LaserX gates
+        run: pnpm verify
+
+      - name: Create disposable CI signing identity
+        shell: pwsh
+        run: ./scripts/create-ci-signing-certificate.ps1
+
+      - name: Build signed upgrade fixture
+        run: pnpm --filter @laserx/desktop package:installer:upgrade-fixture
+
+      - name: Build fail-closed signed current installer
+        run: pnpm --filter @laserx/desktop package:installer:signed
+
+      - name: Validate signed install, upgrade, workflow, and uninstall
+        shell: pwsh
+        run: |
+          ./scripts/validate-windows-installer.ps1 `
+            -UpgradeFixtureInstaller "apps/desktop/dist-packaged-upgrade-fixture/LaserX-Design-Studio-Setup-0.12.99-beta.1-x64.exe" `
+            -CurrentInstaller "apps/desktop/dist-packaged/LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe" `
+            -ExpectedVersion "0.13.0-beta.1"
+
+      - name: Write exact signed-artifact provenance
+        shell: pwsh
+        run: |
+          $sourceCommit = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          ./scripts/write-release-provenance.ps1 `
+            -ArtifactDirectory "apps/desktop/dist-packaged" `
+            -ExpectedVersion "0.13.0-beta.1" `
+            -SourceCommit $sourceCommit `
+            -OutputPath "artifacts/m13/laserx-release-provenance.json"
+
+      - name: Remove disposable CI signing identity
+        if: always()
+        shell: pwsh
+        run: ./scripts/remove-ci-signing-certificate.ps1
+
+      - name: Upload M13 signed installer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: laserx-m13-windows-installer-beta
+          path: |
+            apps/desktop/dist-packaged/LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe
+            apps/desktop/dist-packaged/*.blockmap
+            apps/desktop/dist-packaged/win-unpacked
+            artifacts/m13/laserx-release-provenance.json
+            apps/desktop/test-results
+          if-no-files-found: warn
+          retention-days: 14

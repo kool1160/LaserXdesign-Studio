@@ -20,3 +20,6 @@ Accepted implementation decisions:
 - ADR 0018 — future machine and controller extensibility
 - ADR 0019 — secure replaceable raster tracing
 - ADR 0020 — deterministic cutability and bridge proposals
+- ADR 0021 — versioned sign templates and editable generation
+- ADR 0022 — explicit manufacturing layers and atomic production packages
+- ADR 0023 — Windows beta installer and release boundary

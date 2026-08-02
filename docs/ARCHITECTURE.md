@@ -79,6 +79,21 @@ only from its own `webContents`. Electron main destroys the window on submit,
 cancel, or controller timeout, tests the ephemeral key, and writes it only
 through the existing `safeStorage` vault boundary.
 
+The remaining M13 release boundary uses a stable `studio.laserx.desktop`
+identity and an x64 assisted NSIS installer. The installer owns Start Menu and
+optional desktop shortcuts plus explicit uninstall data-retention choices; it
+never owns user-selected project or export files. Electron main maps session
+data, logs, and local crash dumps under the per-user `userData` root. A fatal
+renderer path settles older autosave work, writes the latest dirty recovery
+snapshot, and relaunches without changing the last explicit save.
+
+Production signing is injected only at the packaging boundary and is required
+to succeed before publication. A manual tagged release produces a schema-1
+manifest binding the exact source commit to x64 installer/application hashes
+and Authenticode identity. Pull-request CI uses only a disposable runner-local
+test certificate; auto-update and crash/telemetry upload remain absent. ADR
+0023 and `docs/WINDOWS_BETA_RELEASE.md` define the complete contract.
+
 ## Process boundary
 
 Electron main process owns privileged file and network operations. The renderer receives a narrow typed API through preload with context isolation enabled. The renderer never receives unrestricted filesystem or process access.

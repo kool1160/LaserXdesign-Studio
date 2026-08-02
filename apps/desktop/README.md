@@ -35,6 +35,15 @@ and edit history outside component state.
 Run `pnpm dev` from the repository root for development. `pnpm test:e2e`
 packages and tests the unpacked Windows application.
 
+## M13 Windows beta boundary
+
+`package:win` remains the unpacked Playwright target. `package:installer`
+builds the assisted x64 NSIS installer for local inspection with certificate
+auto-discovery disabled. `package:installer:signed` enables fail-closed signing
+and is the only publishable path. The stable application ID, shortcut and
+uninstall choices, runtime paths, signing inputs, upgrade contract, and manual
+release gate are documented in `docs/WINDOWS_BETA_RELEASE.md` and ADR 0023.
+
 ## M06 interchange boundary
 
 Electron main owns native SVG/DXF dialogs, bounded UTF-8 reads, atomic writes,

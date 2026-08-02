@@ -1827,6 +1827,16 @@ export class DesktopController {
     return true;
   }
 
+  public async prepareEmergencyRecovery(): Promise<void> {
+    this.stop();
+    const autosave = this.#autosaveInFlight;
+    if (autosave !== null) {
+      await autosave;
+    }
+    await this.#autosave();
+    await this.#logger.info("recovery-emergency-snapshot-complete");
+  }
+
   public stop(): void {
     if (this.#stopAutosave !== null) {
       this.#stopAutosave();

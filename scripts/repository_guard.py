@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 
@@ -21,6 +22,9 @@ REQUIRED_FILES = (
     "docs/TESTING.md",
     "docs/AI_PIPELINE.md",
     "docs/PRODUCTION_PACKAGES.md",
+    "docs/WINDOWS_BETA_RELEASE.md",
+    "docs/BETA_FEEDBACK.md",
+    "docs/KNOWN_ISSUES.md",
     "docs/MILESTONES.md",
     "docs/status/CURRENT.md",
     "docs/milestones/M00-foundation.md",
@@ -33,6 +37,7 @@ REQUIRED_FILES = (
     "docs/decisions/0019-secure-replaceable-raster-tracing.md",
     "docs/decisions/0020-deterministic-cutability-and-bridge-proposals.md",
     "docs/decisions/0022-explicit-manufacturing-layers-and-atomic-production-packages.md",
+    "docs/decisions/0023-windows-beta-installer-and-release-boundary.md",
     "docs/decisions/0017-user-owned-ai-provider-credentials.md",
     ".github/workflows/m06-svg-dxf.yml",
     ".github/workflows/m07-raster-tracing.yml",
@@ -40,6 +45,8 @@ REQUIRED_FILES = (
     ".github/workflows/m10-ai-generation.yml",
     ".github/workflows/m11-ui-branding-polish.yml",
     ".github/workflows/m12-layered-production.yml",
+    ".github/workflows/m13-windows-installer-beta.yml",
+    ".github/workflows/m13-controlled-beta-release.yml",
     "fixtures/svg/24-inch.svg",
     "fixtures/svg/600-mm.svg",
     "fixtures/dxf/24-inch.dxf",
@@ -57,6 +64,9 @@ REQUIRED_FILES = (
     "scripts/cutability-policy-audit.mjs",
     "scripts/ai-boundary-audit.mjs",
     "scripts/production-package-audit.mjs",
+    "scripts/release-policy-audit.mjs",
+    "scripts/validate-windows-installer.ps1",
+    "scripts/write-release-provenance.ps1",
     "docs/screenshots/m06-svg-dxf.png",
     "docs/screenshots/m07-raster-tracing.png",
     "docs/screenshots/m08-cutability-bridge-preview.png",
@@ -64,6 +74,8 @@ REQUIRED_FILES = (
     "apps/desktop/public/laserx-icon.png",
     "apps/desktop/public/laserx-mark.svg",
     "apps/desktop/package.json",
+    "apps/desktop/electron-builder.config.cjs",
+    "apps/desktop/build-resources/installer.nsh",
     "packages/application/package.json",
     "packages/domain/package.json",
     "packages/geometry/package.json",
@@ -112,6 +124,7 @@ IGNORED_DIRECTORY_NAMES = {
     "coverage",
     "dist",
     "dist-packaged",
+    "dist-packaged-upgrade-fixture",
     "node_modules",
     "out",
     "playwright-report",
@@ -124,8 +137,13 @@ def relative(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
-def is_ignored(path: Path) -> bool:
-    return any(part in IGNORED_DIRECTORY_NAMES for part in path.relative_to(ROOT).parts)
+def repository_files():
+    for directory, child_directories, filenames in os.walk(ROOT):
+        child_directories[:] = [
+            name for name in child_directories if name not in IGNORED_DIRECTORY_NAMES
+        ]
+        for filename in filenames:
+            yield Path(directory) / filename
 
 
 def check_required(errors: list[str]) -> None:
@@ -182,9 +200,7 @@ def check_instruction_links(errors: list[str]) -> None:
 
 
 def check_secrets(errors: list[str]) -> None:
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or is_ignored(path):
-            continue
+    for path in repository_files():
         if path.name == ".env.example":
             continue
         if path.name == ".env" or path.name.startswith(".env."):
@@ -194,12 +210,8 @@ def check_secrets(errors: list[str]) -> None:
 
 
 def check_fonts(errors: list[str]) -> None:
-    for path in ROOT.rglob("*"):
-        if (
-            not path.is_file()
-            or is_ignored(path)
-            or path.suffix.lower() not in FONT_SUFFIXES
-        ):
+    for path in repository_files():
+        if path.suffix.lower() not in FONT_SUFFIXES:
             continue
 
         rel = relative(path)

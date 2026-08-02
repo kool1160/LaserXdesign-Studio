@@ -423,6 +423,32 @@ secret or prompt content.
   replacement-key restoration, secret absence from normal renderer state, and
   release of global busy controls.
 
+## M13 installer and beta-hardening executable layers
+
+- the release-policy audit pins the semantic beta version, stable application
+  identity, x64 assisted NSIS target, explicit shortcut/data choices,
+  preserve-by-default uninstall policy, forced production signing, manual tag
+  gate, local-only diagnostics, and required release documents;
+- pull-request CI creates an ephemeral runner-only code-signing certificate,
+  signs both an upgrade fixture and current installer, trusts it only for the
+  duration of validation, verifies Authenticode on the installed executable
+  and installer, then removes the certificate;
+- clean-runner validation installs the prior fixture, creates application data,
+  upgrades to the current beta, proves the data survived, resolves and launches
+  the Start Menu shortcut, selects and removes the optional desktop shortcut,
+  and proves default-preserve versus explicit-delete uninstall behavior;
+- installed Playwright coverage launches the actual installed executable at
+  150% scale, exercises keyboard focus, imports 600 × 300 mm artwork, runs
+  manufacturing analysis, saves schema v9, and exports independently
+  inspectable millimeter DXF within the cold-start and command budgets;
+- emergency-recovery coordination settles an older in-flight autosave and then
+  writes the latest dirty document before fatal exit, while the established
+  packaged restart test proves the explicit project file is not overwritten;
+- every release candidate reruns all migration versions, dependency/license
+  audits, packaged security and M04–M13 workflows, responsive layouts, high
+  DPI, reduced motion, and keyboard navigation before signed provenance is
+  written.
+
 Run all milestone checks from the repository root:
 
 ```bash

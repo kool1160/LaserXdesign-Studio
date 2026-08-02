@@ -44,3 +44,20 @@ network request.
 ## Reporting
 
 Do not publish active exploit details in a public issue. Record a private remediation path when repository tooling supports it.
+
+## Beta packaging and diagnostics
+
+The production Windows build fails closed unless electron-builder can sign the
+application and NSIS installer with credentials injected through
+`WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`. The certificate and password are CI
+secrets and may not be committed, uploaded as evidence, printed, or copied into
+release provenance. Pull-request signing uses a disposable self-signed identity
+created, trusted, and removed on the isolated runner; it is never a release
+publisher.
+
+Renderer session data, logs, crash dumps, recovery, recents, and encrypted
+credential envelopes stay under Electron's per-user application-data root.
+Crash records are local only: the beta has no telemetry, analytics, crash
+upload, or remote diagnostics client. Emergency recovery logs only bounded
+event names and never prompt text, file contents, geometry, credentials, or
+provider request bodies.

@@ -84,12 +84,39 @@ export async function launchPackaged(
   closeResponse: "save" | "discard" | "cancel" = "cancel",
   launchEnvironment: LaunchEnvironment = {},
 ): Promise<TestLaunch> {
+  return launchLaserxExecutable(
+    executablePath,
+    directory,
+    closeResponse,
+    launchEnvironment,
+  );
+}
+
+export async function launchInstalledBeta(
+  installedExecutablePath: string,
+  directory?: string,
+  launchEnvironment: LaunchEnvironment = {},
+): Promise<TestLaunch> {
+  return launchLaserxExecutable(
+    installedExecutablePath,
+    directory,
+    "discard",
+    launchEnvironment,
+  );
+}
+
+async function launchLaserxExecutable(
+  targetExecutablePath: string,
+  directory: string | undefined,
+  closeResponse: "save" | "discard" | "cancel",
+  launchEnvironment: LaunchEnvironment,
+): Promise<TestLaunch> {
   const testDirectory =
     directory ?? (await mkdtemp(join(tmpdir(), "laserx-e2e-")));
   const projectPath = join(testDirectory, "lifecycle.laserx");
   const userDataPath = join(testDirectory, "user-data");
   const electronApp = await launchElectron({
-    executablePath,
+    executablePath: targetExecutablePath,
     env: {
       ...process.env,
       LASERX_AUTOSAVE_INTERVAL_MS: "40",
