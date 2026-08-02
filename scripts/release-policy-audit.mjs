@@ -99,7 +99,7 @@ for (const marker of [
 ]) requireText(workflow, marker, "M13 exact-head workflow");
 for (const marker of [
   "LASERX_CI_SIGNING_THUMBPRINT",
-  'signature.Status -in @(\"NotSigned\", \"HashMismatch\")',
+  'signature.Status -in @("NotSigned", "HashMismatch")',
 ]) requireText(await text("scripts/validate-windows-installer.ps1"), marker, "CI signature boundary");
 for (const marker of [
   "workflow_dispatch",
