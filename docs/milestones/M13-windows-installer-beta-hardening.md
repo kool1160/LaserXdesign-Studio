@@ -8,7 +8,7 @@ A dependable, branded Windows beta can be installed and launched like normal sof
 
 M13 is active. M12 was reviewed on its exact final head, required CI passed, PR #29 merged in `e950a6397ad31cf225893a7fc5f9a0704fe07e64`, Issue #12 closed, and `docs/status/CURRENT.md` activated M13.
 
-The owner released the M12 hands-on hold on 2026-08-02. Before installer implementation begins, M13 must complete the owner-observed hands-on repair prerequisite below through its own exact-head review and merge.
+The owner released the M12 hands-on hold on 2026-08-02. The owner-observed repair prerequisite has now completed exact-head review and merge, so the remaining installer/signing stage may proceed from fresh `main`.
 
 ## Owner-observed hands-on repair prerequisite
 
@@ -40,6 +40,21 @@ The exact reviewed M12 Windows build exposed release-blocking manufacturing and 
 - cancellation or failure must restore usable controls and the previous connection state without requiring application restart;
 - the API key remains outside renderer state, logs, project files, crash reports, and source control and is stored only through the accepted operating-system encryption boundary;
 - packaged Windows E2E must exercise the real production wiring sufficiently to prove the connection flow cannot remain globally busy indefinitely.
+
+## Repair prerequisite completion record
+
+PR #32 completed the prerequisite and merged into `main`.
+
+- Final reviewed head: `5fb466f1d1c784c4d2d2bc14aab6f5167793b150`
+- READY review: `4839027689`
+- Merge commit: `a58eb7049349c02522c4caea05d59c17f54992fe`
+- Repository Guard run: `30754236851`
+- M04–M12 exact-head workflows: all completed successfully
+- Verification: 288 unit/integration tests and 31/31 packaged Windows Electron E2E scenarios
+- Exact-head artifact: `8835466777`
+- Artifact digest: `sha256:d590340d837089c6a301788808a9e119659e4df2fe89a7ec6a024363399a78fc`
+
+The repair merge does not complete M13. Issue #13 remains open for the installer, signing, packaging, recovery, performance, accessibility, security, migration, and controlled beta-release stages.
 
 ## Included
 
@@ -96,10 +111,10 @@ No unrelated major design, AI, layered-production, CAM, nesting, G-code, DWG, ma
 
 ## Exit checklist
 
-- [ ] Owner-observed hands-on repair prerequisite reviewed and merged.
-- [ ] DXF spline conversion, repair preview, and stock-fitting workflow pass packaged Windows tests.
-- [ ] U.S. stock designation workflow and migration pass.
-- [ ] Packaged AI credential connection cannot hang indefinitely and preserves the security boundary.
+- [x] Owner-observed hands-on repair prerequisite reviewed and merged.
+- [x] DXF spline conversion, repair preview, and stock-fitting workflow pass packaged Windows tests.
+- [x] U.S. stock designation workflow and migration pass.
+- [x] Packaged AI credential connection cannot hang indefinitely and preserves the security boundary.
 - [ ] Signed Windows installer validated on a clean Windows environment.
 - [ ] Install, upgrade, launch, shortcut, and uninstall checklist complete.
 - [ ] User-data and credential-storage locations documented and verified.
