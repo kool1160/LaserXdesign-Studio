@@ -8,6 +8,21 @@
 - product/version: `LaserX Design Studio 0.13.0-beta.1`;
 - auto-update: deferred; install a reviewed newer beta over the existing beta.
 
+## Current distribution status
+
+LaserX is currently in **owner-only private testing** on personally controlled
+computers. It is not a trusted public beta and is not authorized for sale or
+public distribution.
+
+For this private phase, an unsigned installer or the disposable CI-self-signed
+installer is acceptable. Windows may display SmartScreen, `Unknown Publisher`,
+or certificate-trust warnings. Those warnings are expected and accepted only
+for the owner's controlled private testing.
+
+Trusted public code signing, public tagging, and public prerelease publication
+are deferred until the owner decides to sell or distribute LaserX outside the
+private test group.
+
 ## Installer behavior
 
 `LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe` is an assisted NSIS
@@ -23,7 +38,7 @@ outside the application-data directory.
 
 ## Windows-owned data locations
 
-The production root is `%APPDATA%\LaserX Design Studio`:
+The runtime root is `%APPDATA%\LaserX Design Studio`:
 
 | Data | Location below the root |
 | --- | --- |
@@ -50,7 +65,7 @@ remote crash upload, or automatic diagnostic submission. A user who chooses to
 share a diagnostic must review it first and must never send an API key or a
 private customer project unintentionally.
 
-## Performance budgets
+## Performance safeguards
 
 The release gate uses these gross safeguards on the documented Windows CI
 reference runner:
@@ -67,7 +82,7 @@ reference runner:
 The packaged suite repeats the 1366 × 768, 1920 × 1080, 150% scale, keyboard
 focus, non-color status, reduced-motion, and renderer-isolation checks from M11.
 
-## Local development artifacts
+## Private-test artifacts
 
 From the repository root:
 
@@ -78,39 +93,67 @@ pnpm --filter @laserx/desktop package:installer
 ```
 
 `package:installer` deliberately disables certificate auto-discovery and may
-produce an unsigned local artifact. It is for layout/build inspection only and
-cannot be published. Production signing uses:
+produce an unsigned installer. Under the current owner-only private-testing
+decision, that installer may be used on the owner's controlled computers after
+reviewed-source verification.
+
+A private-test installer must:
+
+- come from reviewed source or recorded CI evidence;
+- preserve the stable LaserX identity and version;
+- retain recorded hashes and limitations;
+- remain labeled private test software;
+- never be represented as a trusted public release.
+
+The current CI workflow may also produce a disposable self-signed installer to
+prove signing and lifecycle mechanics. That certificate is not a public trust
+identity.
+
+## Private hands-on validation procedure
+
+1. Obtain the current private-test installer from reviewed `main` evidence.
+2. Run the installer on an owner-controlled Windows machine.
+3. Accept the expected Windows trust warning.
+4. Confirm Start Menu launch and optional desktop-shortcut behavior.
+5. Complete a representative import, analysis, save, and DXF export workflow.
+6. Confirm expected project scale and app-data location.
+7. Run normal uninstall and confirm the documented data-preservation choice.
+8. Record the observed result in Issue #13.
+
+This private validation is the remaining M13 exit boundary.
+
+## Future trusted public release
+
+Before sale or distribution outside the owner's controlled private test group,
+production signing uses:
 
 - `WIN_CSC_LINK`: a CI-secret URL, path, or base64-encoded exportable PFX;
-- `WIN_CSC_KEY_PASSWORD`: the matching CI-secret password.
+- `WIN_CSC_KEY_PASSWORD`: the matching CI-secret password;
 - `WINDOWS_CODE_SIGNING_THUMBPRINT`: a reviewed repository variable containing
   the production certificate's complete 40-character SHA-1 thumbprint.
 
-Then `package:installer:signed` turns on `forceCodeSigning`; missing or invalid
+A separately accepted managed-signing ADR may replace the PFX mechanism later.
+
+`package:installer:signed` turns on `forceCodeSigning`; missing or invalid
 credentials fail the build. The PFX and password are exposed only to the two
 electron-builder signing steps. Setup, install, validation, provenance,
 artifact upload, and publication steps cannot read them. Never place the PFX or
 password in the repository, workflow YAML, logs, release notes, or provenance
 file. The public certificate thumbprint is recorded as the expected signer.
 
-## Exact release procedure
+### Future public release procedure
 
-1. Merge only an exact-head reviewed M13 implementation with required checks
-   green.
-2. Set both Windows signing secrets and the reviewed
-   `WINDOWS_CODE_SIGNING_THUMBPRINT` repository variable in GitHub Actions.
-3. Create the exact reviewed `v0.13.0-beta.1` tag only through owner-authorized
-   advancement.
-4. Manually dispatch **M13 Controlled Beta Release** for that tag.
-5. The workflow installs locked dependencies, runs `pnpm verify`, forces
-   signing, validates both installer and packaged executable signatures, runs
-   clean install/upgrade/Start Menu/desktop option/uninstall tests, rejects a
-   valid signature from any certificate other than the reviewed signer, and
-   writes `laserx-release-provenance.json` with expected and observed signer
+1. Review and merge the exact public-release source with required checks green.
+2. Configure the Windows signing secrets and reviewed signer variable.
+3. Create the exact reviewed version tag through owner-authorized advancement.
+4. Manually dispatch **M13 Controlled Beta Release** or its future replacement.
+5. Force trusted signing, validate the exact approved signer, run the full clean
+   lifecycle, and write public provenance with expected and observed signer
    identities.
-6. Compare the manifest source commit to the reviewed tag, retain the workflow
-   run and artifact digest, and only then publish the prerelease assets.
+6. Compare the manifest source commit to the reviewed tag and retain workflow,
+   artifact, checksum, and publication evidence.
+7. Publish only after every trusted-signing and distribution requirement passes.
 
 Authenticode timestamps make signed binaries non-byte-reproducible. The pinned
-toolchain, lockfile, exact source tag, commands above, and recorded output
-hashes are the reproducible-build evidence.
+toolchain, lockfile, exact source tag, commands, and recorded output hashes
+provide the rebuild and provenance record.
