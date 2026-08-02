@@ -148,6 +148,190 @@ describe("DXF interchange", () => {
     expect(candidate.paths[2]?.points.length).toBeGreaterThan(2);
   });
 
+  it("converts planar rational DXF splines into bounded editable preview paths", () => {
+    const candidate = importDxf(dxf(
+      "0\nSPLINE\n8\nSpline cut\n70\n4\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "41\n1\n41\n1\n41\n1\n" +
+      "10\n0\n20\n0\n10\n5\n20\n10\n10\n10\n20\n0\n",
+    ));
+    expect(candidate.paths).toHaveLength(1);
+    expect(candidate.paths[0]).toMatchObject({ layerName: "Spline cut", closed: false });
+    expect(candidate.paths[0]?.points.length).toBeGreaterThan(2);
+    expect(candidate.paths[0]?.points[0]).toMatchObject({ xMm: 0, yMm: 0 });
+    expect(candidate.paths[0]?.points.at(-1)).toMatchObject({ xMm: 10, yMm: 0 });
+    expect(candidate.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted", pathIndex: 0 }),
+    ]));
+  });
+
+  it("validates every repeated spline control-point Z value before conversion", () => {
+    const splineWithZ = (zValues: readonly string[]): string =>
+      "0\nSPLINE\n8\nSpline Z\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      `10\n0\n20\n0\n30\n${zValues[0] ?? "0"}\n` +
+      `10\n5\n20\n10\n30\n${zValues[1] ?? "0"}\n` +
+      `10\n10\n20\n0\n30\n${zValues[2] ?? "0"}\n`;
+
+    const planar = importDxf(dxf(splineWithZ(["0", "0", "0"])));
+    expect(planar.paths).toHaveLength(1);
+    expect(planar.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted", pathIndex: 0 }),
+    ]));
+
+    const nonPlanar = importDxf(dxf(
+      "0\nLINE\n8\nCut\n10\n0\n20\n0\n11\n10\n21\n0\n" +
+      splineWithZ(["0", "2", "0"]),
+    ));
+    expect(nonPlanar.paths).toHaveLength(1);
+    expect(nonPlanar.warnings).toHaveLength(1);
+    expect(nonPlanar.warnings[0]).toMatchObject({
+      code: "unsupported-3d-entity",
+      source: "SPLINE 2",
+    });
+    expect(nonPlanar.warnings[0]?.message).toMatch(/Z=0 in CAD, then reimport/u);
+
+    const nonFinite = importDxf(dxf(splineWithZ(["0", "NaN", "0"])));
+    expect(nonFinite.paths).toHaveLength(0);
+    expect(nonFinite.warnings[0]).toMatchObject({
+      code: "invalid-dxf-entity",
+      source: "SPLINE 1",
+    });
+    expect(nonFinite.warnings[0]?.message).toMatch(/non-finite group 30 value/u);
+  });
+
+  it("fails closed for repeated non-planar spline fit, tangent, and extrusion Z records", () => {
+    const planarSpline =
+      "0\nSPLINE\n8\nAuxiliary Z\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "10\n0\n20\n0\n30\n0\n10\n5\n20\n10\n30\n0\n10\n10\n20\n0\n30\n0\n";
+    for (const code of [31, 32, 33, 210, 220] as const) {
+      const candidate = importDxf(dxf(`${planarSpline}${String(code)}\n0\n${String(code)}\n1\n`));
+      expect(candidate.paths, `group ${String(code)}`).toHaveLength(0);
+      expect(candidate.warnings[0]?.code, `group ${String(code)}`).toBe("unsupported-3d-entity");
+    }
+    const extrusionZ = importDxf(dxf(`${planarSpline}230\n1\n230\n0.5\n`));
+    expect(extrusionZ.paths).toHaveLength(0);
+    expect(extrusionZ.warnings[0]?.code).toBe("unsupported-3d-entity");
+  });
+
+  it("samples every non-empty knot span of a multi-span spline", () => {
+    const candidate = importDxf(dxf(
+      "0\nSPLINE\n8\nMulti span\n70\n0\n71\n2\n72\n8\n73\n5\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n2\n40\n3\n40\n3\n40\n3\n" +
+      "10\n0\n20\n0\n10\n10\n20\n30\n10\n20\n20\n-20\n" +
+      "10\n30\n20\n30\n10\n40\n20\n0\n",
+    ));
+    const points = candidate.paths[0]?.points ?? [];
+    expect(points.length).toBeGreaterThan(10);
+    expect(points[0]).toMatchObject({ xMm: 0, yMm: 0 });
+    expect(points.at(-1)).toMatchObject({ xMm: 40, yMm: 0 });
+    expect(points.some((point) => point.xMm > 15 && point.xMm < 25 && point.yMm < 5))
+      .toBe(true);
+  });
+
+  it("defines closed and periodic splines by coincident sampled endpoints", () => {
+    const closedSpline = (flags: 1 | 2, layer: string): string =>
+      `0\nSPLINE\n8\n${layer}\n70\n${String(flags)}\n71\n1\n72\n7\n73\n5\n` +
+      "40\n0\n40\n0\n40\n1\n40\n2\n40\n3\n40\n4\n40\n4\n" +
+      "10\n0\n20\n0\n10\n10\n20\n0\n10\n10\n20\n10\n" +
+      "10\n0\n20\n10\n10\n0\n20\n0\n";
+    const candidate = importDxf(dxf(
+      closedSpline(1, "Closed") + closedSpline(2, "Periodic"),
+    ));
+    expect(candidate.paths).toHaveLength(2);
+    expect(candidate.paths).toEqual(expect.arrayContaining([
+      expect.objectContaining({ layerName: "Closed", closed: true }),
+      expect.objectContaining({ layerName: "Periodic", closed: true }),
+    ]));
+    expect(candidate.paths.every((path) => path.points.length === 4)).toBe(true);
+  });
+
+  it("fails visibly instead of inventing closure or accepting over-tolerance splines", () => {
+    const openEndedClosed = importDxf(dxf(
+      "0\nSPLINE\n8\nBad closed\n70\n1\n71\n1\n72\n5\n73\n3\n" +
+      "40\n0\n40\n0\n40\n1\n40\n2\n40\n2\n" +
+      "10\n0\n20\n0\n10\n10\n20\n10\n10\n20\n20\n0\n",
+    ));
+    expect(openEndedClosed.paths).toHaveLength(0);
+    expect(openEndedClosed.warnings[0]?.message).toMatch(/refusing an implicit straight closing segment/u);
+    expect(openEndedClosed.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted" }),
+    ]));
+
+    const overTolerance = importDxf(dxf(
+      "0\nSPLINE\n8\nHigh curvature\n70\n0\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "10\n0\n20\n0\n10\n0.000001\n20\n1000000\n10\n1\n20\n0\n",
+    ), { curveToleranceMm: 1e-15 });
+    expect(overTolerance.paths).toHaveLength(0);
+    expect(overTolerance.warnings[0]?.message).toMatch(/requested tolerance|subdivision limit|4,096/u);
+    expect(overTolerance.findings).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted" }),
+    ]));
+  });
+
+  it("shows bounded near-closure and duplicate-node repairs in the preview", () => {
+    const candidate = importDxf(dxf(
+      "0\nLWPOLYLINE\n8\nRepair\n90\n5\n70\n0\n" +
+      "10\n0\n20\n0\n10\n10\n20\n0\n10\n10.0000001\n20\n0\n" +
+      "10\n10\n20\n10\n10\n0.05\n20\n0.04\n",
+    ));
+    expect(candidate.paths[0]).toMatchObject({ closed: true });
+    expect(candidate.paths[0]?.points).toHaveLength(3);
+    expect(candidate.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "duplicate-nodes-removed", severity: "repair" }),
+      expect.objectContaining({ code: "small-gap-closed", severity: "repair" }),
+    ]));
+    expect(candidate.assumptions.join(" ")).toMatch(/fixed 0.1 mm tolerance/u);
+  });
+
+  it("removes only exact same-layer canonical duplicates and retains nearby paths deterministically", () => {
+    const polyline = (
+      layer: string,
+      points: readonly (readonly [number, number])[],
+    ): string =>
+      `0\nLWPOLYLINE\n8\n${layer}\n90\n${String(points.length)}\n70\n1\n` +
+      points.map(([xMm, yMm]) => `10\n${String(xMm)}\n20\n${String(yMm)}\n`).join("");
+    const square = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ] as const;
+    const source = dxf(
+      polyline("Cut", square) +
+      polyline("Cut", [[10, 10], [0, 10], [0, 0], [10, 0]]) +
+      polyline("Cut", [[0, 0], [0, 10], [10, 10], [10, 0]]) +
+      polyline("Cut", [[0.04, 0], [10.04, 0], [10.04, 10], [0.04, 10]]) +
+      polyline("Cut", [[0.06, 0], [10.06, 0], [10.06, 10], [0.06, 10]]) +
+      polyline("Other", square),
+    );
+
+    const first = importDxf(source);
+    const second = importDxf(source);
+    expect(second).toEqual(first);
+    expect(first.paths).toHaveLength(4);
+    expect(first.paths.map((path) => path.layerName)).toEqual([
+      "Cut",
+      "Cut",
+      "Cut",
+      "Other",
+    ]);
+    expect(first.paths[1]?.points[0]?.xMm).toBe(0.04);
+    expect(first.paths[2]?.points[0]?.xMm).toBe(0.06);
+    const duplicateFindings = first.findings?.filter(
+      (finding) => finding.code === "duplicate-path-removed",
+    );
+    expect(duplicateFindings).toHaveLength(2);
+    expect(duplicateFindings?.every((finding) =>
+      finding.pathIndex === 0 &&
+      finding.repair?.action === "remove-duplicate-path" &&
+      finding.repair.toleranceMm === 0,
+    )).toBe(true);
+    expect(first.assumptions.join(" ")).toMatch(/exact canonical coordinates and layer identity/u);
+  });
+
   it("keeps circles at or below tolerance as valid three-node contours", () => {
     const candidate = importDxf(dxf(
       "0\nCIRCLE\n8\nCut\n10\n0\n20\n0\n40\n0.005\n",
@@ -180,9 +364,21 @@ describe("DXF interchange", () => {
     ));
     expect(candidate.paths[0]).toMatchObject({ layerName: "Legacy", closed: true });
     expect(candidate.warnings.map((item) => item.code)).toEqual([
-      "unsupported-dxf-entity",
+      "invalid-dxf-entity",
       "unsupported-3d-entity",
     ]);
+  });
+
+  it("recommends only DXF entity types the importer actually supports", () => {
+    const candidate = importDxf(dxf(
+      "0\nELLIPSE\n8\nUnsupported\n10\n0\n20\n0\n11\n10\n21\n0\n40\n0.5\n",
+    ));
+    expect(candidate.paths).toHaveLength(0);
+    expect(candidate.warnings).toEqual([{
+      code: "unsupported-dxf-entity",
+      source: "ELLIPSE 1",
+      message: "ELLIPSE 1 is not supported and was skipped. Convert it to LINE, LWPOLYLINE, ARC, CIRCLE, or SPLINE geometry in CAD, then reimport.",
+    }]);
   });
 
   it("exports explicit millimeter units and preserves 600 mm closure on round trip", () => {

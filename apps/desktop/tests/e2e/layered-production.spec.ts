@@ -168,6 +168,34 @@ test("layered sign analysis, registration, persistence, and production package",
     ]));
     expect(layerIds.backingObjectIds).not.toContain(layerIds.originalBackingHoleId);
 
+    await expect(
+      page.getByLabel("Stock thickness designation", { exact: true }).locator(
+        'option[value="gauge:mild-steel:14 ga"]',
+      ),
+    ).toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Stock thickness designation", { exact: true }).selectOption(
+      "gauge:mild-steel:14 ga",
+    );
+    await expect(page.getByTestId("manufacturing-stock-thickness-summary"))
+      .toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Display units").getByRole("button", { name: "in" }).click();
+    await expect(page.getByLabel("Thickness inches", { exact: true })).toHaveValue("0.0747");
+    await page.getByLabel("Thickness inches", { exact: true }).fill("0.125");
+    await expect(page.getByTestId("manufacturing-stock-thickness-summary"))
+      .toHaveText("Custom · 0.125 in · 3.175 mm");
+
+    await page.evaluate(async (layerId) => {
+      await window.laserx.editorAction({ type: "layer.activate", layerId });
+    }, layerIds.faceId);
+    await page.getByLabel("Layer stock thickness designation").selectOption(
+      "gauge:mild-steel:14 ga",
+    );
+    await expect(page.getByTestId("layer-stock-thickness-summary"))
+      .toHaveText("14 ga · 0.0747 in · 1.897 mm");
+    await page.getByLabel("Layer thickness inches").fill("0.08");
+    await expect(page.getByTestId("layer-stock-thickness-summary"))
+      .toHaveText("Custom · 0.08 in · 2.032 mm");
+
     await page.evaluate(async ({ faceId, backingId, previewId, ovalId }) => {
       const state = await window.laserx.getState();
       const oval = state.project.document.objects.find(
@@ -334,7 +362,7 @@ test("layered sign analysis, registration, persistence, and production package",
         files: { name: string }[];
       }[];
     };
-    expect(manifest.sourceProjectVersion).toBe(8);
+    expect(manifest.sourceProjectVersion).toBe(9);
     expect(manifest.originMm).toEqual({ xMm: 0, yMm: 0 });
     expect(manifest.layers.map((layer) => layer.id)).toEqual([
       layerIds.faceId,
@@ -371,7 +399,7 @@ test("layered sign analysis, registration, persistence, and production package",
     await expect(page.getByTestId("production-export-summary")).toContainText("Exported 2 layer(s)");
 
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 8);
+    await waitForProjectSchema(launched.projectPath, 9);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       document: {
         layers: { manufacturing?: { role: string; registrationHoleIds: string[] } }[];

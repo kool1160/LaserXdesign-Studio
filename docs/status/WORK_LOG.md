@@ -2,6 +2,59 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-02 - M13 PR #32 exact-head review repair
+
+- Date: 2026-08-02
+- Agent/task: Codex / PR #32 four-blocker review repair
+- Milestone: M13 - Windows Installer, Packaging, and Beta Hardening
+- Delivered: Removed Issue #13 auto-close wording. Replaced the external
+  PowerShell/WinForms process with a parent-bound, focused, application-owned
+  modal credential window using an isolated minimal preload and sender-checked
+  IPC. Made resize-stock preserve current stock and all existing nonnegative
+  geometry without moving/scaling it. Replaced 0.1 mm duplicate bucketing with
+  exact same-layer canonical identity supporting reversed and rotated paths.
+- Regression evidence: Added real packaged credential-window visibility,
+  focus, cancel, timeout, success, encrypted-envelope, failed replacement, and
+  restored-control coverage; non-empty resize cancel/commit/Undo/Redo/reopen
+  coverage; and deterministic exact/nearby/reversed/rotated duplicate fixtures.
+- Verification: Root `pnpm verify` passed all seven audits, lint, full workspace
+  typecheck, 281 unit/integration tests, build/package, and 31/31 serial
+  packaged Windows E2E scenarios. `pnpm audit --prod` reports no known
+  vulnerabilities; repository guard verified 68 required files and 17
+  milestones; the scoped patch passes `git diff --check`.
+- Gate restraint: PR #32 remains draft, Issue #13 remains open, and
+  installer/signing work remains blocked pending exact-head re-review and merge.
+
+## 2026-08-02 - M13 hands-on repair gate implementation
+
+- Date: 2026-08-02
+- Agent/task: Codex / Issue #13 mandatory hands-on repair prerequisite
+- Milestone: M13 - Windows Installer, Packaging, and Beta Hardening
+- Delivered: Added bounded planar DXF rational-spline conversion, explicit
+  geometry-linked repair findings, preview focus, and three-way stock fitting
+  with a single undoable geometry/stock commit. Added material-specific steel,
+  stainless, and aluminum gauges plus fractional-inch, millimeter, and custom
+  stock choices; canonical `thicknessMm`; schema-v9 project persistence; a
+  no-inference v8-to-v9 migration; and schema-2 production manifests. Reworked
+  credential connection as a visible, cancelable, two-minute-bounded Windows
+  interaction with timeout/retry behavior, prior-state restoration, retained
+  `safeStorage`, and no renderer credential exposure.
+- Verification: All policy/license audits, lint, full workspace typecheck, 287
+  unit/integration tests, production build/package, and all 31 serial packaged
+  Windows Electron E2E scenarios pass. Packaged coverage exercises spline and
+  repair location/stock fitting plus credential cancel, retry, timeout, and
+  global-control restoration.
+- Decisions: Legacy decimal thicknesses receive a null shop designation rather
+  than an invented gauge. Import repairs are applied only to the visible
+  transient preview at documented tolerances and enter the project only after
+  explicit acceptance. Credential acquisition is main-process-owned and races
+  every port against application cancellation and timeout.
+- Known limitations: Spline import is limited to planar degree-1-through-5 DXF
+  knot/control records under existing geometry budgets. Installer/signing work
+  remains blocked until this repair slice is independently reviewed and merged.
+- Next allowed work: Publish a draft PR for Issue #13, obtain exact-head Windows
+  CI and independent review, and stop. Do not merge or start installer/signing.
+
 ## 2026-08-01 - M12 world-space registration-circle review repair
 
 - Date: 2026-08-01

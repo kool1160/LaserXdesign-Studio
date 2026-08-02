@@ -3,7 +3,10 @@ import {
   type EditorActionRequest,
 } from "@laserx/application";
 import {
+  MILLIMETERS_PER_INCH,
+  formatStockThickness,
   isRegistrationCircleObject,
+  stockThicknessChoicesForMaterial,
   type PathObject,
   type ManufacturingSettingField,
   type ManufacturingSettings,
@@ -164,6 +167,11 @@ export function App() {
     state?.project.document.settings.viewport.gridSpacingMm,
   ]);
 
+  const savedManufacturingSettingsKey =
+    state === null
+      ? null
+      : JSON.stringify(state.project.document.settings.manufacturing);
+
   useEffect(() => {
     if (state !== null) {
       setManufacturingSettings({
@@ -173,7 +181,7 @@ export function App() {
         ],
       });
     }
-  }, [state?.project.id, state?.project.document.settings.manufacturing]);
+  }, [savedManufacturingSettingsKey, state?.project.id]);
 
   useEffect(() => {
     if (state?.editor.selectionBounds === null || state === null) {
@@ -446,6 +454,26 @@ export function App() {
   const activeLayer = document.layers.find(
     (layer) => layer.id === document.activeLayerId,
   );
+  const manufacturingThicknessChoices = stockThicknessChoicesForMaterial(
+    manufacturingSettings.material,
+  );
+  const selectedManufacturingThicknessChoice = manufacturingThicknessChoices.find(
+    (choice) =>
+      choice.designation.kind === manufacturingSettings.stockThicknessDesignation?.kind &&
+      choice.designation.label === manufacturingSettings.stockThicknessDesignation.label &&
+      choice.designation.material === manufacturingSettings.stockThicknessDesignation.material,
+  )?.id ?? "custom";
+  const activeLayerThicknessChoices = activeLayer?.manufacturing === undefined
+    ? []
+    : stockThicknessChoicesForMaterial(activeLayer.manufacturing.material);
+  const activeLayerThicknessDesignation =
+    activeLayer?.manufacturing?.stockThicknessDesignation;
+  const selectedLayerThicknessChoice = activeLayerThicknessChoices.find(
+    (choice) =>
+      choice.designation.kind === activeLayerThicknessDesignation?.kind &&
+      choice.designation.label === activeLayerThicknessDesignation.label &&
+      choice.designation.material === activeLayerThicknessDesignation.material,
+  )?.id ?? "custom";
   const physicalProductionLayers = document.layers.filter(
     (layer) =>
       layer.manufacturing !== undefined &&
@@ -478,6 +506,13 @@ export function App() {
     Number(joinTolerance),
   );
   const unit = document.settings.displayUnit;
+  const stockThicknessInputUnit = unit === "inches" ? "in" : "mm";
+  const stockThicknessForDisplay = (thicknessMm: number): number =>
+    unit === "inches"
+      ? Number((thicknessMm / MILLIMETERS_PER_INCH).toFixed(6))
+      : thicknessMm;
+  const stockThicknessFromDisplay = (thickness: number): number =>
+    unit === "inches" ? thickness * MILLIMETERS_PER_INCH : thickness;
   const unitLabel = unit === "inches" ? "in" : "mm";
   const cutability = state.analysis.cutability;
   const focusedCutabilityIssue = cutability?.issues.find(
@@ -820,10 +855,81 @@ export function App() {
                     ))}
                   </ul>
                 )}
-                {state.editor.importPreview.warnings.length > 0 && (
-                  <ul data-testid="import-warnings">
-                    {state.editor.importPreview.warnings.map((item, index) => (
-                      <li key={`${item.code}-${String(index)}`}>{item.message}</li>
+                {state.editor.importPreview.partialImport && (
+                  <strong data-testid="import-partial-warning">
+                    Partial import: {String(state.editor.importPreview.skippedEntityCount)} source {state.editor.importPreview.skippedEntityCount === 1 ? "entity was" : "entities were"} skipped. Review the finding guidance, then cancel or explicitly accept the partial result.
+                  </strong>
+                )}
+                <div className="manufacturing-settings-grid" data-testid="import-stock-fit">
+                  <label>
+                    Fit artwork to stock
+                    <select
+                      aria-label="Import stock fitting choice"
+                      value={state.editor.importPreview.fitMode}
+                      disabled={busy}
+                      onChange={(event) => void run(() =>
+                        window.laserx.configureVectorImport({
+                          fitMode: event.target.value as "resize-stock" | "scale-artwork" | "keep",
+                          marginMm: state.editor.importPreview?.marginMm ?? 12.7,
+                        }),
+                      )}
+                    >
+                      <option value="resize-stock">Resize stock; keep artwork scale</option>
+                      <option value="scale-artwork">Keep stock; scale artwork uniformly</option>
+                      <option value="keep">Keep both; allow overflow</option>
+                    </select>
+                  </label>
+                  <label>
+                    Margin (mm)
+                    <input
+                      aria-label="Import stock margin millimeters"
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="0.1"
+                      value={state.editor.importPreview.marginMm}
+                      disabled={busy}
+                      onChange={(event) => void run(() =>
+                        window.laserx.configureVectorImport({
+                          fitMode: state.editor.importPreview?.fitMode ?? "keep",
+                          marginMm: Number(event.target.value),
+                        }),
+                      )}
+                    />
+                  </label>
+                </div>
+                <span data-testid="import-fit-result">
+                  Proposed stock {state.editor.importPreview.proposedDocumentDimensionsMm.widthMm.toFixed(3)} × {state.editor.importPreview.proposedDocumentDimensionsMm.heightMm.toFixed(3)} mm
+                  {state.editor.importPreview.artworkScale === 1
+                    ? " · artwork remains at source scale"
+                    : ` · artwork scale ${(state.editor.importPreview.artworkScale * 100).toFixed(2)}%`}
+                  {state.editor.importPreview.oversizedAtOriginalScale
+                    ? " · original artwork exceeded the current stock"
+                    : ""}
+                </span>
+                {state.editor.importPreview.findings.length > 0 && (
+                  <ul data-testid="import-findings">
+                    {state.editor.importPreview.findings.map((finding, index) => (
+                      <li key={`${finding.code}-${String(index)}`}>
+                        <strong>{finding.severity === "repair" ? "Preview repair" : "Import finding"}:</strong>{" "}
+                        {finding.message}
+                        {finding.repair !== null ? ` (${finding.repair.summary})` : ""}
+                        {finding.objectId !== null && (
+                          <button
+                            type="button"
+                            className="quiet"
+                            disabled={busy}
+                            onClick={() => void run(() => window.laserx.focusVectorImportFinding({
+                              objectId: finding.objectId as string,
+                            }))}
+                          >
+                            Locate path
+                          </button>
+                        )}
+                        {finding.objectId === null && finding.repair === null && (
+                          <small> No in-document location is available; follow the source-file guidance or cancel the import.</small>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -834,7 +940,9 @@ export function App() {
                     disabled={busy}
                     onClick={() => void run(() => window.laserx.commitVectorImport())}
                   >
-                    Commit import
+                    {state.editor.importPreview.partialImport
+                      ? "Accept partial import"
+                      : "Accept import"}
                   </button>
                   <button
                     type="button"
@@ -843,7 +951,7 @@ export function App() {
                     disabled={busy}
                     onClick={() => void run(() => window.laserx.cancelVectorImport())}
                   >
-                    Cancel
+                    Cancel import
                   </button>
                 </div>
               </div>
@@ -1153,8 +1261,88 @@ export function App() {
               </select>
             </label>
             <div className="manufacturing-settings-grid">
+              <label>
+                U.S. stock thickness
+                <select
+                  aria-label="Stock thickness designation"
+                  value={selectedManufacturingThicknessChoice}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const choice = manufacturingThicknessChoices.find(
+                      (candidate) => candidate.id === event.target.value,
+                    );
+                    setManufacturingSettings((current) => ({
+                      ...current,
+                      ...(choice === undefined
+                        ? {
+                            stockThicknessDesignation: {
+                              kind: "custom" as const,
+                              label: "Custom",
+                              material: null,
+                            },
+                          }
+                        : {
+                            thicknessMm: choice.thicknessMm,
+                            stockThicknessDesignation: { ...choice.designation },
+                          }),
+                      customizedFields: [...new Set([
+                        ...current.customizedFields,
+                        "thicknessMm" as const,
+                        "stockThicknessDesignation" as const,
+                      ])],
+                    }));
+                  }}
+                >
+                  <optgroup label="Material-specific gauges">
+                    {manufacturingThicknessChoices.filter((choice) => choice.designation.kind === "gauge").map((choice) => (
+                      <option key={choice.id} value={choice.id}>{choice.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Fractional plate">
+                    {manufacturingThicknessChoices.filter((choice) => choice.designation.kind === "fractional-inch").map((choice) => (
+                      <option key={choice.id} value={choice.id}>{choice.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Millimeters">
+                    {manufacturingThicknessChoices.filter((choice) => choice.designation.kind === "millimeter").map((choice) => (
+                      <option key={choice.id} value={choice.id}>{choice.label}</option>
+                    ))}
+                  </optgroup>
+                  <option value="custom">Custom thickness</option>
+                </select>
+              </label>
+              <label>
+                Custom thickness ({stockThicknessInputUnit})
+                <input
+                  aria-label={`Thickness ${unit}`}
+                  type="number"
+                  min="0.001"
+                  step={unit === "inches" ? "0.0001" : "0.001"}
+                  value={stockThicknessForDisplay(manufacturingSettings.thicknessMm)}
+                  disabled={busy}
+                  onChange={(event) => setManufacturingSettings((current) => ({
+                    ...current,
+                    thicknessMm: stockThicknessFromDisplay(Number(event.target.value)),
+                    stockThicknessDesignation: {
+                      kind: "custom",
+                      label: "Custom",
+                      material: null,
+                    },
+                    customizedFields: [...new Set([
+                      ...current.customizedFields,
+                      "thicknessMm" as const,
+                      "stockThicknessDesignation" as const,
+                    ])],
+                  }))}
+                />
+              </label>
+              <span data-testid="manufacturing-stock-thickness-summary">
+                {formatStockThickness(
+                  manufacturingSettings.thicknessMm,
+                  manufacturingSettings.stockThicknessDesignation,
+                )}
+              </span>
               {([
-                ["Thickness", "thicknessMm"],
                 ["Kerf", "kerfWidthMm"],
                 ["Min feature", "minimumFeatureWidthMm"],
                 ["Min bridge", "minimumBridgeWidthMm"],
@@ -1630,6 +1818,11 @@ export function App() {
               state.editor.rasterTracePreview ??
               state.editor.signToolPreview ??
               state.editor.aiConceptPreview
+            }
+            importPreviewFitKey={
+              state.editor.importPreview === null
+                ? null
+                : `${state.editor.importPreview.sourceName}:${state.editor.importPreview.fitMode}:${String(state.editor.importPreview.marginMm)}`
             }
             previewGeometryVisible={
               state.editor.rasterTracePreview === null ||
@@ -2422,6 +2615,12 @@ export function App() {
                           role: role as ManufacturingLayerMetadata["role"],
                           material: document.settings.manufacturing.material,
                           thicknessMm: document.settings.manufacturing.thicknessMm,
+                          stockThicknessDesignation:
+                            document.settings.manufacturing.stockThicknessDesignation === undefined
+                              ? null
+                              : document.settings.manufacturing.stockThicknessDesignation === null
+                                ? null
+                                : { ...document.settings.manufacturing.stockThicknessDesignation },
                           process: isPreview
                             ? "non-cut"
                             : document.settings.manufacturing.process,
@@ -2451,6 +2650,7 @@ export function App() {
                           onChange={(event) =>
                             updateActiveLayerManufacturing({
                               material: event.target.value as ManufacturingLayerMetadata["material"],
+                              stockThicknessDesignation: null,
                             })
                           }
                         >
@@ -2463,20 +2663,60 @@ export function App() {
                         </select>
                       </label>
                       <label>
-                        Thickness (mm)
+                        Stock designation
+                        <select
+                          aria-label="Layer stock thickness designation"
+                          value={selectedLayerThicknessChoice}
+                          onChange={(event) => {
+                            const choice = activeLayerThicknessChoices.find(
+                              (candidate) => candidate.id === event.target.value,
+                            );
+                            updateActiveLayerManufacturing(choice === undefined
+                              ? {
+                                  stockThicknessDesignation: {
+                                    kind: "custom",
+                                    label: "Custom",
+                                    material: null,
+                                  },
+                                }
+                              : {
+                                  thicknessMm: choice.thicknessMm,
+                                  stockThicknessDesignation: { ...choice.designation },
+                                });
+                          }}
+                        >
+                          {activeLayerThicknessChoices.map((choice) => (
+                            <option key={choice.id} value={choice.id}>{choice.label}</option>
+                          ))}
+                          <option value="custom">Custom thickness</option>
+                        </select>
+                      </label>
+                      <label>
+                        Custom thickness ({stockThicknessInputUnit})
                         <input
-                          aria-label="Layer thickness millimeters"
+                          aria-label={`Layer thickness ${unit}`}
                           type="number"
                           min="0.001"
-                          step="0.1"
-                          value={activeLayer.manufacturing.thicknessMm}
+                          step={unit === "inches" ? "0.0001" : "0.001"}
+                          value={stockThicknessForDisplay(activeLayer.manufacturing.thicknessMm)}
                           onChange={(event) =>
                             updateActiveLayerManufacturing({
-                              thicknessMm: Number(event.target.value),
+                              thicknessMm: stockThicknessFromDisplay(Number(event.target.value)),
+                              stockThicknessDesignation: {
+                                kind: "custom",
+                                label: "Custom",
+                                material: null,
+                              },
                             })
                           }
                         />
                       </label>
+                      <span data-testid="layer-stock-thickness-summary">
+                        {formatStockThickness(
+                          activeLayer.manufacturing.thicknessMm,
+                          activeLayer.manufacturing.stockThicknessDesignation,
+                        )}
+                      </span>
                       <label>
                         Process
                         <select

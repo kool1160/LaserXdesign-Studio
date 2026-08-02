@@ -22,6 +22,8 @@ export const IPC_CHANNELS = {
   saveProject: "laserx:project:save",
   saveProjectAs: "laserx:project:save-as",
   previewVectorImport: "laserx:vector:preview-import",
+  configureVectorImport: "laserx:vector:configure-import",
+  focusVectorImportFinding: "laserx:vector:focus-import-finding",
   commitVectorImport: "laserx:vector:commit-import",
   cancelVectorImport: "laserx:vector:cancel-import",
   exportVector: "laserx:vector:export",
@@ -37,6 +39,7 @@ export const IPC_CHANNELS = {
   deleteSignTemplate: "laserx:sign-tools:delete-template",
   openAiAccountPage: "laserx:ai:open-account-page",
   connectAi: "laserx:ai:connect",
+  cancelAiConnection: "laserx:ai:cancel-connection",
   replaceAiCredential: "laserx:ai:replace-credential",
   testAiConnection: "laserx:ai:test-connection",
   disconnectAi: "laserx:ai:disconnect",
@@ -180,10 +183,24 @@ const documentObjectSchema: z.ZodType<DocumentObject> = z.lazy(() =>
   ]),
 );
 
+const stockThicknessDesignationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("gauge"),
+    label: z.string().trim().min(1).max(50),
+    material: z.enum(["mild-steel", "stainless-steel", "aluminum"]),
+  }),
+  z.strictObject({
+    kind: z.enum(["fractional-inch", "millimeter", "custom"]),
+    label: z.string().trim().min(1).max(50),
+    material: z.null(),
+  }),
+]);
+
 const manufacturingLayerMetadataSchema = z.strictObject({
     role: z.enum(["face", "backing", "spacer-tab", "drill-reference", "non-cut-preview"]),
     material: z.enum(["mild-steel", "stainless-steel", "aluminum", "wood", "acrylic", "other"]),
     thicknessMm: positiveNumber,
+    stockThicknessDesignation: stockThicknessDesignationSchema.nullable().optional(),
     process: z.enum(["laser", "plasma", "waterjet", "router", "drill", "non-cut"]),
     notes: z.string().max(500),
     registrationGroup: z.string().min(1).max(100).nullable(),
@@ -227,6 +244,7 @@ export const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
       "other",
     ]),
     thicknessMm: positiveNumber,
+    stockThicknessDesignation: stockThicknessDesignationSchema.nullable().optional(),
     kerfWidthMm: positiveNumber,
     minimumFeatureWidthMm: positiveNumber,
     minimumBridgeWidthMm: positiveNumber,
@@ -238,6 +256,7 @@ export const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
       "process",
       "material",
       "thicknessMm",
+      "stockThicknessDesignation",
       "kerfWidthMm",
       "minimumFeatureWidthMm",
       "minimumBridgeWidthMm",
@@ -770,6 +789,15 @@ export const vectorImportPreviewRequestSchema = z.strictObject({
   unitlessDxfUnit: z.enum(["millimeters", "inches"]).nullable(),
 });
 
+export const configureVectorImportRequestSchema = z.strictObject({
+  fitMode: z.enum(["resize-stock", "scale-artwork", "keep"]),
+  marginMm: z.number().min(0).max(1_000),
+});
+
+export const focusVectorImportFindingRequestSchema = z.strictObject({
+  objectId: z.uuid(),
+});
+
 export const vectorExportRequestSchema = z.strictObject({
   format: z.enum(["svg", "dxf"]),
 });
@@ -811,6 +839,28 @@ const interchangeWarningSchema = z.strictObject({
   code: z.string().min(1),
   message: z.string().min(1),
   source: z.string().nullable(),
+});
+
+const interchangeFindingSchema = z.strictObject({
+  code: z.string().min(1),
+  severity: z.enum(["warning", "repair"]),
+  message: z.string().min(1),
+  source: z.string().nullable(),
+  pathIndex: z.number().int().nonnegative().nullable(),
+  locationMm: pointSchema.nullable(),
+  objectId: z.uuid().nullable(),
+  repair: z.strictObject({
+    action: z.enum([
+      "remove-duplicate-nodes",
+      "close-small-gap",
+      "snap-endpoint",
+      "remove-duplicate-path",
+    ]),
+    summary: z.string().min(1),
+    changeCount: z.number().int().positive(),
+    toleranceMm: z.number().min(0).max(1),
+    appliedToPreview: z.literal(true),
+  }).nullable(),
 });
 
 const vectorExportSummarySchema = z.strictObject({
@@ -872,8 +922,20 @@ export const desktopStateSchema = z.strictObject({
         layers: z.array(layerSchema),
         objects: z.array(documentObjectSchema),
         warnings: z.array(interchangeWarningSchema),
+        findings: z.array(interchangeFindingSchema),
+        skippedEntityCount: z.number().int().nonnegative(),
+        partialImport: z.boolean(),
         assumptions: z.array(z.string()),
         bounds: boundsSchema.nullable(),
+        fitMode: z.enum(["resize-stock", "scale-artwork", "keep"]),
+        marginMm: z.number().min(0).max(1_000),
+        proposedDocumentDimensionsMm: z.strictObject({
+          widthMm: positiveNumber,
+          heightMm: positiveNumber,
+        }),
+        oversizedAtOriginalScale: z.boolean(),
+        artworkScale: positiveNumber,
+        focusedObjectId: z.uuid().nullable(),
       })
       .nullable(),
     rasterTracePreview: z
@@ -1045,6 +1107,10 @@ export const desktopStateSchema = z.strictObject({
       model: z.string().min(1).max(200),
       message: z.string().min(1).max(1_000),
       retryAfterMs: z.number().nonnegative().nullable(),
+    }),
+    credentialPrompt: z.strictObject({
+      active: z.boolean(),
+      timeoutMs: z.number().positive().max(10 * 60_000),
     }),
     job: z.strictObject({
       operationId: z.uuid(),
@@ -1246,6 +1312,12 @@ export type CancelGeometryOperationRequest = z.infer<
 export type VectorImportPreviewRequest = z.infer<
   typeof vectorImportPreviewRequestSchema
 >;
+export type ConfigureVectorImportRequest = z.infer<
+  typeof configureVectorImportRequestSchema
+>;
+export type FocusVectorImportFindingRequest = z.infer<
+  typeof focusVectorImportFindingRequestSchema
+>;
 export type VectorExportRequest = z.infer<typeof vectorExportRequestSchema>;
 export type RasterTraceRequest = z.infer<typeof rasterTraceRequestSchema>;
 export type CancelRasterTraceRequest = z.infer<
@@ -1274,6 +1346,8 @@ export interface LaserxDesktopApi {
   saveProject(): Promise<CommandResult>;
   saveProjectAs(): Promise<CommandResult>;
   previewVectorImport(request: VectorImportPreviewRequest): Promise<CommandResult>;
+  configureVectorImport(request: ConfigureVectorImportRequest): Promise<CommandResult>;
+  focusVectorImportFinding(request: FocusVectorImportFindingRequest): Promise<CommandResult>;
   commitVectorImport(): Promise<CommandResult>;
   cancelVectorImport(): Promise<CommandResult>;
   exportVector(request: VectorExportRequest): Promise<CommandResult>;
@@ -1289,6 +1363,7 @@ export interface LaserxDesktopApi {
   deleteSignTemplate(request: DeleteSignTemplateRequest): Promise<CommandResult>;
   openAiAccountPage(request: OpenAiAccountPageRequest): Promise<CommandResult>;
   connectAi(): Promise<CommandResult>;
+  cancelAiConnection(): Promise<CommandResult>;
   replaceAiCredential(): Promise<CommandResult>;
   testAiConnection(): Promise<CommandResult>;
   disconnectAi(): Promise<CommandResult>;

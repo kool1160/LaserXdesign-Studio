@@ -102,7 +102,16 @@ export function AiGenerationPanel({ state, busy, run }: AiGenerationPanelProps) 
         {state.ai.connection.message}
       </p>
       <div className="button-grid compact">
-        {!connected ? (
+        {state.ai.credentialPrompt.active ? (
+          <button
+            type="button"
+            className="quiet"
+            data-testid="cancel-ai-connection"
+            onClick={() => void run(() => window.laserx.cancelAiConnection())}
+          >
+            Cancel secure connection
+          </button>
+        ) : !connected ? (
           <button type="button" data-testid="connect-ai" disabled={busy} onClick={() => void run(() => window.laserx.connectAi())}>
             Connect existing key
           </button>
@@ -116,9 +125,14 @@ export function AiGenerationPanel({ state, busy, run }: AiGenerationPanelProps) 
         <button type="button" className="quiet" disabled={busy} onClick={() => void run(() => window.laserx.openAiAccountPage({ target: "keys" }))}>Open key setup</button>
         <button type="button" className="quiet" disabled={busy} onClick={() => void run(() => window.laserx.openAiAccountPage({ target: "billing" }))}>Open billing</button>
       </div>
+      {state.ai.credentialPrompt.active ? (
+        <small data-testid="ai-credential-timeout">
+          The application-owned LaserX credential window closes automatically after {Math.ceil(state.ai.credentialPrompt.timeoutMs / 1_000)} seconds. Cancel restores the previous connection.
+        </small>
+      ) : null}
 
       <p className="privacy-note">
-        The API key stays in the operating-system vault and main process. Prompts and an attached image go to OpenAI only when you choose Generate; manual editing remains available while disconnected.
+        The API key passes only through the isolated credential window and main process, then stays in the operating-system vault. Prompts and an attached image go to OpenAI only when you choose Generate; manual editing remains available while disconnected.
       </p>
 
       <form className="document-form ai-generation-form" onSubmit={generate}>

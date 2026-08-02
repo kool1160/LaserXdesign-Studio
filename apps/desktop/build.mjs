@@ -27,6 +27,12 @@ await Promise.all([
   }),
   build({
     ...shared,
+    entryPoints: ["electron/credential-preload.ts"],
+    outfile: "dist/electron/credential-preload.cjs",
+    format: "cjs",
+  }),
+  build({
+    ...shared,
     entryPoints: ["electron/geometry-worker.ts"],
     outfile: "dist/electron/geometry-worker.cjs",
     format: "cjs",

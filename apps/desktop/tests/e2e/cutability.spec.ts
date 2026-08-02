@@ -145,7 +145,7 @@ test("automatic bridge chooses a minimum-width candidate and persists editable p
     ).toBe(1);
 
     await clickAndWaitForCommand(page, "Save");
-    await waitForProjectSchema(launched.projectPath, 8);
+    await waitForProjectSchema(launched.projectPath, 9);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       document: {
         objects: Array<{ type: string; closed?: boolean }>;

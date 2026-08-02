@@ -10,6 +10,8 @@ import {
   isInvertibleTransform,
   objectUsesLayerRecursively,
   validateRegistrationHoleReferences,
+  validateManufacturingSettings,
+  validateManufacturingLayerMetadata,
   type AffineTransformMm,
   type DocumentObject,
   type LaserxProject,
@@ -254,7 +256,7 @@ const legacyLayerSchema = z.strictObject({
   visible: z.boolean(),
   locked: z.boolean(),
 });
-const manufacturingLayerMetadataSchema = z
+const manufacturingLayerMetadataV8Schema = z
   .strictObject({
     role: z.enum([
       "face",
@@ -305,6 +307,45 @@ const manufacturingLayerMetadataSchema = z
       (metadata.role !== "non-cut-preview" && metadata.registrationGroup !== null),
     "Registration holes require a named physical manufacturing layer.",
   );
+const layerV8Schema = legacyLayerSchema.extend({
+  manufacturing: manufacturingLayerMetadataV8Schema.optional(),
+});
+const stockThicknessDesignationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("gauge"),
+    label: z.string().trim().min(1).max(50),
+    material: z.enum(["mild-steel", "stainless-steel", "aluminum"]),
+  }),
+  z.strictObject({
+    kind: z.enum(["fractional-inch", "millimeter", "custom"]),
+    label: z.string().trim().min(1).max(50),
+    material: z.null(),
+  }),
+]);
+const manufacturingLayerMetadataSchema = z
+  .strictObject({
+    role: z.enum(["face", "backing", "spacer-tab", "drill-reference", "non-cut-preview"]),
+    material: z.enum(["mild-steel", "stainless-steel", "aluminum", "wood", "acrylic", "other"]),
+    thicknessMm: positiveNumber,
+    stockThicknessDesignation: stockThicknessDesignationSchema.nullable().default(null),
+    process: z.enum(["laser", "plasma", "waterjet", "router", "drill", "non-cut"]),
+    notes: z.string().trim().max(500),
+    registrationGroup: z.string().trim().min(1).max(100).nullable(),
+    registrationHoleIds: z.array(z.uuid()).max(MAX_REGISTRATION_HOLES_PER_LAYER).default([]),
+  })
+  .refine(
+    (metadata) => (metadata.role === "non-cut-preview") === (metadata.process === "non-cut"),
+    "Preview-only layers must use the non-cut process, and physical layers cannot use it.",
+  )
+  .refine(
+    (metadata) => new Set(metadata.registrationHoleIds).size === metadata.registrationHoleIds.length,
+    "Registration hole references must be unique.",
+  )
+  .refine(
+    (metadata) => metadata.registrationHoleIds.length === 0 ||
+      (metadata.role !== "non-cut-preview" && metadata.registrationGroup !== null),
+    "Registration holes require a named physical manufacturing layer.",
+  );
 const layerSchema = legacyLayerSchema.extend({
   manufacturing: manufacturingLayerMetadataSchema.optional(),
 });
@@ -314,7 +355,7 @@ const guideSchema = z.strictObject({
   positionMm: finiteNumber,
 });
 
-const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
+const manufacturingSettingsV8Schema =
   z.strictObject({
     presetId: z.string().trim().min(1).max(100),
     process: z.enum(["laser", "plasma", "waterjet", "router"]),
@@ -349,6 +390,22 @@ const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
           "tolerancePreset",
         ]),
       )
+      .refine(
+        (fields) => new Set(fields).size === fields.length,
+        "Customized manufacturing fields must be unique.",
+      ),
+  });
+
+const manufacturingSettingsSchema: z.ZodType<ManufacturingSettings> =
+  manufacturingSettingsV8Schema.extend({
+    stockThicknessDesignation: stockThicknessDesignationSchema.nullable().default(null),
+    customizedFields: z
+      .array(z.enum([
+        "process", "material", "thicknessMm", "stockThicknessDesignation",
+        "kerfWidthMm", "minimumFeatureWidthMm", "minimumBridgeWidthMm",
+        "minimumGapMm", "contourSpacingMm", "heatDistortionSpacingMm",
+        "tolerancePreset",
+      ]))
       .refine(
         (fields) => new Set(fields).size === fields.length,
         "Customized manufacturing fields must be unique.",
@@ -577,7 +634,7 @@ export const laserxProjectV6Schema = z.strictObject({
           snapToDocument: z.boolean(),
         }),
       }),
-      manufacturing: manufacturingSettingsSchema,
+      manufacturing: manufacturingSettingsV8Schema,
     }),
     layers: z.array(legacyLayerSchema).min(1),
     activeLayerId: z.uuid(),
@@ -615,9 +672,42 @@ export const laserxProjectV7Schema = z.strictObject({
           snapToDocument: z.boolean(),
         }),
       }),
-      manufacturing: manufacturingSettingsSchema,
+      manufacturing: manufacturingSettingsV8Schema,
     }),
     layers: z.array(legacyLayerSchema).min(1),
+    activeLayerId: z.uuid(),
+    guides: z.array(guideSchema),
+    objects: z.array(documentObjectSchema),
+    templates: z.array(savedSignTemplateSchema).max(MAX_SAVED_SIGN_TEMPLATES),
+  }),
+  migrationHistory: z.array(migrationRecordSchema),
+});
+
+export const laserxProjectV8Schema = z.strictObject({
+  schemaVersion: z.literal(8),
+  project: metadataSchema,
+  document: z.strictObject({
+    kind: z.literal("document"),
+    id: z.uuid(),
+    dimensions: z.strictObject({ widthMm: positiveNumber, heightMm: positiveNumber }),
+    origin: z.strictObject({ xMm: z.literal(0), yMm: z.literal(0) }),
+    settings: z.strictObject({
+      displayUnit: z.enum(["millimeters", "inches"]),
+      viewport: z.strictObject({
+        rulersVisible: z.boolean(),
+        gridVisible: z.boolean(),
+        gridSpacingMm: positiveNumber,
+        snapping: z.strictObject({
+          enabled: z.boolean(),
+          snapToGrid: z.boolean(),
+          snapToGuides: z.boolean(),
+          snapToObjects: z.boolean(),
+          snapToDocument: z.boolean(),
+        }),
+      }),
+      manufacturing: manufacturingSettingsV8Schema,
+    }),
+    layers: z.array(layerV8Schema).min(1),
     activeLayerId: z.uuid(),
     guides: z.array(guideSchema),
     objects: z.array(documentObjectSchema),
@@ -671,6 +761,7 @@ type LaserxProjectV4Format = z.infer<typeof laserxProjectV4Schema>;
 type LaserxProjectV5Format = z.infer<typeof laserxProjectV5Schema>;
 type LaserxProjectV6Format = z.infer<typeof laserxProjectV6Schema>;
 type LaserxProjectV7Format = z.infer<typeof laserxProjectV7Schema>;
+type LaserxProjectV8Format = z.infer<typeof laserxProjectV8Schema>;
 type DocumentObjectV2 = z.infer<typeof documentObjectV2Schema>;
 
 export type ProjectFormatErrorCode =
@@ -902,6 +993,10 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProjectV6Format {
       "This schema-v5 project is damaged and cannot be migrated.",
     );
   }
+  const legacyManufacturingDefaults: ManufacturingSettings = {
+    ...DEFAULT_MANUFACTURING_SETTINGS,
+  };
+  delete legacyManufacturingDefaults.stockThicknessDesignation;
   return {
     ...legacy.data,
     schemaVersion: 6,
@@ -910,7 +1005,7 @@ export function migrateProjectV5ToV6(value: unknown): LaserxProjectV6Format {
       settings: {
         ...legacy.data.document.settings,
         manufacturing: {
-          ...DEFAULT_MANUFACTURING_SETTINGS,
+          ...legacyManufacturingDefaults,
           customizedFields: [],
         },
       },
@@ -952,7 +1047,7 @@ export function migrateProjectV6ToV7(value: unknown): LaserxProjectV7Format {
   };
 }
 
-export function migrateProjectV7ToV8(value: unknown): LaserxProject {
+export function migrateProjectV7ToV8(value: unknown): LaserxProjectV8Format {
   const legacy = laserxProjectV7Schema.safeParse(value);
   if (!legacy.success) {
     throw new ProjectFormatError(
@@ -962,11 +1057,54 @@ export function migrateProjectV7ToV8(value: unknown): LaserxProject {
   }
   return {
     ...legacy.data,
-    schemaVersion: PROJECT_SCHEMA_VERSION,
+    schemaVersion: 8,
     migrationHistory: [
       ...legacy.data.migrationHistory.map((record) => ({ ...record })),
       {
         fromVersion: 7,
+        toVersion: 8,
+        migratedAt: legacy.data.project.updatedAt,
+      },
+    ],
+  };
+}
+
+export function migrateProjectV8ToV9(value: unknown): LaserxProject {
+  const legacy = laserxProjectV8Schema.safeParse(value);
+  if (!legacy.success) {
+    throw new ProjectFormatError(
+      "INVALID_PROJECT",
+      "This schema-v8 project is damaged and cannot be migrated.",
+    );
+  }
+  return {
+    ...legacy.data,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    document: {
+      ...legacy.data.document,
+      settings: {
+        ...legacy.data.document.settings,
+        manufacturing: {
+          ...legacy.data.document.settings.manufacturing,
+          stockThicknessDesignation: null,
+        },
+      },
+      layers: legacy.data.document.layers.map(({ manufacturing, ...layer }) =>
+        manufacturing === undefined
+          ? layer
+          : {
+              ...layer,
+              manufacturing: {
+                ...manufacturing,
+                stockThicknessDesignation: null,
+              },
+            },
+      ),
+    },
+    migrationHistory: [
+      ...legacy.data.migrationHistory.map((record) => ({ ...record })),
+      {
+        fromVersion: 8,
         toVersion: PROJECT_SCHEMA_VERSION,
         migratedAt: legacy.data.project.updatedAt,
       },
@@ -975,7 +1113,7 @@ export function migrateProjectV7ToV8(value: unknown): LaserxProject {
 }
 
 export function migrateProjectV1(value: unknown): LaserxProject {
-  return migrateProjectV7ToV8(
+  return migrateProjectV8ToV9(migrateProjectV7ToV8(
     migrateProjectV6ToV7(
       migrateProjectV5ToV6(
       migrateProjectV4ToV5(
@@ -985,7 +1123,7 @@ export function migrateProjectV1(value: unknown): LaserxProject {
       ),
     ),
     ),
-  );
+  ));
 }
 
 export const projectMigrationRegistry: readonly ProjectMigration[] = [
@@ -1021,8 +1159,13 @@ export const projectMigrationRegistry: readonly ProjectMigration[] = [
   },
   {
     fromVersion: 7,
-    toVersion: PROJECT_SCHEMA_VERSION,
+    toVersion: 8,
     migrate: migrateProjectV7ToV8,
+  },
+  {
+    fromVersion: 8,
+    toVersion: PROJECT_SCHEMA_VERSION,
+    migrate: migrateProjectV8ToV9,
   },
 ];
 
@@ -1116,10 +1259,16 @@ export function parseProjectValue(candidate: unknown): LaserxProject {
   }
   try {
     validateRegistrationHoleReferences(result.data.document);
+    validateManufacturingSettings(result.data.document.settings.manufacturing);
+    for (const layer of result.data.document.layers) {
+      if (layer.manufacturing !== undefined) {
+        validateManufacturingLayerMetadata(layer.manufacturing);
+      }
+    }
   } catch {
     throw new ProjectFormatError(
       "INVALID_PROJECT",
-      "This project contains ambiguous or stale registration-hole references.",
+      "This project contains invalid manufacturing metadata or ambiguous registration-hole references.",
     );
   }
   return result.data;

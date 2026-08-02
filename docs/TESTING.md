@@ -328,7 +328,7 @@ the conservative analysis into a manufacturability guarantee.
   mismatch, accepts editable geometry, analyzes, verifies transient provenance,
   undoes exactly, disconnects, and confirms manual editing still works;
 - `pnpm audit:ai` checks provider pinning, request privacy controls, renderer
-  isolation, schema-v8 non-persistence, documentation, and production-source
+  isolation, schema-v9 non-persistence, documentation, and production-source
   secret patterns.
 
 Real-provider calls are never required in CI. The separate procedure in
@@ -350,7 +350,8 @@ secret or prompt content.
   `apps/desktop/tests/e2e/m11-polish.spec.ts-snapshots/`;
 - the M02 high-DPI pointer/zoom test and every earlier packaged project,
   editing, geometry, text, interchange, tracing, cutability, sign-tool, and AI
-  workflow remain in the same 28-test serial packaged suite;
+  workflow remain in the same serial packaged suite, now 31 tests with the M13
+  repair-gate scenarios;
 - `pnpm --filter @laserx/desktop brand:assets` deterministically regenerates
   the Windows icon, and the M11 workflow fails if the committed output changes.
 
@@ -395,6 +396,32 @@ secret or prompt content.
   replacement behavior;
 - `pnpm audit:production` enforces explicit physical scope, preview exclusion,
   atomic main-process storage, schema/docs/fixtures, and the no-CAM boundary.
+
+## M13 repair-gate executable layers
+
+- DXF adapter tests convert planar degree-1-through-5 rational splines within
+  the bounded sampling and global point budgets, reject malformed spline
+  records explicitly, and expose geometry-linked repair findings for duplicate
+  nodes and near closure. Exact-duplicate tests cover nearby offsets around the
+  repair tolerance, layer identity, reversed direction, rotated closed starts,
+  true exact duplicates, surviving-path linkage, and deterministic output;
+- application and desktop tests prove resize-stock, scale-artwork, and
+  keep/overflow previews remain non-mutating, locate a linked preview path, and
+  commit accepted geometry plus stock dimensions as exactly one undoable edit.
+  Non-empty resize coverage pins existing geometry at multiple stock edges,
+  uses an oversized different-aspect import, and proves cancel, commit, exact
+  Undo/Redo, unchanged existing objects, and schema-v9 save/reopen;
+- domain/project-format/production tests validate material-specific gauge
+  choices, fractional-inch and millimeter/custom choices, canonical
+  `thicknessMm`, deterministic v8-to-v9 null migration with no invented stock
+  name, round-trip persistence, and schema-2 manifest retention;
+- credential coordination tests cover cancel, timeout, retry, ignored-abort
+  ports, prior connection restoration, and bounded prompt cleanup. Packaged
+  Playwright drives the real application-owned credential modal and temporary
+  `safeStorage` vault, proves visibility and focus, dialog cancel, forced
+  timeout/closure, successful retry, encrypted-at-rest storage, rejected
+  replacement-key restoration, secret absence from normal renderer state, and
+  release of global busy controls.
 
 Run all milestone checks from the repository root:
 

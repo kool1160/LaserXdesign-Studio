@@ -4,9 +4,11 @@
 
 - context isolation and renderer sandboxing enabled;
 - Node integration disabled in the renderer;
-- navigation and new renderer windows denied;
+- normal renderer navigation and renderer-requested windows denied;
 - local packaged content only, with the Vite loopback URL allowlisted only in development;
-- one frozen typed preload API with fixed allowlisted IPC methods;
+- one frozen typed normal-renderer preload API with fixed allowlisted IPC
+  methods; the main-created credential modal uses a separate minimal preload
+  that can only submit or cancel its own password field;
 - strict Zod validation of IPC arguments and results on both sides;
 - arbitrary renderer-provided save paths rejected;
 - no arbitrary command execution from project data.
@@ -20,13 +22,19 @@ SVG, DXF, raster, and `.laserx` project files are untrusted input. Apply size li
 
 ## Secrets
 
-AI API keys are acquired in a native password prompt and used only by Electron
-main. On Windows, Electron `safeStorage` encrypts the key before an envelope is
-written under application user data. Keys never belong in project files,
-renderer/preload state, IPC arguments, logs, crash reports, fixtures, source
-control, or provider request bodies. Connection tests and generation read the
-vault at call time; replace overwrites the encrypted envelope and disconnect
-deletes it.
+AI API keys are acquired in a main-created, parent-bound modal credential
+window and used only by Electron main. Its isolated renderer has no normal
+LaserX preload/state, Node, navigation, network, DevTools, project, or file
+access; the key exists only in its password field and one sender-validated
+submit message before the window is destroyed. The visible window is
+cancelable, has a two-minute hard timeout, and is destroyed before prior
+connection state and controls are restored. On Windows, Electron `safeStorage`
+encrypts the key before an envelope is written under application user data.
+Keys never belong in project files, normal renderer/preload state, normal
+application IPC arguments, logs, crash reports, fixtures, source control, or
+provider request bodies. Connection tests and generation read the vault at
+call time; replace overwrites the encrypted envelope only after validation and
+disconnect deletes it.
 
 Reference images require explicit consent, strict byte/pixel limits, trusted-
 host decoding, and a second consent check at generation. Prompts and references

@@ -971,12 +971,17 @@ button:disabled {
   stroke: #49b9f2;
 }
 
-.import-preview {
+.placeholder-objects .incoming-import-object {
   fill: rgb(238 174 78 / 10%);
   stroke: #f0ad4e;
   stroke-width: 2;
   stroke-dasharray: 7 4;
-  vector-effect: non-scaling-stroke;
+}
+
+.placeholder-objects .existing-import-object {
+  fill: rgb(73 185 242 / 7%);
+  stroke: #65a9c8;
+  opacity: 0.72;
 }
 
 .interchange-summary {

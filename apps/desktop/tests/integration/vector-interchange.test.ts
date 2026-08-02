@@ -89,6 +89,15 @@ describe("desktop vector interchange", () => {
     expect(controller.state.dirty).toBe(false);
     expect(controller.state.project.document.objects).toHaveLength(0);
     expect(controller.state.editor.importPreview).toMatchObject({ format: "svg", sourceName: "sign.svg" });
+    expect(controller.state.editor.importPreview?.fitMode).toBe("resize-stock");
+    expect(await controller.configureVectorImport({
+      fitMode: "scale-artwork",
+      marginMm: 10,
+    })).toMatchObject({ ok: true });
+    expect(controller.state.editor.importPreview).toMatchObject({
+      fitMode: "scale-artwork",
+      proposedDocumentDimensionsMm: controller.state.project.document.dimensions,
+    });
 
     await controller.commitVectorImport();
     expect(controller.state.editor.importPreview).toBeNull();

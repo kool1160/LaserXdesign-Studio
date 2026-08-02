@@ -32,6 +32,7 @@ import {
   type VectorSourceUnit,
   type VectorInterchangeFormat,
   type InterchangeWarning,
+  type InterchangeFinding,
   type RasterSourceMetadata,
   type RasterTraceCandidate,
   type RasterTraceSettings,
@@ -55,6 +56,12 @@ import type {
 export const DEFAULT_HISTORY_LIMIT = 100;
 export const DEFAULT_DUPLICATE_OFFSET_MM = 10;
 export const MAX_VECTOR_IMPORT_GEOMETRY_POINTS = 200_000;
+export const DEFAULT_VECTOR_IMPORT_MARGIN_MM = 12.7;
+export type VectorImportFitMode = "resize-stock" | "scale-artwork" | "keep";
+
+export interface VectorImportPreviewFinding extends InterchangeFinding {
+  objectId: string | null;
+}
 
 export interface LifecycleDependencies {
   createId(): string;
@@ -87,12 +94,23 @@ export interface VectorImportPreview {
   layers: Layer[];
   objects: PathObject[];
   warnings: InterchangeWarning[];
+  findings: VectorImportPreviewFinding[];
+  skippedEntityCount: number;
+  partialImport: boolean;
   assumptions: string[];
   bounds: BoundsMm | null;
+  fitMode: VectorImportFitMode;
+  marginMm: number;
+  proposedDocumentDimensionsMm: { widthMm: number; heightMm: number };
+  oversizedAtOriginalScale: boolean;
+  artworkScale: number;
+  focusedObjectId: string | null;
 }
 
 interface PendingVectorImport extends VectorImportPreview {
   projectFingerprint: string;
+  sourceObjects: PathObject[];
+  sourceBounds: BoundsMm;
 }
 
 export interface RasterTracePreview {
@@ -377,9 +395,106 @@ function copyImportPreview(
           copyDocumentObject(object) as PathObject,
         ),
         warnings: preview.warnings.map((item) => ({ ...item })),
+        findings: preview.findings.map((item) => ({
+          ...item,
+          locationMm: item.locationMm === null ? null : { ...item.locationMm },
+          repair: item.repair === null ? null : { ...item.repair },
+        })),
+        skippedEntityCount: preview.skippedEntityCount,
+        partialImport: preview.partialImport,
         assumptions: [...preview.assumptions],
         bounds: preview.bounds === null ? null : { ...preview.bounds },
+        fitMode: preview.fitMode,
+        marginMm: preview.marginMm,
+        proposedDocumentDimensionsMm: { ...preview.proposedDocumentDimensionsMm },
+        oversizedAtOriginalScale: preview.oversizedAtOriginalScale,
+        artworkScale: preview.artworkScale,
+        focusedObjectId: preview.focusedObjectId,
       };
+}
+
+function fittedImportObjects(
+  sourceObjects: readonly PathObject[],
+  sourceBounds: BoundsMm,
+  documentDimensions: { widthMm: number; heightMm: number },
+  existingBounds: BoundsMm | null,
+  fitMode: VectorImportFitMode,
+  marginMm: number,
+): {
+  objects: PathObject[];
+  dimensions: { widthMm: number; heightMm: number };
+  scale: number;
+} {
+  const artworkWidth = sourceBounds.maxXmm - sourceBounds.minXmm;
+  const artworkHeight = sourceBounds.maxYmm - sourceBounds.minYmm;
+  if (
+    fitMode === "resize-stock" &&
+    existingBounds !== null &&
+    (existingBounds.minXmm < -1e-9 || existingBounds.minYmm < -1e-9)
+  ) {
+    throw new RangeError(
+      "Existing project geometry extends left or below the fixed stock origin. Choose a non-resizing import fit or move that geometry explicitly first.",
+    );
+  }
+  const dimensions = fitMode === "resize-stock"
+    ? {
+        widthMm: Math.max(
+          0.001,
+          artworkWidth + marginMm * 2,
+          ...(existingBounds === null
+            ? []
+            : [documentDimensions.widthMm, existingBounds.maxXmm]),
+        ),
+        heightMm: Math.max(
+          0.001,
+          artworkHeight + marginMm * 2,
+          ...(existingBounds === null
+            ? []
+            : [documentDimensions.heightMm, existingBounds.maxYmm]),
+        ),
+      }
+    : { ...documentDimensions };
+  const availableWidth = Math.max(0.001, dimensions.widthMm - marginMm * 2);
+  const availableHeight = Math.max(0.001, dimensions.heightMm - marginMm * 2);
+  const scale = fitMode === "scale-artwork"
+    ? Math.min(
+        artworkWidth <= 1e-12 ? 1 : availableWidth / artworkWidth,
+        artworkHeight <= 1e-12 ? 1 : availableHeight / artworkHeight,
+      )
+    : 1;
+  const targetMinX = fitMode === "keep"
+    ? sourceBounds.minXmm
+    : (dimensions.widthMm - artworkWidth * scale) / 2;
+  const targetMinY = fitMode === "keep"
+    ? sourceBounds.minYmm
+    : (dimensions.heightMm - artworkHeight * scale) / 2;
+  const transformPoint = (point: PointMm): PointMm => ({
+    xMm: targetMinX + (point.xMm - sourceBounds.minXmm) * scale,
+    yMm: targetMinY + (point.yMm - sourceBounds.minYmm) * scale,
+  });
+  return {
+    dimensions,
+    scale,
+    objects: sourceObjects.map((object) => ({
+      ...copyDocumentObject(object) as PathObject,
+      points: object.points.map(transformPoint),
+      ...(object.handles === undefined
+        ? {}
+        : {
+            handles: object.handles.map((handles) => ({
+              incoming: handles.incoming === null ? null : transformPoint(handles.incoming),
+              outgoing: handles.outgoing === null ? null : transformPoint(handles.outgoing),
+            })),
+          }),
+    })),
+  };
+}
+
+function canResizeStockWithoutMovingExistingGeometry(
+  existingBounds: BoundsMm | null,
+): boolean {
+  return existingBounds === null ||
+    (existingBounds.minXmm >= -1e-9 && existingBounds.minYmm >= -1e-9);
 }
 
 function copyRasterTracePreview(
@@ -1081,15 +1196,76 @@ export class ProjectSession implements ProjectCommandDispatcher {
             })),
           }),
     }));
-    const previewDocument: LaserxDocument = {
+    const sourcePreviewDocument: LaserxDocument = {
       ...document,
       layers: [...document.layers, ...newLayers],
       objects: [...document.objects, ...objects],
     };
-    const bounds = getSelectionBounds(
-      previewDocument,
+    const sourceBounds = getSelectionBounds(
+      sourcePreviewDocument,
       objects.map((object) => object.id),
     );
+    if (sourceBounds === null) {
+      throw new RangeError("The selected file contains no bounded 2D geometry to preview.");
+    }
+    const oversizedAtOriginalScale =
+      sourceBounds.minXmm < 0 ||
+      sourceBounds.minYmm < 0 ||
+      sourceBounds.maxXmm + DEFAULT_VECTOR_IMPORT_MARGIN_MM > document.dimensions.widthMm ||
+      sourceBounds.maxYmm + DEFAULT_VECTOR_IMPORT_MARGIN_MM > document.dimensions.heightMm;
+    const existingBounds = getSelectionBounds(
+      document,
+      document.objects.map((object) => object.id),
+    );
+    const fitMode: VectorImportFitMode =
+      oversizedAtOriginalScale &&
+      canResizeStockWithoutMovingExistingGeometry(existingBounds)
+      ? "resize-stock"
+      : "keep";
+    const fitted = fittedImportObjects(
+      objects,
+      sourceBounds,
+      document.dimensions,
+      existingBounds,
+      fitMode,
+      DEFAULT_VECTOR_IMPORT_MARGIN_MM,
+    );
+    const fittedPreviewDocument: LaserxDocument = {
+      ...document,
+      dimensions: fitted.dimensions,
+      layers: [...document.layers, ...newLayers],
+      objects: [...document.objects, ...fitted.objects],
+    };
+    const bounds = getSelectionBounds(
+      fittedPreviewDocument,
+      fitted.objects.map((object) => object.id),
+    );
+    const candidateFindings = candidate.findings ?? [];
+    const findingKeys = new Set(
+      candidateFindings.map(
+        (item) => `${item.code}\u0000${item.message}\u0000${item.source ?? ""}`,
+      ),
+    );
+    const authoritativeFindings: InterchangeFinding[] = [
+      ...candidateFindings,
+      ...candidate.warnings
+        .filter(
+          (item) =>
+            !findingKeys.has(
+              `${item.code}\u0000${item.message}\u0000${item.source ?? ""}`,
+            ),
+        )
+        .map((item) => ({
+          ...item,
+          severity: "warning" as const,
+          pathIndex: null,
+          locationMm: null,
+          repair: null,
+        })),
+    ];
+    const skippedEntityCount = candidate.warnings.filter((item) =>
+      /\bskipped\b/iu.test(item.message)
+    ).length;
     this.#importPreview = {
       sourceName: sourceName.trim() || `Imported ${candidate.format.toUpperCase()}`,
       format: candidate.format,
@@ -1097,12 +1273,85 @@ export class ProjectSession implements ProjectCommandDispatcher {
       dimensionsMm:
         candidate.dimensionsMm === null ? null : { ...candidate.dimensionsMm },
       layers: newLayers,
-      objects,
+      objects: fitted.objects,
       warnings: candidate.warnings.map((item) => ({ ...item })),
+      findings: authoritativeFindings.map((item) => ({
+        ...item,
+        locationMm: item.locationMm === null ? null : { ...item.locationMm },
+        repair: item.repair === null ? null : { ...item.repair },
+        objectId: item.pathIndex === null
+          ? null
+          : (objects[item.pathIndex]?.id ?? null),
+      })),
+      skippedEntityCount,
+      partialImport: skippedEntityCount > 0,
       assumptions: [...candidate.assumptions],
       bounds,
+      fitMode,
+      marginMm: DEFAULT_VECTOR_IMPORT_MARGIN_MM,
+      proposedDocumentDimensionsMm: { ...fitted.dimensions },
+      oversizedAtOriginalScale,
+      artworkScale: fitted.scale,
+      focusedObjectId: null,
       projectFingerprint: fingerprint(this.#project),
+      sourceObjects: objects.map((object) => copyDocumentObject(object) as PathObject),
+      sourceBounds: { ...sourceBounds },
     };
+    return this.state;
+  }
+
+  public configureVectorImport(
+    fitMode: VectorImportFitMode,
+    marginMm: number,
+  ): ProjectSessionState {
+    const preview = this.#importPreview;
+    if (preview === null) {
+      throw new RangeError("There is no vector import preview to configure.");
+    }
+    if (!Number.isFinite(marginMm) || marginMm < 0 || marginMm > 1_000) {
+      throw new RangeError("Import margin must be between 0 and 1,000 mm.");
+    }
+    if (preview.projectFingerprint !== fingerprint(this.#project)) {
+      throw new Error("The project changed after this preview was created. Preview the vector file again before configuring it.");
+    }
+    const fitted = fittedImportObjects(
+      preview.sourceObjects,
+      preview.sourceBounds,
+      this.#project.document.dimensions,
+      getSelectionBounds(
+        this.#project.document,
+        this.#project.document.objects.map((object) => object.id),
+      ),
+      fitMode,
+      marginMm,
+    );
+    const previewDocument: LaserxDocument = {
+      ...this.#project.document,
+      dimensions: fitted.dimensions,
+      layers: [...this.#project.document.layers, ...preview.layers],
+      objects: [...this.#project.document.objects, ...fitted.objects],
+    };
+    preview.objects = fitted.objects;
+    preview.bounds = getSelectionBounds(
+      previewDocument,
+      fitted.objects.map((object) => object.id),
+    );
+    preview.fitMode = fitMode;
+    preview.marginMm = marginMm;
+    preview.proposedDocumentDimensionsMm = { ...fitted.dimensions };
+    preview.artworkScale = fitted.scale;
+    return this.state;
+  }
+
+  public focusVectorImportFinding(objectId: string): ProjectSessionState {
+    const preview = this.#importPreview;
+    if (preview === null) {
+      throw new RangeError("There is no vector import preview to inspect.");
+    }
+    if (!preview.objects.some((object) => object.id === objectId)) {
+      throw new RangeError("That import finding no longer identifies preview geometry.");
+    }
+    preview.focusedObjectId = objectId;
     return this.state;
   }
 
@@ -1123,6 +1372,9 @@ export class ProjectSession implements ProjectCommandDispatcher {
       type: "objects.import",
       layers: preview.layers,
       objects: preview.objects,
+      dimensions: preview.fitMode === "resize-stock"
+        ? { ...preview.proposedDocumentDimensionsMm }
+        : undefined,
     });
     this.#importPreview = null;
     return this.state;

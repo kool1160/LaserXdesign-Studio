@@ -68,6 +68,8 @@ export interface TestLaunch {
 export interface LaunchEnvironment {
   aiMock?: boolean;
   aiDelayMs?: string;
+  aiCredentialMode?: "application" | "wait";
+  aiCredentialTimeoutMs?: string;
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
   geometryDelayMs?: string;
@@ -100,6 +102,12 @@ export async function launchPackaged(
       ...(launchEnvironment.aiDelayMs === undefined
         ? {}
         : { LASERX_TEST_AI_DELAY_MS: launchEnvironment.aiDelayMs }),
+      ...(launchEnvironment.aiCredentialMode === undefined
+        ? {}
+        : { LASERX_TEST_AI_CREDENTIAL_MODE: launchEnvironment.aiCredentialMode }),
+      ...(launchEnvironment.aiCredentialTimeoutMs === undefined
+        ? {}
+        : { LASERX_TEST_AI_CREDENTIAL_TIMEOUT_MS: launchEnvironment.aiCredentialTimeoutMs }),
       ...(launchEnvironment.deviceScaleFactor === undefined
         ? {}
         : {

@@ -193,7 +193,7 @@ describe("layered production workflow", () => {
       sourceProjectVersion: number;
       layers: { role: string; registrationHoles: { objectId: string }[] }[];
     };
-    expect(manifest.sourceProjectVersion).toBe(8);
+    expect(manifest.sourceProjectVersion).toBe(9);
     expect(manifest.layers.map((layer) => layer.role)).toEqual(["face", "backing"]);
     expect(manifest.layers.map((layer) => layer.registrationHoles.map((hole) => hole.objectId))).toEqual([
       [faceHoleId],

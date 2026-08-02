@@ -33,6 +33,11 @@ function layer(
       role,
       material: role === "backing" ? "acrylic" : "mild-steel",
       thicknessMm: role === "backing" ? 6 : 3,
+      stockThicknessDesignation: {
+        kind: "millimeter",
+        label: role === "backing" ? "6 mm" : "3 mm",
+        material: null,
+      },
       process: role === "non-cut-preview" ? "non-cut" : "laser",
       notes: `${name} material note`,
       registrationGroup:
@@ -184,6 +189,10 @@ describe("production package export", () => {
     expect(first.manifest.originMm).toEqual({ xMm: 0, yMm: 0 });
     expect(first.manifest.stockMm).toEqual({ widthMm: 300, heightMm: 200 });
     expect(first.manifest.layers.map((item) => item.objectCount)).toEqual([4, 4]);
+    expect(first.manifest.layers.map((item) => item.stockThicknessDesignation)).toEqual([
+      { kind: "millimeter", label: "3 mm", material: null },
+      { kind: "millimeter", label: "6 mm", material: null },
+    ]);
     expect(first.manifest.layers[0]?.registrationHoles).toEqual([
       { objectId: FACE_HOLE_ID, xMm: 40, yMm: 50, diameterMm: 6 },
     ]);

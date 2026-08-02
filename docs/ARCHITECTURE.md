@@ -29,7 +29,8 @@ Owns process presets, limits, issue detection, retained/drop-out region classifi
 ### Production package — `packages/production-export`
 
 Owns deterministic physical-layer filtering, per-layer SVG/DXF artifacts,
-schema-1 manifests, explicit registration-object comparison, hashes, and the
+schema-2 manifests, explicit registration-object comparison, hashes, stock
+thickness designations, and the
 simple 2D assembly projection. It resolves only validated registration-hole
 IDs that identify true world-space circles from domain metadata and derives
 manifest centers and diameters from the same transformed geometry. Decorative
@@ -57,6 +58,26 @@ Electron main owns an atomic production-folder storage adapter and exposes only
 layer IDs, output formats, and conflict intent through strict IPC. React owns
 metadata forms, selection, status, and a presentation-only exploded stack.
 ADR 0022 and `docs/PRODUCTION_PACKAGES.md` define the full contract.
+
+For M13, schema v9 adds a nullable, material-validated U.S. stock designation
+beside canonical `thicknessMm`; migration from v8 deliberately records null.
+Vector import adapters publish bounded repair findings and geometry-linked
+locations. The application layer owns the non-mutating three-way stock-fit
+preview and includes any accepted stock resize in the same undoable import
+command as the geometry. Resize-stock fitting may fit an empty project tightly;
+on a non-empty project it preserves the current stock extent and unions every
+existing authoritative object bound without moving or scaling existing objects.
+DXF duplicate identity is an exact, same-layer canonical comparison independent
+of closed-path start index and path direction; the 0.1 mm endpoint-closure
+tolerance is never reused as identity.
+
+The M13 credential interaction is a main-created modal `BrowserWindow` bound to
+the LaserX parent window. It loads only repository-owned inline UI through a
+dedicated minimal preload, has no normal application preload/state, Node,
+navigation, network, DevTools, or project access, and accepts submit/cancel IPC
+only from its own `webContents`. Electron main destroys the window on submit,
+cancel, or controller timeout, tests the ephemeral key, and writes it only
+through the existing `safeStorage` vault boundary.
 
 ## Process boundary
 
@@ -269,7 +290,7 @@ owns the preview and source-project fingerprint. Wording mismatch or stale
 project state blocks acceptance; a successful acceptance is exactly one
 `objects.import` command followed by a fresh analysis of the accepted IDs.
 Prompts, references, alternatives, provider metadata, usage, and AI provenance
-remain transient and do not change schema v8.
+remain transient and do not change schema v9.
 
 ## State flow
 

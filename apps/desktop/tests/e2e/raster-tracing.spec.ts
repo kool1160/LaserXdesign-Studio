@@ -83,7 +83,7 @@ test("preprocesses a PNG, previews overlays, accepts editable paths, analyzes, s
   await expect(page.getByTestId("path-edit-overlay")).toBeVisible();
 
   await clickAndWaitForCommand(page, "Save");
-  await waitForProjectSchema(testLaunch.projectPath, 8);
+  await waitForProjectSchema(testLaunch.projectPath, 9);
   const saved = JSON.parse(await readFile(testLaunch.projectPath, "utf8")) as {
     document: { objects: Array<{ type: string; closed?: boolean; points?: unknown[] }> };
   };
