@@ -93,6 +93,20 @@ function clonePoint(point: PointMm): PointMm {
   return { xMm: point.xMm, yMm: point.yMm };
 }
 
+/**
+ * Detaches the returned material metadata from the authoritative project:
+ * `StockThicknessDesignation` is a plain object, so returning it directly
+ * would let scene consumers mutate the source `LaserxProject` without an
+ * application command, dirty-state transition, or Undo/Redo record.
+ */
+function cloneStockThicknessDesignation(
+  designation: StockThicknessDesignation | null | undefined,
+): StockThicknessDesignation | null {
+  return designation === null || designation === undefined
+    ? null
+    : { ...designation };
+}
+
 function layerScopedDocument(
   document: LaserxDocument,
   layerId: string,
@@ -218,7 +232,9 @@ export function buildPhysicalPreviewScene(
     thicknessMm: metadata.thicknessMm,
     material: {
       material: metadata.material,
-      stockThicknessDesignation: metadata.stockThicknessDesignation ?? null,
+      stockThicknessDesignation: cloneStockThicknessDesignation(
+        metadata.stockThicknessDesignation,
+      ),
       displayLabel: formatStockThickness(
         metadata.thicknessMm,
         metadata.stockThicknessDesignation ?? null,

@@ -1,9 +1,12 @@
 import {
   createBlankProject,
   identityTransform,
+  type AffineTransformMm,
+  type GroupObject,
   type LaserxProject,
   type Layer,
   type PathObject,
+  type RectangleObject,
 } from "@laserx/domain";
 import { describe, expect, it } from "vitest";
 
@@ -148,6 +151,76 @@ function stencilProject(): LaserxProject {
   });
 }
 
+const TRANSFORM_LAYER_ID = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa";
+const GROUP_ID = "bbbbbbbb-2222-4bbb-8bbb-bbbbbbbbbbbb";
+const RECT_CHILD_ID = "cccccccc-3333-4ccc-8ccc-cccccccccccc";
+const HOLE_CHILD_ID = "dddddddd-4444-4ddd-8ddd-dddddddddddd";
+
+/**
+ * Group transform {a:0,b:2,c:-2,d:0} is an exact scale-by-2-then-rotate-90°
+ * matrix (integer coefficients, no trig calls, so world points are exact
+ * with no floating-point flattening noise): world = (50 - 2*y, 2*x + 20).
+ * Composed with each child's own translation, this proves the adapter
+ * applies parent-then-child transform composition, not just a flat offset.
+ */
+function transformedGroupProject(): LaserxProject {
+  const groupTransform: AffineTransformMm = { a: 0, b: 2, c: -2, d: 0, eMm: 50, fMm: 20 };
+  const rectChildTransform: AffineTransformMm = { a: 1, b: 0, c: 0, d: 1, eMm: 3, fMm: 4 };
+  const holeChildTransform: AffineTransformMm = { a: 1, b: 0, c: 0, d: 1, eMm: 8, fMm: 7 };
+
+  const rectangle: RectangleObject = {
+    id: RECT_CHILD_ID,
+    type: "rectangle",
+    layerId: TRANSFORM_LAYER_ID,
+    transform: rectChildTransform,
+    origin: { xMm: 0, yMm: 0 },
+    widthMm: 10,
+    heightMm: 6,
+  };
+  const hole: PathObject = {
+    id: HOLE_CHILD_ID,
+    type: "path",
+    layerId: TRANSFORM_LAYER_ID,
+    transform: holeChildTransform,
+    closed: true,
+    points: [
+      { xMm: 0, yMm: 0 },
+      { xMm: 2, yMm: 0 },
+      { xMm: 2, yMm: 2 },
+      { xMm: 0, yMm: 2 },
+    ],
+  };
+  const group: GroupObject = {
+    id: GROUP_ID,
+    type: "group",
+    layerId: TRANSFORM_LAYER_ID,
+    transform: groupTransform,
+    children: [rectangle, hole],
+  };
+
+  const layer = faceLayer(TRANSFORM_LAYER_ID, "Face", "face");
+  if (layer.manufacturing === undefined) throw new Error("Expected manufacturing metadata.");
+  layer.manufacturing.thicknessMm = 4;
+  layer.manufacturing.stockThicknessDesignation = {
+    kind: "millimeter",
+    label: "4 mm",
+    material: null,
+  };
+
+  return createBlankProject({
+    id: "11110000-0000-4000-8000-000000000000",
+    documentId: "22220000-0000-4000-8000-000000000000",
+    name: "Transformed Group",
+    now: "2026-08-02T12:00:00.000Z",
+    width: 200,
+    height: 150,
+    inputUnit: "millimeters",
+    layers: [layer],
+    activeLayerId: TRANSFORM_LAYER_ID,
+    objects: [group],
+  });
+}
+
 describe("buildPhysicalPreviewScene", () => {
   it("extrudes a single physical layer with a through-hole and preserves exact dimensions", () => {
     const scene = buildPhysicalPreviewScene(singleLayerProject(), { layerId: FACE_ID });
@@ -263,6 +336,72 @@ describe("buildPhysicalPreviewScene", () => {
     const project = singleLayerProject();
     const before = structuredClone(project);
     buildPhysicalPreviewScene(project, { layerId: FACE_ID });
+    expect(project).toEqual(before);
+  });
+
+  it("returns a detached stockThicknessDesignation that can be mutated without touching the source project", () => {
+    const project = singleLayerProject();
+    const face = project.document.layers.find((candidate) => candidate.id === FACE_ID);
+    if (face?.manufacturing === undefined) throw new Error("Expected face metadata.");
+    const sourceDesignation = face.manufacturing.stockThicknessDesignation;
+    const before = structuredClone(project);
+
+    const scene = buildPhysicalPreviewScene(project, { layerId: FACE_ID });
+    const returnedDesignation = scene.layers[0]?.material.stockThicknessDesignation;
+    if (returnedDesignation === null || returnedDesignation === undefined) {
+      throw new Error("Expected a stock thickness designation.");
+    }
+    expect(returnedDesignation).not.toBe(sourceDesignation);
+    expect(returnedDesignation).toEqual(sourceDesignation);
+
+    returnedDesignation.label = "MUTATED";
+
+    expect(project).toEqual(before);
+    expect(face.manufacturing.stockThicknessDesignation?.label).toBe("3 mm");
+  });
+
+  it("preserves exact world-space geometry through a transformed group and transformed child geometry (translation + rotation + scale)", () => {
+    const project = transformedGroupProject();
+    const before = structuredClone(project);
+
+    const first = buildPhysicalPreviewScene(project, { layerId: TRANSFORM_LAYER_ID });
+    const layer = first.layers[0];
+    if (layer === undefined) throw new Error("Expected the transformed layer.");
+    expect(layer.thicknessMm).toBe(4);
+    expect(layer.shapes).toHaveLength(1);
+    const shape = layer.shapes[0];
+    if (shape === undefined) throw new Error("Expected the transformed shape.");
+
+    // Outer rectangle: local (0,0)-(10,6) -> +child translate(3,4) ->
+    // +group scale2/rotate90/translate(50,20) -> exact axis-aligned world rect.
+    expect(shape.outerContour.points).toEqual([
+      { xMm: 42, yMm: 26 },
+      { xMm: 42, yMm: 46 },
+      { xMm: 30, yMm: 46 },
+      { xMm: 30, yMm: 26 },
+    ]);
+    // Hole square: local (0,0)-(2,2) -> +child translate(8,7) -> +group transform.
+    expect(shape.holeContours).toHaveLength(1);
+    expect(shape.holeContours[0]?.points).toEqual([
+      { xMm: 36, yMm: 36 },
+      { xMm: 36, yMm: 40 },
+      { xMm: 32, yMm: 40 },
+      { xMm: 32, yMm: 36 },
+    ]);
+    expect(layer.boundsMm).toEqual({
+      minXmm: 30,
+      minYmm: 26,
+      maxXmm: 42,
+      maxYmm: 46,
+    });
+    expect(first.findings).toEqual([]);
+
+    const second = buildPhysicalPreviewScene(transformedGroupProject(), {
+      layerId: TRANSFORM_LAYER_ID,
+    });
+    expect(second).toEqual(first);
+    expect(second.fingerprint).toBe(first.fingerprint);
+
     expect(project).toEqual(before);
   });
 });
