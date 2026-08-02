@@ -84,11 +84,15 @@ import type {
   BridgeProposalRequestDto,
   VectorExportRequest,
   VectorImportPreviewRequest,
+  ConfigureVectorImportRequest,
+  FocusVectorImportFindingRequest,
   ProductionExportRequest,
 } from "./ipc-contract.js";
-import type {
-  CredentialAcquisitionPort,
-  CredentialVaultPort,
+import {
+  CredentialAcquisitionCancelledError,
+  CredentialAcquisitionTimeoutError,
+  type CredentialAcquisitionPort,
+  type CredentialVaultPort,
 } from "./ai-credentials.js";
 import {
   CutabilityAnalysisCancelledError,
@@ -166,6 +170,7 @@ export interface DesktopControllerOptions {
   aiProvider?: AiProvider;
   credentialVault?: CredentialVaultPort;
   credentialAcquisition?: CredentialAcquisitionPort;
+  credentialConnectionTimeoutMs?: number;
   openExternal?: (url: string) => Promise<void>;
 }
 
@@ -309,12 +314,14 @@ export class DesktopController {
   readonly #aiProvider: AiProvider;
   readonly #credentialVault: CredentialVaultPort;
   readonly #credentialAcquisition: CredentialAcquisitionPort;
+  readonly #credentialConnectionTimeoutMs: number;
   readonly #openExternal: ((url: string) => Promise<void>) | null;
   readonly #cutabilityCache = new CutabilityAnalysisCache();
   readonly #geometryAbortControllers = new Map<string, AbortController>();
   readonly #rasterAbortControllers = new Map<string, AbortController>();
   readonly #cutabilityAbortControllers = new Map<string, AbortController>();
   #aiAbortController: AbortController | null = null;
+  #credentialAbortController: AbortController | null = null;
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -383,6 +390,14 @@ export class DesktopController {
     this.#credentialVault = options.credentialVault ?? unavailableCredentialVault;
     this.#credentialAcquisition =
       options.credentialAcquisition ?? unavailableCredentialAcquisition;
+    this.#credentialConnectionTimeoutMs = options.credentialConnectionTimeoutMs ?? 120_000;
+    if (
+      !Number.isFinite(this.#credentialConnectionTimeoutMs) ||
+      this.#credentialConnectionTimeoutMs <= 0 ||
+      this.#credentialConnectionTimeoutMs > 10 * 60_000
+    ) {
+      throw new RangeError("AI credential connection timeout must be between 1 ms and 10 minutes.");
+    }
     this.#openExternal = options.openExternal ?? null;
     this.#aiConnection = disconnectedAiState(this.#aiProvider);
     this.#rasterOperationTimeoutMs =
@@ -462,6 +477,10 @@ export class DesktopController {
       },
       ai: {
         connection: { ...this.#aiConnection },
+        credentialPrompt: {
+          active: this.#credentialAbortController !== null,
+          timeoutMs: this.#credentialConnectionTimeoutMs,
+        },
         job: this.#aiJob === null ? null : { ...this.#aiJob },
         reference: this.#aiReference === null
           ? null
@@ -599,6 +618,22 @@ export class DesktopController {
     return this.#run(() => {
       this.#session.commitVectorImport();
       this.#invalidateCutability();
+    });
+  }
+
+  public async configureVectorImport(
+    request: ConfigureVectorImportRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.configureVectorImport(request.fitMode, request.marginMm);
+    });
+  }
+
+  public async focusVectorImportFinding(
+    request: FocusVectorImportFindingRequest,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#session.focusVectorImportFinding(request.objectId);
     });
   }
 
@@ -837,7 +872,12 @@ export class DesktopController {
 
   public async connectAi(replacing = false): Promise<CommandResult> {
     return this.#run(async () => {
+      if (this.#credentialAbortController !== null) {
+        throw new RangeError("Finish or cancel the active credential connection first.");
+      }
       const previous = { ...this.#aiConnection };
+      const abortController = new AbortController();
+      this.#credentialAbortController = abortController;
       this.#aiConnection = {
         ...previous,
         status: "connecting",
@@ -847,10 +887,41 @@ export class DesktopController {
         retryAfterMs: null,
       };
       this.#emit();
-      const credential = await this.#credentialAcquisition.acquire(
-        this.#aiProvider.name,
-        replacing,
-      );
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        abortController.abort();
+      }, this.#credentialConnectionTimeoutMs);
+      let credential: string | null;
+      try {
+        const canceled = new Promise<never>((_resolve, reject) => {
+          abortController.signal.addEventListener("abort", () => {
+            reject(timedOut
+              ? new CredentialAcquisitionTimeoutError()
+              : new CredentialAcquisitionCancelledError());
+          }, { once: true });
+        });
+        credential = await Promise.race([
+          this.#credentialAcquisition.acquire(
+            this.#aiProvider.name,
+            replacing,
+            abortController.signal,
+          ),
+          canceled,
+        ]);
+      } catch (error) {
+        this.#aiConnection = previous;
+        if (error instanceof CredentialAcquisitionTimeoutError) throw error;
+        if (abortController.signal.aborted) {
+          throw new CredentialAcquisitionCancelledError();
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+        if (this.#credentialAbortController === abortController) {
+          this.#credentialAbortController = null;
+        }
+      }
       if (credential === null) {
         this.#aiConnection = previous;
         return;
@@ -869,9 +940,25 @@ export class DesktopController {
           retryAfterMs: null,
         };
       } catch (error) {
-        this.#aiConnection = connectionStateForError(this.#aiProvider, error);
+        this.#aiConnection = replacing
+          ? previous
+          : connectionStateForError(this.#aiProvider, error);
         throw error;
       }
+    });
+  }
+
+  public async cancelAiConnection(): Promise<CommandResult> {
+    return this.#run(() => {
+      const controller = this.#credentialAbortController;
+      if (controller === null) {
+        throw new RangeError("There is no active credential connection to cancel.");
+      }
+      this.#aiConnection = {
+        ...this.#aiConnection,
+        message: "Canceling secure credential entry and restoring the previous connection.",
+      };
+      controller.abort();
     });
   }
 
@@ -908,6 +995,7 @@ export class DesktopController {
 
   public async disconnectAi(): Promise<CommandResult> {
     return this.#run(async () => {
+      this.#credentialAbortController?.abort();
       this.#aiAbortController?.abort();
       this.#aiAbortController = null;
       this.#aiJob = null;

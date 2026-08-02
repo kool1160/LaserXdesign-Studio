@@ -19,6 +19,7 @@ import {
   FixedCredentialAcquisition,
   MemoryCredentialVault,
 } from "../../electron/ai-test-provider.js";
+import type { CredentialAcquisitionPort } from "../../electron/ai-credentials.js";
 import type { CutabilityWorkerPort } from "../../electron/cutability-worker-service.js";
 import {
   DesktopController,
@@ -74,6 +75,8 @@ async function desktop(options: {
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
   cutabilityWorker?: CutabilityWorkerPort;
+  credentialAcquisition?: CredentialAcquisitionPort;
+  credentialConnectionTimeoutMs?: number;
 } = {}): Promise<{ controller: DesktopController; vault: MemoryCredentialVault }> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-ai-generation-"));
   temporaryDirectories.push(directory);
@@ -93,7 +96,11 @@ async function desktop(options: {
     cutabilityWorker: options.cutabilityWorker ?? cutabilityWorker,
     aiProvider: options.aiProvider ?? new DeterministicAiProvider(options.delayMs ?? 0),
     credentialVault: vault,
-    credentialAcquisition: new FixedCredentialAcquisition(CREDENTIAL),
+    credentialAcquisition:
+      options.credentialAcquisition ?? new FixedCredentialAcquisition(CREDENTIAL),
+    ...(options.credentialConnectionTimeoutMs === undefined
+      ? {}
+      : { credentialConnectionTimeoutMs: options.credentialConnectionTimeoutMs }),
     ...(options.rasterCodec === undefined ? {} : { rasterCodec: options.rasterCodec }),
     ...(options.rasterWorker === undefined ? {} : { rasterWorker: options.rasterWorker }),
   });
@@ -356,6 +363,64 @@ describe("AI generation coordination", () => {
     expect(controller.state.ai.connection.status).toBe("disconnected");
     expect(JSON.stringify(controller.state.project)).toBe(before);
     expect(controller.state.editor.history.undoDepth).toBe(0);
+  });
+
+  it("cancels a waiting credential prompt and restores the prior connection and controls", async () => {
+    const waiting: CredentialAcquisitionPort = {
+      acquire: (_provider, _replacing, signal) => new Promise((resolve) => {
+        signal.addEventListener("abort", () => resolve(null), { once: true });
+      }),
+    };
+    const { controller } = await desktop({
+      credential: null,
+      credentialAcquisition: waiting,
+      credentialConnectionTimeoutMs: 5_000,
+    });
+    const connection = controller.connectAi();
+    await expect.poll(() => controller.state.ai.credentialPrompt.active).toBe(true);
+    expect(controller.state.ai.connection.status).toBe("connecting");
+    expect(await controller.cancelAiConnection()).toMatchObject({ ok: true });
+    const result = await connection;
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("Expected credential cancellation to fail the command.");
+    expect(result.error).toMatch(/canceled/u);
+    expect(controller.state.ai.credentialPrompt.active).toBe(false);
+    expect(controller.state.ai.connection.status).toBe("disconnected");
+  });
+
+  it("times out an acquisition that ignores cancellation and allows retry", async () => {
+    const neverSettles: CredentialAcquisitionPort = {
+      acquire: () => new Promise(() => undefined),
+    };
+    const { controller } = await desktop({
+      credential: null,
+      credentialAcquisition: neverSettles,
+      credentialConnectionTimeoutMs: 20,
+    });
+    const result = await controller.connectAi();
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("Expected credential timeout to fail the command.");
+    expect(result.error).toMatch(/timed out/u);
+    expect(controller.state.ai.credentialPrompt.active).toBe(false);
+    expect(controller.state.ai.connection.status).toBe("disconnected");
+    expect((await controller.connectAi()).ok).toBe(false);
+  });
+
+  it("restores a working prior connection when replacement validation fails", async () => {
+    const failingProvider: AiProvider = {
+      id: "openai",
+      name: "Failing replacement provider",
+      model: "replacement-test-model",
+      testConnection: () => Promise.reject(new Error("Replacement key was rejected.")),
+      generate: () => Promise.reject(new Error("Not used.")),
+    };
+    const { controller, vault } = await desktop({ aiProvider: failingProvider });
+    expect(controller.state.ai.connection.status).toBe("connected");
+    const prior = await vault.read("openai");
+    const result = await controller.connectAi(true);
+    expect(result).toMatchObject({ ok: false });
+    expect(controller.state.ai.connection.status).toBe("connected");
+    expect(await vault.read("openai")).toBe(prior);
   });
 
   it("routes provider raster fallback through the M07 worker and exact requested size", async () => {

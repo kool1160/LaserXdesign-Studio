@@ -294,6 +294,7 @@ describe("typed IPC validation", () => {
           message: "Connect a user-owned OpenAI API key to generate concepts.",
           retryAfterMs: null,
         },
+        credentialPrompt: { active: false, timeoutMs: 120_000 },
         job: null,
         reference: null,
         concepts: [],

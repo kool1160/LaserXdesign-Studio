@@ -27,14 +27,14 @@ const documentation = await source("docs/PRODUCTION_PACKAGES.md");
 const golden = JSON.parse(await source("fixtures/production/m12-package-goldens.json"));
 
 for (const marker of [
-  "PROJECT_SCHEMA_VERSION = 8",
+  "PROJECT_SCHEMA_VERSION = 9",
   "manufacturing?: ManufacturingLayerMetadata",
   "registrationHoleIds: string[]",
   "isRegistrationCircleObject",
   "getRegistrationCircleGeometry",
   "getRegistrationHoleObjects",
   '"non-cut-preview"',
-]) requireText(domain, marker, "schema-v8 manufacturing layer contract");
+]) requireText(domain, marker, "schema-v9 manufacturing layer contract");
 
 for (const marker of [
   "migrateProjectV7ToV8",
@@ -43,7 +43,8 @@ for (const marker of [
 ]) requireText(projectFormat, marker, "project migration contract");
 
 for (const marker of [
-  "PRODUCTION_PACKAGE_SCHEMA_VERSION = 1",
+  "PRODUCTION_PACKAGE_SCHEMA_VERSION = 2",
+  "stockThicknessDesignation",
   'layer.manufacturing?.role !== "non-cut-preview"',
   "sha256",
   'originMm: { xMm: 0, yMm: 0 }',
@@ -90,6 +91,7 @@ for (const marker of [
   "no ordinary",
   "Decorative ellipses remain ordinary",
   "true world-space circles",
+  "nullable stock",
 ]) requireText(documentation, marker, "production documentation");
 
 if (
@@ -107,4 +109,4 @@ const forbidden = await Promise.all([
 ]).then((parts) => parts.join("\n"));
 rejectText(forbidden, /\bG-?code\b|\bDWG\b|\btoolpath\b|\bnesting\b/iu, "production source");
 
-console.log("Production package audit passed: explicit schema-v8 layers, preview exclusion, exact manifest, atomic storage, and no CAM surface.");
+console.log("Production package audit passed: explicit schema-v9 layers, preview exclusion, exact manifest, atomic storage, and no CAM surface.");

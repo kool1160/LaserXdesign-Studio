@@ -76,3 +76,34 @@ test("mocked AI concepts stay previews until wording verification and one-comman
     await killAndRemove(launched);
   }
 });
+
+test("packaged credential connection cancels, times out, and restores global controls", async () => {
+  const launched = await launchPackaged(undefined, "discard", {
+    aiMock: true,
+    aiCredentialMode: "wait",
+    aiCredentialTimeoutMs: "800",
+  });
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await expect(page.getByTestId("ai-connection-message")).toContainText("Connect");
+
+    await page.getByTestId("connect-ai").click();
+    await expect(page.getByTestId("cancel-ai-connection")).toBeVisible();
+    await expect(page.getByTestId("ai-credential-timeout")).toContainText("1 seconds");
+    await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "true");
+    await page.getByTestId("cancel-ai-connection").click();
+    await expect(page.getByTestId("error-message")).toContainText("canceled");
+    await expect(page.getByTestId("cancel-ai-connection")).toBeHidden();
+    await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByTestId("connect-ai")).toBeEnabled();
+
+    await page.getByTestId("connect-ai").click();
+    await expect(page.getByTestId("error-message")).toContainText("timed out", {
+      timeout: 5_000,
+    });
+    await expect(page.locator(".app-shell")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByTestId("connect-ai")).toBeEnabled();
+  } finally {
+    await killAndRemove(launched);
+  }
+});

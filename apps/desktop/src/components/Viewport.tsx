@@ -51,7 +51,12 @@ interface ViewportProps {
   selectionIds: readonly string[];
   selectionBounds: BoundsMm | null;
   pathSelection: PathSelectionProjection | null;
-  importPreview: { layers: Layer[]; objects: DocumentObject[] } | null;
+  importPreview: {
+    layers: Layer[];
+    objects: DocumentObject[];
+    proposedDocumentDimensionsMm?: { widthMm: number; heightMm: number } | undefined;
+    focusedObjectId?: string | null | undefined;
+  } | null;
   previewGeometryVisible: boolean;
   rasterBackground: {
     dataUrl: string;
@@ -255,12 +260,15 @@ export function Viewport({
         : createViewportScene(
             {
               ...document,
+              dimensions: importPreview.proposedDocumentDimensionsMm ?? document.dimensions,
               layers: [...document.layers, ...importPreview.layers],
               objects: importPreview.objects,
             },
             viewport,
             size,
-            [],
+            importPreview.focusedObjectId === null || importPreview.focusedObjectId === undefined
+              ? []
+              : [importPreview.focusedObjectId],
           ),
     [document, importPreview, size, viewport],
   );

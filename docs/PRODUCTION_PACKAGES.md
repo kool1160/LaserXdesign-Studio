@@ -4,7 +4,8 @@
 
 An ordinary editing layer is not a physical part. Per-layer analysis and
 production export are available only after the user assigns strict
-manufacturing metadata: role, material, positive millimeter thickness,
+manufacturing metadata: role, material, positive canonical millimeter
+thickness, optional U.S. stock designation,
 process, notes, an optional registration-group name, and explicit registration-
 hole object IDs.
 
@@ -77,12 +78,13 @@ coordinates, so all files share origin `(0, 0)`, scale, and stock dimensions.
 Hidden state does not suppress a selected physical layer. `non-cut-preview`
 layers are never emitted as SVG or DXF manufacturing artifacts.
 
-`manifest.json` is deterministic UTF-8 JSON with a trailing newline. Schema 1
+`manifest.json` is deterministic UTF-8 JSON with a trailing newline. Schema 2
 records:
 
 - source schema/project/document identity and source update timestamp;
 - package name, millimeter units, origin, and stock dimensions;
-- each layer’s identity, role, material, thickness, process, notes, object
+- each layer’s identity, role, material, canonical thickness, nullable stock
+  designation, process, notes, object
   count, exact bounds, explicitly designated registration-hole object IDs and
   coordinates, and warnings;
 - each actual SVG/DXF filename, byte length, SHA-256 digest, and format;

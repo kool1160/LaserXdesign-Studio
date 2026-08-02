@@ -15,7 +15,7 @@ import {
 import { exportDxf } from "@laserx/io-dxf";
 import { exportSvg } from "@laserx/io-svg";
 
-export const PRODUCTION_PACKAGE_SCHEMA_VERSION = 1 as const;
+export const PRODUCTION_PACKAGE_SCHEMA_VERSION = 2 as const;
 export type ProductionArtifactFormat = "svg" | "dxf";
 
 export interface ProductionPackageRequest {
@@ -43,6 +43,7 @@ export interface ProductionManifestLayer {
   role: ManufacturingLayerMetadata["role"];
   material: ManufacturingLayerMetadata["material"];
   thicknessMm: number;
+  stockThicknessDesignation: ManufacturingLayerMetadata["stockThicknessDesignation"];
   process: ManufacturingLayerMetadata["process"];
   notes: string;
   registrationGroup: string | null;
@@ -277,6 +278,7 @@ export function buildProductionPackage(
       role: metadata.role,
       material: metadata.material,
       thicknessMm: metadata.thicknessMm,
+      stockThicknessDesignation: metadata.stockThicknessDesignation ?? null,
       process: metadata.process,
       notes: metadata.notes,
       registrationGroup: metadata.registrationGroup,

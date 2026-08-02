@@ -117,7 +117,30 @@ export class FixedCredentialAcquisition implements CredentialAcquisitionPort {
     this.#credential = credential;
   }
 
-  public acquire(): Promise<string> {
+  public acquire(
+    _providerName?: string,
+    _replacing?: boolean,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (signal?.aborted === true) {
+      return Promise.reject(new Error("Credential acquisition was canceled."));
+    }
     return Promise.resolve(this.#credential);
+  }
+}
+
+export class WaitingCredentialAcquisition implements CredentialAcquisitionPort {
+  public acquire(
+    _providerName: string,
+    _replacing: boolean,
+    signal: AbortSignal,
+  ): Promise<null> {
+    return new Promise((resolve) => {
+      if (signal.aborted) {
+        resolve(null);
+        return;
+      }
+      signal.addEventListener("abort", () => resolve(null), { once: true });
+    });
   }
 }

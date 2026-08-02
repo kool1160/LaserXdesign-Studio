@@ -115,6 +115,7 @@ export type EditorCommand =
       type: "objects.import";
       layers: Layer[];
       objects: DocumentObject[];
+      dimensions?: { widthMm: number; heightMm: number } | undefined;
     }
   | {
       type: "objects.replace";
@@ -950,6 +951,19 @@ export function applyEditorCommand(
       document.objects.push(...command.objects.map(copyDocumentObject));
       break;
     case "objects.import": {
+      if (command.dimensions !== undefined) {
+        if (
+          !Number.isFinite(command.dimensions.widthMm) ||
+          !Number.isFinite(command.dimensions.heightMm) ||
+          command.dimensions.widthMm <= 0 ||
+          command.dimensions.heightMm <= 0 ||
+          command.dimensions.widthMm > 1_000_000 ||
+          command.dimensions.heightMm > 1_000_000
+        ) {
+          throw new RangeError("Imported stock dimensions must be positive finite values no greater than 1,000,000 mm.");
+        }
+        document.dimensions = { ...command.dimensions };
+      }
       const incomingLayerIds = command.layers.map((layer) => layer.id);
       if (
         new Set(incomingLayerIds).size !== incomingLayerIds.length ||

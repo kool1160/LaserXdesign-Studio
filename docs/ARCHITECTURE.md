@@ -29,7 +29,8 @@ Owns process presets, limits, issue detection, retained/drop-out region classifi
 ### Production package — `packages/production-export`
 
 Owns deterministic physical-layer filtering, per-layer SVG/DXF artifacts,
-schema-1 manifests, explicit registration-object comparison, hashes, and the
+schema-2 manifests, explicit registration-object comparison, hashes, stock
+thickness designations, and the
 simple 2D assembly projection. It resolves only validated registration-hole
 IDs that identify true world-space circles from domain metadata and derives
 manifest centers and diameters from the same transformed geometry. Decorative
@@ -57,6 +58,13 @@ Electron main owns an atomic production-folder storage adapter and exposes only
 layer IDs, output formats, and conflict intent through strict IPC. React owns
 metadata forms, selection, status, and a presentation-only exploded stack.
 ADR 0022 and `docs/PRODUCTION_PACKAGES.md` define the full contract.
+
+For M13, schema v9 adds a nullable, material-validated U.S. stock designation
+beside canonical `thicknessMm`; migration from v8 deliberately records null.
+Vector import adapters publish bounded repair findings and geometry-linked
+locations. The application layer owns the non-mutating three-way stock-fit
+preview and includes any accepted stock resize in the same undoable import
+command as the geometry.
 
 ## Process boundary
 
@@ -269,7 +277,7 @@ owns the preview and source-project fingerprint. Wording mismatch or stale
 project state blocks acceptance; a successful acceptance is exactly one
 `objects.import` command followed by a fresh analysis of the accepted IDs.
 Prompts, references, alternatives, provider metadata, usage, and AI provenance
-remain transient and do not change schema v8.
+remain transient and do not change schema v9.
 
 ## State flow
 

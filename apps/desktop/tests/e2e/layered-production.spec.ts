@@ -334,7 +334,7 @@ test("layered sign analysis, registration, persistence, and production package",
         files: { name: string }[];
       }[];
     };
-    expect(manifest.sourceProjectVersion).toBe(8);
+    expect(manifest.sourceProjectVersion).toBe(9);
     expect(manifest.originMm).toEqual({ xMm: 0, yMm: 0 });
     expect(manifest.layers.map((layer) => layer.id)).toEqual([
       layerIds.faceId,
@@ -371,7 +371,7 @@ test("layered sign analysis, registration, persistence, and production package",
     await expect(page.getByTestId("production-export-summary")).toContainText("Exported 2 layer(s)");
 
     await clickAndWaitForCommand(page, "Save as");
-    await waitForProjectSchema(launched.projectPath, 8);
+    await waitForProjectSchema(launched.projectPath, 9);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       document: {
         layers: { manufacturing?: { role: string; registrationHoleIds: string[] } }[];

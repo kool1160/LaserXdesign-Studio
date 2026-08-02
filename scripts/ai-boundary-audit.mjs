@@ -57,7 +57,14 @@ for (const marker of [
   "#safeStorage.decryptString",
   "UseSystemPasswordChar = $true",
   'stdio: ["ignore", "pipe", "pipe"]',
+  "CredentialAcquisitionTimeoutError",
+  "signal.removeEventListener",
 ]) requireText(credentials, marker, "credential boundary");
+
+for (const marker of [
+  "cancelAiConnection",
+  "credentialConnectionTimeoutMs",
+]) requireText(main + preload, marker, "bounded credential connection wiring");
 
 requireText(main, 'process.env.LASERX_TEST_AI_MOCK === "1"', "mock-provider gate");
 rejectText(renderer, /https:\/\/api\.openai\.com|\bfetch\s*\(|\bAuthorization\b|Bearer\s|safeStorage|encryptString|decryptString/u, "renderer source");
@@ -77,4 +84,4 @@ for (const term of [
   "They never call OpenAI",
 ]) requireText(pipeline, term, "AI pipeline documentation");
 
-console.log("AI boundary audit passed: main-only credentials/network, transient provenance, schema-v8 isolation, and documented mock/real-provider paths.");
+console.log("AI boundary audit passed: main-only credentials/network, transient provenance, schema-v9 isolation, and documented mock/real-provider paths.");

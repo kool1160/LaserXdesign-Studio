@@ -4,13 +4,14 @@
 
 Extension: `.laserx`.
 
-Schema version 8 is strict, deterministic UTF-8 JSON with a trailing newline.
+Schema version 9 is strict, deterministic UTF-8 JSON with a trailing newline.
 It contains project identity/timestamps; a stable document ID; canonical
 millimeter dimensions; the fixed Cartesian origin; display, viewport, and
 snapping preferences; editable manufacturing settings; ordered layers and
 guides; recursive groups; and ordered objects with stable IDs, layer
 references, and affine transforms. Manufacturing settings persist process,
-material, thickness, kerf, minimum feature/bridge/gap, contour and optional
+material, canonical millimeter thickness, an optional user-selected stock
+designation, kerf, minimum feature/bridge/gap, contour and optional
 heat-distortion spacing, tolerance preset, starting preset ID, and the fields
 the user customized. Editable text
 adds font identity/fingerprint, millimeter typography settings, optional arc
@@ -18,7 +19,7 @@ intent, and materialized contours carrying deterministic nonnegative glyph-
 compound indices. The indices preserve counter-versus-overlap fill semantics
 without changing outline conversion, which still emits every contour.
 Converted outline groups may preserve editable source metadata.
-Schema v7 introduced and schema v8 retains at most 1,000 strict version-1 saved sign
+Schema v7 introduced and schema v9 retains at most 1,000 strict version-1 saved sign
 template parameter records. Template intent includes a UUID, user name, kind,
 audited style preset, exact millimeter dimensions, border and mounting-hole
 parameters, font/text settings, and an optional arc radius. Generated geometry,
@@ -34,6 +35,12 @@ by preview-only or unnamed groups. Early schema-v8 files that predate the
 designation field normalize it to an empty list; no ellipse is inferred as a
 hole.
 Absence means an ordinary editing layer. See `docs/PRODUCTION_PACKAGES.md`.
+Schema v9 adds an optional stock-thickness designation beside every global and
+physical-layer canonical `thicknessMm`. Gauge designations are validated
+against material-specific mild-steel, stainless-steel, or aluminum tables;
+fractional-inch plate, millimeter, and custom labels carry no gauge material.
+The v8-to-v9 migration writes `null` globally and per declared layer. It never
+guesses a gauge or plate label from a legacy decimal thickness.
 `fixtures/projects/editing-v4.laserx` remains the reviewed v4 compatibility
 fixture; schema-v5 curve persistence and schema-v6 manufacturing-setting
 persistence are exercised by the project-format round-trip suite.
@@ -43,27 +50,28 @@ name, and active-layer identity are persistent. Selection, clipboard, undo/redo
 history, transient camera position, and transform-handle state are not project
 data.
 
-Every descendant of a schema-v8 group must use the same `layerId` as the
+Every descendant of a schema-v9 group must use the same `layerId` as the
 group. Parsing, serialization, and internal insertion reject mixed-layer
 groups. Layer moves, grouping, duplicate/paste, ungrouping, and layer deletion
-preserve this recursive invariant; schema v8 does not define independent child
+preserve this recursive invariant; schema v9 does not define independent child
 layer semantics inside a group.
 
 The parser rejects unknown fields, invalid object geometry or matrices,
 dangling layer references, corrupt JSON, and schema versions newer than the
 application supports. Files remain limited to 10 MB.
 
-Schema versions 1 through 7 remain read-compatible through explicit
+Schema versions 1 through 8 remain read-compatible through explicit
 deterministic migrations:
 
 ```text
-v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8
-v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8
-v3 -> v4 -> v5 -> v6 -> v7 -> v8
-v4 -> v5 -> v6 -> v7 -> v8
-v5 -> v6 -> v7 -> v8
-v6 -> v7 -> v8
-v7 -> v8
+v1 -> v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8 -> v9
+v2 -> v3 -> v4 -> v5 -> v6 -> v7 -> v8 -> v9
+v3 -> v4 -> v5 -> v6 -> v7 -> v8 -> v9
+v4 -> v5 -> v6 -> v7 -> v8 -> v9
+v5 -> v6 -> v7 -> v8 -> v9
+v6 -> v7 -> v8 -> v9
+v7 -> v8 -> v9
+v8 -> v9
 ```
 
 The v2-to-v3 migration derives one stable default-layer ID from the document
@@ -72,7 +80,7 @@ guides, and adds the reviewed snapping defaults. Migration history uses the
 source `updatedAt`, so repeated reads serialize identically. Opening does not
 rewrite the source file. The v3-to-v4 migration preserves the document and
 records the transition using the source `updatedAt`. A later explicit save
-writes schema v8. The v4-to-v5 migration also preserves the document byte
+writes schema v9. The v4-to-v5 migration also preserves the document byte
 shape, adds no empty handle arrays, and records the transition with the source
 `updatedAt`. The v5-to-v6 migration adds the documented editable manufacturing
 defaults and records the transition using the same source timestamp. Opening
@@ -80,8 +88,10 @@ still does not rewrite the source file. The v6-to-v7 migration adds an empty
 template library and records the transition using that same source timestamp.
 The v7-to-v8 migration preserves every layer without manufacturing metadata,
 so opening a legacy project never infers physical pieces from names or state.
+The v8-to-v9 migration preserves canonical thickness values and records a null
+designation, so legacy decimals never acquire an invented U.S. stock name.
 
-Schema-v8 paths retain the schema-v5 representation: ordered millimeter
+Schema-v9 paths retain the schema-v5 representation: ordered millimeter
 anchors may persist one handle
 record per anchor. Incoming and outgoing cubic controls are nullable absolute
 local-space points. Omission is the canonical all-line form. Handle count must
@@ -156,6 +166,7 @@ Supported import entities:
 | `POLYLINE` + `VERTEX`/`SEQEND` | Legacy 2D open/closed path. |
 | `CIRCLE` | Closed path flattened at 0.01 mm. |
 | `ARC` | Open counterclockwise path flattened at 0.01 mm. |
+| `SPLINE` | Planar degree-1-through-5 rational B-spline converted by bounded adaptive sampling at 0.01 mm; invalid knots, weights, or control counts become explicit skipped-entity findings. |
 
 Circles whose radius is at or below the curve tolerance still materialize at
 least three distinct nodes, preserving the closed-path document invariant.
@@ -165,8 +176,18 @@ instead of returning a partial candidate.
 Layer group code 8 maps to LaserX layers. `$INSUNITS` 1, 4, and 5 mean inches,
 millimeters, and centimeters. `$INSUNITS` 0 or absent is accepted only with an
 explicit millimeter or inch assumption. Other units are rejected clearly.
-Nonzero Z/elevation, 3D/polyface flags, splines, and unsupported entities warn
+Nonzero Z/elevation, 3D/polyface flags, and unsupported entities warn
 and skip.
+
+Before commit, DXF preview removes exact/zero-length duplicate nodes, closes
+endpoint gaps no larger than the documented 0.1 mm repair tolerance, and
+removes duplicate paths. Every applied repair is listed with its tolerance and
+linked preview object when one remains; skipped entities remain explicit, so a
+partial import cannot look complete. The user then chooses one of three stock
+fits: resize stock while preserving source scale, keep stock and uniformly
+scale/center artwork, or keep both and allow overflow. Margin and resulting
+stock/artwork scale remain visible. Acceptance commits the repaired geometry
+and any chosen stock resize as one undoable `objects.import` command.
 
 DXF export writes AutoCAD 2013 ASCII (`AC1027`), `$INSUNITS = 4`
 (millimeters), a layer table, `LINE` for open two-point paths, and
@@ -204,7 +225,7 @@ geometry.
 
 ## AI concepts
 
-AI concepts do not add a file format or schema-v8 record. Before acceptance,
+AI concepts do not add a file format or schema-v9 record. Before acceptance,
 prompt text, a consented reference image, concept alternatives, wording review,
 provider/model/request IDs, usage, analysis, and provenance are transient host
 state. Discard, failure, project replacement, or application exit persists none

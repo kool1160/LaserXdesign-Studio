@@ -1,5 +1,6 @@
 import {
   flattenDocumentForInterchange,
+  type InterchangeFinding,
   type InterchangePath,
   type InterchangeWarning,
   type LaserxDocument,
@@ -14,12 +15,14 @@ const MAX_DXF_PAIRS = 500_000;
 const MAX_DXF_ENTITIES = 100_000;
 const MAX_DXF_GEOMETRY_POINTS = 200_000;
 const DEFAULT_TOLERANCE_MM = 0.01;
+const DEFAULT_REPAIR_TOLERANCE_MM = 0.1;
 
 export type UnitlessDxfUnit = "millimeters" | "inches";
 
 export interface DxfImportOptions {
   unitlessUnit?: UnitlessDxfUnit | undefined;
   curveToleranceMm?: number | undefined;
+  repairToleranceMm?: number | undefined;
 }
 
 interface DxfPair {
@@ -100,6 +103,18 @@ function requiredNumber(entity: DxfEntity, code: number): number {
     throw new RangeError(`${entity.type} is missing required group code ${String(code)}.`);
   }
   return value;
+}
+
+function numberValues(entity: DxfEntity, code: number): number[] {
+  return entity.pairs
+    .filter((pair) => pair.code === code)
+    .map((pair) => {
+      const value = Number(pair.value);
+      if (!Number.isFinite(value)) {
+        throw new RangeError(`${entity.type} contains a non-finite group ${String(code)} value.`);
+      }
+      return value;
+    });
 }
 
 function stringValue(entity: DxfEntity, code: number, fallback: string): string {
@@ -356,6 +371,310 @@ function parseLwPolyline(
   };
 }
 
+interface HomogeneousPoint {
+  x: number;
+  y: number;
+  w: number;
+}
+
+function evaluateRationalBSpline(
+  controlPoints: readonly PointMm[],
+  weights: readonly number[],
+  knots: readonly number[],
+  degree: number,
+  parameter: number,
+): PointMm {
+  const lastControlIndex = controlPoints.length - 1;
+  let span = lastControlIndex;
+  if (parameter < (knots[lastControlIndex + 1] as number)) {
+    let low = degree;
+    let high = lastControlIndex + 1;
+    while (high - low > 1) {
+      const middle = Math.floor((low + high) / 2);
+      if (parameter < (knots[middle] as number)) high = middle;
+      else low = middle;
+    }
+    span = low;
+  }
+  const working: HomogeneousPoint[] = [];
+  for (let index = 0; index <= degree; index += 1) {
+    const controlIndex = span - degree + index;
+    const point = controlPoints[controlIndex] as PointMm;
+    const weight = weights[controlIndex] as number;
+    working.push({ x: point.xMm * weight, y: point.yMm * weight, w: weight });
+  }
+  for (let level = 1; level <= degree; level += 1) {
+    for (let index = degree; index >= level; index -= 1) {
+      const knotIndex = span - degree + index;
+      const denominator = (knots[knotIndex + degree - level + 1] as number) -
+        (knots[knotIndex] as number);
+      const alpha = Math.abs(denominator) <= 1e-15
+        ? 0
+        : (parameter - (knots[knotIndex] as number)) / denominator;
+      const previous = working[index - 1] as HomogeneousPoint;
+      const current = working[index] as HomogeneousPoint;
+      working[index] = {
+        x: previous.x * (1 - alpha) + current.x * alpha,
+        y: previous.y * (1 - alpha) + current.y * alpha,
+        w: previous.w * (1 - alpha) + current.w * alpha,
+      };
+    }
+  }
+  const result = working[degree] as HomogeneousPoint;
+  if (!Number.isFinite(result.w) || Math.abs(result.w) <= 1e-15) {
+    throw new RangeError("SPLINE evaluates to an invalid rational weight.");
+  }
+  return { xMm: result.x / result.w, yMm: result.y / result.w };
+}
+
+function pointToSegmentDistance(point: PointMm, start: PointMm, end: PointMm): number {
+  const dx = end.xMm - start.xMm;
+  const dy = end.yMm - start.yMm;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 1e-24) return Math.hypot(point.xMm - start.xMm, point.yMm - start.yMm);
+  const ratio = Math.max(0, Math.min(1,
+    ((point.xMm - start.xMm) * dx + (point.yMm - start.yMm) * dy) / lengthSquared,
+  ));
+  return Math.hypot(
+    point.xMm - (start.xMm + dx * ratio),
+    point.yMm - (start.yMm + dy * ratio),
+  );
+}
+
+function parseSpline(
+  entity: DxfEntity,
+  scaleToMm: number,
+  toleranceMm: number,
+  pointBudget: DxfGeometryPointBudget,
+): InterchangePath {
+  const degree = requiredNumber(entity, 71);
+  if (!Number.isInteger(degree) || degree < 1 || degree > 5) {
+    throw new RangeError("SPLINE degree must be an integer from 1 through 5.");
+  }
+  const xValues = numberValues(entity, 10);
+  const yValues = numberValues(entity, 20);
+  if (xValues.length !== yValues.length || xValues.length <= degree) {
+    throw new RangeError("SPLINE control-point coordinates are incomplete.");
+  }
+  const declaredControlCount = numberValue(entity, 73);
+  if (declaredControlCount !== undefined && declaredControlCount !== xValues.length) {
+    throw new RangeError("SPLINE control-point count does not match its coordinates.");
+  }
+  const controlPoints = xValues.map((x, index) => ({
+    xMm: x * scaleToMm,
+    yMm: (yValues[index] as number) * scaleToMm,
+  }));
+  const knots = numberValues(entity, 40);
+  const expectedKnotCount = controlPoints.length + degree + 1;
+  if (knots.length !== expectedKnotCount) {
+    throw new RangeError(`SPLINE requires ${String(expectedKnotCount)} knots for this degree and control-point count.`);
+  }
+  for (let index = 1; index < knots.length; index += 1) {
+    if ((knots[index] as number) < (knots[index - 1] as number)) {
+      throw new RangeError("SPLINE knots must be nondecreasing.");
+    }
+  }
+  const rawWeights = numberValues(entity, 41);
+  if (rawWeights.length !== 0 && rawWeights.length !== controlPoints.length) {
+    throw new RangeError("SPLINE weights must be omitted or match the control-point count.");
+  }
+  const weights = rawWeights.length === 0
+    ? controlPoints.map(() => 1)
+    : rawWeights;
+  if (weights.some((weight) => !Number.isFinite(weight) || weight <= 0)) {
+    throw new RangeError("SPLINE weights must be positive and finite.");
+  }
+  const startParameter = knots[degree] as number;
+  const endParameter = knots[controlPoints.length] as number;
+  if (!(endParameter > startParameter)) {
+    throw new RangeError("SPLINE has an empty parameter range.");
+  }
+  const evaluate = (parameter: number) => evaluateRationalBSpline(
+    controlPoints,
+    weights,
+    knots,
+    degree,
+    parameter,
+  );
+  const start = evaluate(startParameter);
+  const end = evaluate(endParameter);
+  const points: PointMm[] = [start];
+  const appendAdaptive = (
+    fromParameter: number,
+    from: PointMm,
+    toParameter: number,
+    to: PointMm,
+    depth: number,
+  ): void => {
+    if (points.length >= 4_096) {
+      throw new RangeError("SPLINE requires more than 4,096 preview points at the requested tolerance.");
+    }
+    const quarterParameter = fromParameter + (toParameter - fromParameter) * 0.25;
+    const middleParameter = (fromParameter + toParameter) / 2;
+    const threeQuarterParameter = fromParameter + (toParameter - fromParameter) * 0.75;
+    const quarter = evaluate(quarterParameter);
+    const middle = evaluate(middleParameter);
+    const threeQuarter = evaluate(threeQuarterParameter);
+    const deviation = Math.max(
+      pointToSegmentDistance(quarter, from, to),
+      pointToSegmentDistance(middle, from, to),
+      pointToSegmentDistance(threeQuarter, from, to),
+    );
+    if (deviation <= toleranceMm || depth >= 18) {
+      points.push(to);
+      return;
+    }
+    appendAdaptive(fromParameter, from, middleParameter, middle, depth + 1);
+    appendAdaptive(middleParameter, middle, toParameter, to, depth + 1);
+  };
+  appendAdaptive(startParameter, start, endParameter, end, 0);
+  const closed = (((numberValue(entity, 70) ?? 0) & 1) === 1);
+  const firstPoint = points[0];
+  const lastPoint = points.at(-1);
+  if (
+    closed &&
+    firstPoint !== undefined &&
+    lastPoint !== undefined &&
+    points.length > 1 &&
+    Math.hypot(
+      lastPoint.xMm - firstPoint.xMm,
+      lastPoint.yMm - firstPoint.yMm,
+    ) <= toleranceMm
+  ) {
+    points.pop();
+  }
+  if (points.length < (closed ? 3 : 2)) {
+    throw new RangeError("SPLINE did not produce enough distinct planar points.");
+  }
+  pointBudget.reserve(points.length);
+  return {
+    layerName: stringValue(entity, 8, "0"),
+    closed,
+    points,
+  };
+}
+
+function repairImportedPaths(
+  sourcePaths: readonly InterchangePath[],
+  toleranceMm: number,
+): { paths: InterchangePath[]; findings: InterchangeFinding[]; indexMap: Map<number, number> } {
+  const paths: InterchangePath[] = [];
+  const findings: InterchangeFinding[] = [];
+  const indexMap = new Map<number, number>();
+  const pathKeys = new Set<string>();
+  const duplicateNodeToleranceMm = Math.min(toleranceMm, 0.000001);
+  const coordinateKey = (value: number) => String(Math.round(value / toleranceMm));
+  for (let sourceIndex = 0; sourceIndex < sourcePaths.length; sourceIndex += 1) {
+    const sourcePath = sourcePaths[sourceIndex] as InterchangePath;
+    const cleaned: PointMm[] = [];
+    let removedNodes = 0;
+    for (const point of sourcePath.points) {
+      const previous = cleaned.at(-1);
+      if (previous !== undefined && Math.hypot(
+        point.xMm - previous.xMm,
+        point.yMm - previous.yMm,
+      ) <= duplicateNodeToleranceMm) {
+        removedNodes += 1;
+      } else {
+        cleaned.push({ ...point });
+      }
+    }
+    let closed = sourcePath.closed;
+    const firstCleaned = cleaned[0];
+    const lastCleaned = cleaned.at(-1);
+    if (
+      closed &&
+      firstCleaned !== undefined &&
+      lastCleaned !== undefined &&
+      cleaned.length > 1 &&
+      Math.hypot(
+        firstCleaned.xMm - lastCleaned.xMm,
+        firstCleaned.yMm - lastCleaned.yMm,
+      ) <= duplicateNodeToleranceMm
+    ) {
+      cleaned.pop();
+      removedNodes += 1;
+    }
+    const closureFirst = cleaned[0];
+    const closureLast = cleaned.at(-1);
+    const canClose =
+      !closed &&
+      closureFirst !== undefined &&
+      closureLast !== undefined &&
+      cleaned.length >= 3 &&
+      Math.hypot(
+        closureFirst.xMm - closureLast.xMm,
+        closureFirst.yMm - closureLast.yMm,
+      ) <= toleranceMm;
+    if (canClose) {
+      cleaned.pop();
+      closed = true;
+    }
+    if (cleaned.length < (closed ? 3 : 2)) continue;
+    const findingLocation = cleaned[0];
+    if (findingLocation === undefined) continue;
+    const key = `${closed ? "c" : "o"}:${cleaned.map((point) =>
+      `${coordinateKey(point.xMm)},${coordinateKey(point.yMm)}`).join(";")}`;
+    if (pathKeys.has(key)) {
+      findings.push({
+        code: "duplicate-path-removed",
+        severity: "repair",
+        message: `Path ${String(sourceIndex + 1)} duplicated earlier geometry and was removed from the preview.`,
+        source: `Path ${String(sourceIndex + 1)}`,
+        pathIndex: null,
+        locationMm: { ...findingLocation },
+        repair: {
+          action: "remove-duplicate-path",
+          summary: "Removed one duplicate path.",
+          changeCount: 1,
+          toleranceMm,
+          appliedToPreview: true,
+        },
+      });
+      continue;
+    }
+    pathKeys.add(key);
+    const pathIndex = paths.length;
+    indexMap.set(sourceIndex, pathIndex);
+    paths.push({ ...sourcePath, closed, points: cleaned });
+    if (removedNodes > 0) {
+      findings.push({
+        code: "duplicate-nodes-removed",
+        severity: "repair",
+        message: `Removed ${String(removedNodes)} zero-length or duplicate node(s) from this path.`,
+        source: `Path ${String(sourceIndex + 1)}`,
+        pathIndex,
+        locationMm: { ...findingLocation },
+        repair: {
+          action: "remove-duplicate-nodes",
+          summary: `Removed ${String(removedNodes)} duplicate node(s).`,
+          changeCount: removedNodes,
+          toleranceMm,
+          appliedToPreview: true,
+        },
+      });
+    }
+    if (canClose) {
+      findings.push({
+        code: "small-gap-closed",
+        severity: "repair",
+        message: `Closed an endpoint gap no larger than ${String(toleranceMm)} mm.`,
+        source: `Path ${String(sourceIndex + 1)}`,
+        pathIndex,
+        locationMm: { ...findingLocation },
+        repair: {
+          action: "close-small-gap",
+          summary: "Closed one nearly closed contour.",
+          changeCount: 1,
+          toleranceMm,
+          appliedToPreview: true,
+        },
+      });
+    }
+  }
+  return { paths, findings, indexMap };
+}
+
 function warning(code: string, message: string, source: string): InterchangeWarning {
   return { code, message, source };
 }
@@ -368,11 +687,16 @@ export function importDxf(
   if (!Number.isFinite(toleranceMm) || toleranceMm <= 0) {
     throw new RangeError("DXF curve tolerance must be positive and finite.");
   }
+  const repairToleranceMm = options.repairToleranceMm ?? DEFAULT_REPAIR_TOLERANCE_MM;
+  if (!Number.isFinite(repairToleranceMm) || repairToleranceMm <= 0 || repairToleranceMm > 1) {
+    throw new RangeError("DXF repair tolerance must be positive, finite, and no greater than 1 mm.");
+  }
   const pairs = parsePairs(source);
   const units = unitsFromPairs(pairs, options.unitlessUnit);
   const entities = entitySections(pairs);
   const paths: InterchangePath[] = [];
   const warnings: InterchangeWarning[] = [];
+  const findings: InterchangeFinding[] = [];
   const pointBudget = new DxfGeometryPointBudget();
   for (let index = 0; index < entities.length; index += 1) {
     const entity = entities[index] as DxfEntity;
@@ -407,6 +731,30 @@ export function importDxf(
             ),
           );
           break;
+        case "SPLINE": {
+          const pathIndex = paths.length;
+          const path = parseSpline(
+            entity,
+            units.scaleToMm,
+            toleranceMm,
+            pointBudget,
+          );
+          paths.push(path);
+          const splineLocation = path.points[0];
+          if (splineLocation === undefined) {
+            throw new RangeError("SPLINE produced no preview location.");
+          }
+          findings.push({
+            code: "dxf-spline-converted",
+            severity: "warning",
+            message: `${sourceLabel} was converted to an editable path within ${String(toleranceMm)} mm preview tolerance.`,
+            source: sourceLabel,
+            pathIndex,
+            locationMm: { ...splineLocation },
+            repair: null,
+          });
+          break;
+        }
         case "CIRCLE": {
           const radiusMm = requiredNumber(entity, 40) * units.scaleToMm;
           if (radiusMm <= 0) {
@@ -519,13 +867,37 @@ export function importDxf(
       );
     }
   }
+  const repaired = repairImportedPaths(paths, repairToleranceMm);
+  const mappedFindings = findings.map((finding) => ({
+    ...finding,
+    pathIndex: finding.pathIndex === null
+      ? null
+      : (repaired.indexMap.get(finding.pathIndex) ?? null),
+  }));
+  const repairsApplied = repaired.findings.length > 0;
   return {
     format: "dxf",
     sourceUnit: units.sourceUnit,
     dimensionsMm: null,
-    paths,
+    paths: repaired.paths,
     warnings,
-    assumptions: units.assumptions,
+    findings: [
+      ...mappedFindings,
+      ...repaired.findings,
+      ...warnings.map((item): InterchangeFinding => ({
+        ...item,
+        severity: "warning",
+        pathIndex: null,
+        locationMm: null,
+        repair: null,
+      })),
+    ],
+    assumptions: [
+      ...units.assumptions,
+      ...(repairsApplied
+        ? [`Preview repairs use a fixed ${String(repairToleranceMm)} mm tolerance and are committed only with explicit import acceptance.`]
+        : []),
+    ],
   };
 }
 

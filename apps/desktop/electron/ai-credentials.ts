@@ -108,7 +108,25 @@ export class ElectronCredentialVault implements CredentialVaultPort {
 }
 
 export interface CredentialAcquisitionPort {
-  acquire(providerName: string, replacing: boolean): Promise<string | null>;
+  acquire(
+    providerName: string,
+    replacing: boolean,
+    signal: AbortSignal,
+  ): Promise<string | null>;
+}
+
+export class CredentialAcquisitionCancelledError extends Error {
+  public constructor() {
+    super("AI credential connection was canceled; the previous connection was restored.");
+    this.name = "CredentialAcquisitionCancelledError";
+  }
+}
+
+export class CredentialAcquisitionTimeoutError extends Error {
+  public constructor() {
+    super("The secure credential prompt timed out; retry when you are ready.");
+    this.name = "CredentialAcquisitionTimeoutError";
+  }
 }
 
 const WINDOWS_CREDENTIAL_PROMPT = String.raw`
@@ -155,8 +173,25 @@ $form.Dispose()
 `;
 
 export class WindowsCredentialAcquisition implements CredentialAcquisitionPort {
-  public acquire(): Promise<string | null> {
+  readonly #timeoutMs: number;
+
+  public constructor(timeoutMs = 120_000) {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new RangeError("Credential prompt timeout must be a positive finite duration.");
+    }
+    this.#timeoutMs = timeoutMs;
+  }
+
+  public acquire(
+    _providerName: string,
+    _replacing: boolean,
+    signal: AbortSignal,
+  ): Promise<string | null> {
     return new Promise((resolveResult, reject) => {
+      if (signal.aborted) {
+        reject(new CredentialAcquisitionCancelledError());
+        return;
+      }
       const encoded = Buffer.from(WINDOWS_CREDENTIAL_PROMPT, "utf16le").toString("base64");
       const child = spawn(
         "powershell.exe",
@@ -165,28 +200,55 @@ export class WindowsCredentialAcquisition implements CredentialAcquisitionPort {
       );
       const output: Buffer[] = [];
       let outputBytes = 0;
+      let settled = false;
+      let timedOut = false;
+      const finish = (action: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
+        action();
+      };
+      const onAbort = (): void => {
+        child.kill();
+        finish(() => reject(
+          timedOut
+            ? new CredentialAcquisitionTimeoutError()
+            : new CredentialAcquisitionCancelledError(),
+        ));
+      };
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        onAbort();
+      }, this.#timeoutMs);
+      signal.addEventListener("abort", onAbort, { once: true });
       child.stdout.on("data", (chunk: Buffer) => {
         outputBytes += chunk.length;
         if (outputBytes <= 16_384) output.push(chunk);
       });
       child.stderr.resume();
       child.once("error", () => {
-        reject(new Error("The secure Windows credential prompt could not be opened."));
+        finish(() => reject(new Error("The secure Windows credential prompt could not be opened.")));
       });
       child.once("close", (code) => {
+        if (settled) return;
         if (code !== 0 || outputBytes > 16_384) {
-          reject(new Error("The secure Windows credential prompt failed."));
+          finish(() => reject(new Error("The secure Windows credential prompt failed.")));
           return;
         }
         const value = Buffer.concat(output).toString("utf8").trim();
         if (value.length === 0) {
-          resolveResult(null);
+          finish(() => resolveResult(null));
           return;
         }
         try {
-          resolveResult(Buffer.from(value, "base64").toString("utf8"));
+          const decoded = Buffer.from(value, "base64").toString("utf8");
+          if (decoded.length < 20 || /[\r\n]/u.test(decoded)) {
+            throw new Error("invalid credential payload");
+          }
+          finish(() => resolveResult(decoded));
         } catch {
-          reject(new Error("The secure Windows credential prompt returned invalid data."));
+          finish(() => reject(new Error("The secure Windows credential prompt returned invalid data.")));
         }
       });
     });

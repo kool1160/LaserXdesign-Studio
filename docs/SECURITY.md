@@ -21,7 +21,9 @@ SVG, DXF, raster, and `.laserx` project files are untrusted input. Apply size li
 ## Secrets
 
 AI API keys are acquired in a native password prompt and used only by Electron
-main. On Windows, Electron `safeStorage` encrypts the key before an envelope is
+main. The visible Windows prompt is cancelable from LaserX, has a two-minute
+hard timeout, and is terminated before prior connection state and controls are
+restored. On Windows, Electron `safeStorage` encrypts the key before an envelope is
 written under application user data. Keys never belong in project files,
 renderer/preload state, IPC arguments, logs, crash reports, fixtures, source
 control, or provider request bodies. Connection tests and generation read the

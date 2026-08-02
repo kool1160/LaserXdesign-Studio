@@ -57,3 +57,36 @@ test("previews, commits, undoes, and exports physical-scale vector geometry", as
   await page.getByTestId("undo").click();
   await expect(page.getByTestId("selection-count")).toContainText("No objects selected");
 });
+
+test("packaged DXF preview converts splines, locates repairs, and applies an explicit stock fit", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "laserx-m13-vector-e2e-"));
+  const importPath = join(directory, "repair-spline.dxf");
+  await writeFile(importPath,
+    "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n" +
+    "0\nSECTION\n2\nENTITIES\n" +
+    "0\nSPLINE\n8\nSpline\n70\n4\n71\n2\n72\n6\n73\n3\n" +
+    "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+    "41\n1\n41\n1\n41\n1\n10\n0\n20\n0\n10\n200\n20\n300\n10\n400\n20\n0\n" +
+    "0\nLWPOLYLINE\n8\nRepair\n90\n4\n70\n0\n" +
+    "10\n0\n20\n0\n10\n400\n20\n0\n10\n400\n20\n200\n10\n0.05\n20\n0.04\n" +
+    "0\nENDSEC\n0\nEOF\n",
+    "utf8",
+  );
+  testLaunch = await launchPackaged(directory, "discard", { importPath });
+  const page = await testLaunch.electronApp.firstWindow();
+
+  await page.getByTestId("preview-vector-import").click();
+  await expect(page.getByTestId("import-findings")).toContainText("SPLINE");
+  await expect(page.getByTestId("import-findings")).toContainText("Closed an endpoint gap");
+  await page.getByRole("button", { name: "Locate path" }).first().click();
+  await expect.poll(async () =>
+    (await page.evaluate(() => window.laserx.getState())).editor.importPreview?.focusedObjectId,
+  ).not.toBeNull();
+
+  await page.getByLabel("Import stock fitting choice").selectOption("scale-artwork");
+  await expect(page.getByTestId("import-fit-result")).toContainText("artwork scale");
+  await page.getByTestId("commit-vector-import").click();
+  await expect(page.getByTestId("selection-count")).toContainText("2 objects selected");
+  await page.getByTestId("undo").click();
+  await expect(page.getByTestId("selection-count")).toContainText("No objects selected");
+});

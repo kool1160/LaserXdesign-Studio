@@ -20,6 +20,7 @@ import {
   DeterministicAiProvider,
   FixedCredentialAcquisition,
   MemoryCredentialVault,
+  WaitingCredentialAcquisition,
 } from "./ai-test-provider.js";
 import {
   bundledFontSources,
@@ -64,6 +65,8 @@ import {
   textUpdateRequestSchema,
   vectorExportRequestSchema,
   vectorImportPreviewRequestSchema,
+  configureVectorImportRequestSchema,
+  focusVectorImportFindingRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
@@ -267,6 +270,14 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.commitVectorImport, () =>
     requireController().commitVectorImport(),
   );
+  ipcMain.handle(IPC_CHANNELS.configureVectorImport, (_event, request: unknown) => {
+    const validated = configureVectorImportRequestSchema.parse(request);
+    return requireController().configureVectorImport(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.focusVectorImportFinding, (_event, request: unknown) => {
+    const validated = focusVectorImportFindingRequestSchema.parse(request);
+    return requireController().focusVectorImportFinding(validated);
+  });
   ipcMain.handle(IPC_CHANNELS.cancelVectorImport, () =>
     requireController().cancelVectorImport(),
   );
@@ -316,6 +327,9 @@ function registerIpc(): void {
   });
   ipcMain.handle(IPC_CHANNELS.connectAi, () =>
     requireController().connectAi(false),
+  );
+  ipcMain.handle(IPC_CHANNELS.cancelAiConnection, () =>
+    requireController().cancelAiConnection(),
   );
   ipcMain.handle(IPC_CHANNELS.replaceAiCredential, () =>
     requireController().connectAi(true),
@@ -622,6 +636,8 @@ async function createWindow(): Promise<void> {
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   const useDeterministicAi = process.env.LASERX_TEST_AI_MOCK === "1";
+  const waitForCredentialCancellation =
+    process.env.LASERX_TEST_AI_CREDENTIAL_MODE === "wait";
   const testCredential = "laserx-e2e-credential-placeholder";
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
@@ -650,11 +666,16 @@ async function createWindow(): Promise<void> {
         }
       : {}),
     credentialVault: useDeterministicAi
-      ? new MemoryCredentialVault(testCredential)
+      ? new MemoryCredentialVault(waitForCredentialCancellation ? null : testCredential)
       : new ElectronCredentialVault(app.getPath("userData"), safeStorage),
-    credentialAcquisition: useDeterministicAi
-      ? new FixedCredentialAcquisition(testCredential)
+    credentialAcquisition: waitForCredentialCancellation
+      ? new WaitingCredentialAcquisition()
+      : useDeterministicAi
+        ? new FixedCredentialAcquisition(testCredential)
       : new WindowsCredentialAcquisition(),
+    credentialConnectionTimeoutMs: Number(
+      process.env.LASERX_TEST_AI_CREDENTIAL_TIMEOUT_MS ?? 120_000,
+    ),
     openExternal: async (url) => {
       await shell.openExternal(url);
     },

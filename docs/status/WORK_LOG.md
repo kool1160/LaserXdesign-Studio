@@ -2,6 +2,36 @@
 
 Add concise dated entries for substantial work that needs durable handoff beyond commit history.
 
+## 2026-08-02 - M13 hands-on repair gate implementation
+
+- Date: 2026-08-02
+- Agent/task: Codex / Issue #13 mandatory hands-on repair prerequisite
+- Milestone: M13 - Windows Installer, Packaging, and Beta Hardening
+- Delivered: Added bounded planar DXF rational-spline conversion, explicit
+  geometry-linked repair findings, preview focus, and three-way stock fitting
+  with a single undoable geometry/stock commit. Added material-specific steel,
+  stainless, and aluminum gauges plus fractional-inch, millimeter, and custom
+  stock choices; canonical `thicknessMm`; schema-v9 project persistence; a
+  no-inference v8-to-v9 migration; and schema-2 production manifests. Reworked
+  credential connection as a visible, cancelable, two-minute-bounded Windows
+  interaction with timeout/retry behavior, prior-state restoration, retained
+  `safeStorage`, and no renderer credential exposure.
+- Verification: All policy/license audits, lint, full workspace typecheck, 287
+  unit/integration tests, production build/package, and all 31 serial packaged
+  Windows Electron E2E scenarios pass. Packaged coverage exercises spline and
+  repair location/stock fitting plus credential cancel, retry, timeout, and
+  global-control restoration.
+- Decisions: Legacy decimal thicknesses receive a null shop designation rather
+  than an invented gauge. Import repairs are applied only to the visible
+  transient preview at documented tolerances and enter the project only after
+  explicit acceptance. Credential acquisition is main-process-owned and races
+  every port against application cancellation and timeout.
+- Known limitations: Spline import is limited to planar degree-1-through-5 DXF
+  knot/control records under existing geometry budgets. Installer/signing work
+  remains blocked until this repair slice is independently reviewed and merged.
+- Next allowed work: Publish a draft PR for Issue #13, obtain exact-head Windows
+  CI and independent review, and stop. Do not merge or start installer/signing.
+
 ## 2026-08-01 - M12 world-space registration-circle review repair
 
 - Date: 2026-08-01

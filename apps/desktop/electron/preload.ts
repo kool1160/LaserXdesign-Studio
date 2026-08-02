@@ -37,6 +37,8 @@ import {
   productionExportRequestSchema,
   manufacturingLayerAnalysisRequestSchema,
   vectorImportPreviewRequestSchema,
+  configureVectorImportRequestSchema,
+  focusVectorImportFindingRequestSchema,
   type CreateDocumentRequest,
   type AiGenerateRequest,
   type AttachAiReferenceRequest,
@@ -68,6 +70,8 @@ import {
   type ProductionExportRequest,
   type ManufacturingLayerAnalysisRequest,
   type VectorImportPreviewRequest,
+  type ConfigureVectorImportRequest,
+  type FocusVectorImportFindingRequest,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -121,6 +125,18 @@ const api: LaserxDesktopApi = Object.freeze({
   async commitVectorImport() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.commitVectorImport),
+    );
+  },
+  async configureVectorImport(request: ConfigureVectorImportRequest) {
+    const validated = configureVectorImportRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.configureVectorImport, validated),
+    );
+  },
+  async focusVectorImportFinding(request: FocusVectorImportFindingRequest) {
+    const validated = focusVectorImportFindingRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.focusVectorImportFinding, validated),
     );
   },
   async cancelVectorImport() {
@@ -199,6 +215,11 @@ const api: LaserxDesktopApi = Object.freeze({
   async connectAi() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.connectAi),
+    );
+  },
+  async cancelAiConnection() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelAiConnection),
     );
   },
   async replaceAiCredential() {

@@ -148,6 +148,38 @@ describe("DXF interchange", () => {
     expect(candidate.paths[2]?.points.length).toBeGreaterThan(2);
   });
 
+  it("converts planar rational DXF splines into bounded editable preview paths", () => {
+    const candidate = importDxf(dxf(
+      "0\nSPLINE\n8\nSpline cut\n70\n4\n71\n2\n72\n6\n73\n3\n" +
+      "40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n" +
+      "41\n1\n41\n1\n41\n1\n" +
+      "10\n0\n20\n0\n10\n5\n20\n10\n10\n10\n20\n0\n",
+    ));
+    expect(candidate.paths).toHaveLength(1);
+    expect(candidate.paths[0]).toMatchObject({ layerName: "Spline cut", closed: false });
+    expect(candidate.paths[0]?.points.length).toBeGreaterThan(2);
+    expect(candidate.paths[0]?.points[0]).toMatchObject({ xMm: 0, yMm: 0 });
+    expect(candidate.paths[0]?.points.at(-1)).toMatchObject({ xMm: 10, yMm: 0 });
+    expect(candidate.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "dxf-spline-converted", pathIndex: 0 }),
+    ]));
+  });
+
+  it("shows bounded near-closure and duplicate-node repairs in the preview", () => {
+    const candidate = importDxf(dxf(
+      "0\nLWPOLYLINE\n8\nRepair\n90\n5\n70\n0\n" +
+      "10\n0\n20\n0\n10\n10\n20\n0\n10\n10.0000001\n20\n0\n" +
+      "10\n10\n20\n10\n10\n0.05\n20\n0.04\n",
+    ));
+    expect(candidate.paths[0]).toMatchObject({ closed: true });
+    expect(candidate.paths[0]?.points).toHaveLength(3);
+    expect(candidate.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "duplicate-nodes-removed", severity: "repair" }),
+      expect.objectContaining({ code: "small-gap-closed", severity: "repair" }),
+    ]));
+    expect(candidate.assumptions.join(" ")).toMatch(/fixed 0.1 mm tolerance/u);
+  });
+
   it("keeps circles at or below tolerance as valid three-node contours", () => {
     const candidate = importDxf(dxf(
       "0\nCIRCLE\n8\nCut\n10\n0\n20\n0\n40\n0.005\n",
@@ -180,7 +212,7 @@ describe("DXF interchange", () => {
     ));
     expect(candidate.paths[0]).toMatchObject({ layerName: "Legacy", closed: true });
     expect(candidate.warnings.map((item) => item.code)).toEqual([
-      "unsupported-dxf-entity",
+      "invalid-dxf-entity",
       "unsupported-3d-entity",
     ]);
   });

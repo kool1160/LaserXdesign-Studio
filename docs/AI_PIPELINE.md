@@ -23,7 +23,11 @@ contains bounded intent parameters and concept summaries, never a credential,
 authorization header, provider endpoint, local path, source pixels, or
 provider-supplied geometry.
 
-On Windows, key entry uses a native password field outside the renderer. The
+On Windows, key entry uses a visible app-owned password dialog outside the
+renderer. The prompt has a two-minute ceiling, exposes an in-app Cancel action,
+and is terminated on cancel or timeout. Either outcome restores the prior
+connection state and releases the renderer's global busy state so the user can
+retry or continue manual work. The
 main process tests the key before encrypting it with Electron `safeStorage`;
 only the encrypted envelope is written under Electron user data. Replace and
 disconnect update or delete that envelope without changing the open project.
@@ -95,7 +99,8 @@ The UI distinguishes disconnected, invalid-key, no-credit, rate-limited,
 offline, and unavailable states. Retry timing is retained when OpenAI supplies
 it. Key setup and billing buttons open official OpenAI Platform pages. Users
 can test, replace, or disconnect the credential; all manual commands remain
-available in every connection state.
+available in every settled connection state. Credential entry is the only
+temporarily modal connection step and is always cancelable and time-bounded.
 
 ## Real-provider validation (manual, never CI)
 

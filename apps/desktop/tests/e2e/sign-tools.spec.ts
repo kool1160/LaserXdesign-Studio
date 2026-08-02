@@ -141,7 +141,7 @@ for (const fixture of cases) {
       }).toBe(true);
 
       await clickAndWaitForCommand(page, "Save");
-      await waitForProjectSchema(launched.projectPath, 8);
+      await waitForProjectSchema(launched.projectPath, 9);
       const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
         document: { templates: unknown[] };
       };

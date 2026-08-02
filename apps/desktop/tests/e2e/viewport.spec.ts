@@ -111,11 +111,11 @@ test("schema-v1 project opens through the packaged migration path", async () => 
       dimensions: { widthMm: 304.8, heightMm: 304.8 },
     });
     await clickAndWaitForCommand(page, "Save");
-    await waitForProjectSchema(launched.projectPath, 8);
+    await waitForProjectSchema(launched.projectPath, 9);
     const saved = JSON.parse(await readFile(launched.projectPath, "utf8")) as {
       schemaVersion: number;
     };
-    expect(saved.schemaVersion).toBe(8);
+    expect(saved.schemaVersion).toBe(9);
   } finally {
     await killAndRemove(launched);
   }

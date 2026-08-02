@@ -34,6 +34,21 @@ function candidate(): VectorImportCandidate {
       },
     ],
     warnings: [{ code: "unsupported-svg-element", message: "Text skipped.", source: "<text>" }],
+    findings: [{
+      code: "repair-preview",
+      severity: "repair",
+      message: "Closed a small gap.",
+      source: "path 1",
+      pathIndex: 0,
+      locationMm: { xMm: 0, yMm: 0 },
+      repair: {
+        action: "close-small-gap",
+        summary: "Closed one gap.",
+        changeCount: 1,
+        toleranceMm: 0.1,
+        appliedToPreview: true,
+      },
+    }],
     assumptions: [],
   };
 }
@@ -52,10 +67,22 @@ describe("vector import preview", () => {
       sourceName: "24-inch.svg",
       format: "svg",
       sourceUnit: "inches",
-      bounds: { minXmm: 0, minYmm: 0, maxXmm: 609.6, maxYmm: 304.8 },
+      fitMode: "resize-stock",
+      marginMm: 12.7,
+      proposedDocumentDimensionsMm: { widthMm: 635, heightMm: 330.2 },
     });
+    expect(previewed.editor.importPreview?.bounds?.minXmm).toBeCloseTo(12.7, 9);
+    expect(previewed.editor.importPreview?.bounds?.minYmm).toBeCloseTo(12.7, 9);
+    expect(previewed.editor.importPreview?.bounds?.maxXmm).toBeCloseTo(622.3, 9);
+    expect(previewed.editor.importPreview?.bounds?.maxYmm).toBeCloseTo(317.5, 9);
     expect(previewed.editor.importPreview?.layers).toHaveLength(1);
     expect(previewed.editor.importPreview?.objects).toHaveLength(2);
+    const findingObjectId = previewed.editor.importPreview?.findings[0]?.objectId;
+    if (findingObjectId === null || findingObjectId === undefined) {
+      throw new Error("Expected a geometry-linked finding.");
+    }
+    expect(session.focusVectorImportFinding(findingObjectId).editor.importPreview)
+      .toMatchObject({ focusedObjectId: findingObjectId });
 
     const canceled = session.cancelVectorImport();
     expect(canceled.project).toEqual(before.project);
@@ -74,6 +101,7 @@ describe("vector import preview", () => {
     expect(committed.project.document.layers).toHaveLength(before.document.layers.length + 1);
     expect(committed.project.document.objects).toHaveLength(2);
     expect(committed.project.document.objects[0]).toMatchObject({ type: "path", closed: true });
+    expect(committed.project.document.dimensions).toEqual({ widthMm: 635, heightMm: 330.2 });
     expect(committed.editor.selectionIds).toHaveLength(2);
 
     const undone = session.undo();
@@ -82,6 +110,33 @@ describe("vector import preview", () => {
 
     const redone = session.redo();
     expect(redone.project.document.objects).toHaveLength(2);
+  });
+
+  it("previews all three stock fitting choices without mutation and commits the chosen fit once", () => {
+    const session = new ProjectSession(dependencies());
+    const before = session.state.project;
+    session.previewVectorImport(candidate(), "oversized.svg");
+
+    const scaled = session.configureVectorImport("scale-artwork", 10);
+    expect(scaled.project).toEqual(before);
+    expect(scaled.editor.importPreview).toMatchObject({
+      fitMode: "scale-artwork",
+      proposedDocumentDimensionsMm: before.document.dimensions,
+    });
+    expect(scaled.editor.importPreview?.artworkScale).toBeLessThan(1);
+    expect(scaled.editor.importPreview?.bounds?.minXmm).toBeGreaterThanOrEqual(10);
+    expect(scaled.editor.importPreview?.bounds?.maxXmm).toBeLessThanOrEqual(590);
+    expect(scaled.editor.importPreview?.bounds?.minYmm).toBeGreaterThanOrEqual(10);
+    expect(scaled.editor.importPreview?.bounds?.maxYmm).toBeLessThanOrEqual(290);
+
+    const kept = session.configureVectorImport("keep", 10);
+    expect(kept.editor.importPreview).toMatchObject({
+      fitMode: "keep",
+      bounds: { minXmm: 0, minYmm: 0, maxXmm: 609.6, maxYmm: 304.8 },
+    });
+    const committed = session.commitVectorImport();
+    expect(committed.project.document.dimensions).toEqual(before.document.dimensions);
+    expect(committed.editor.history.undoDepth).toBe(1);
   });
 
   it("rejects a stale preview after another project edit", () => {

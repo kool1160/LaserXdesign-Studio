@@ -28,6 +28,31 @@ export interface InterchangeWarning {
   source: string | null;
 }
 
+export type InterchangeRepairAction =
+  | "remove-duplicate-nodes"
+  | "close-small-gap"
+  | "snap-endpoint"
+  | "remove-duplicate-path";
+
+export interface InterchangeRepair {
+  action: InterchangeRepairAction;
+  summary: string;
+  changeCount: number;
+  toleranceMm: number;
+  appliedToPreview: true;
+}
+
+/** A preview finding that can be located in imported geometry before commit. */
+export interface InterchangeFinding {
+  code: string;
+  severity: "warning" | "repair";
+  message: string;
+  source: string | null;
+  pathIndex: number | null;
+  locationMm: PointMm | null;
+  repair: InterchangeRepair | null;
+}
+
 export interface InterchangePath {
   layerName: string | null;
   closed: boolean;
@@ -41,6 +66,7 @@ export interface VectorImportCandidate {
   dimensionsMm: { widthMm: number; heightMm: number } | null;
   paths: InterchangePath[];
   warnings: InterchangeWarning[];
+  findings?: InterchangeFinding[] | undefined;
   assumptions: string[];
 }
 

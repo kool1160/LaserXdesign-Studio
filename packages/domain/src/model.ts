@@ -20,7 +20,7 @@ export type {
   PathControlHandles,
 } from "@laserx/geometry";
 
-export const PROJECT_SCHEMA_VERSION = 8 as const;
+export const PROJECT_SCHEMA_VERSION = 9 as const;
 export const MAX_SAVED_SIGN_TEMPLATES = 1_000;
 export const MAX_REGISTRATION_HOLES_PER_LAYER = 1_000;
 export const MILLIMETERS_PER_INCH = 25.4;
@@ -73,6 +73,7 @@ export type ManufacturingSettingField =
   | "process"
   | "material"
   | "thicknessMm"
+  | "stockThicknessDesignation"
   | "kerfWidthMm"
   | "minimumFeatureWidthMm"
   | "minimumBridgeWidthMm"
@@ -86,6 +87,7 @@ export interface ManufacturingSettings {
   process: ManufacturingProcess;
   material: ManufacturingMaterial;
   thicknessMm: number;
+  stockThicknessDesignation?: StockThicknessDesignation | null | undefined;
   kerfWidthMm: number;
   minimumFeatureWidthMm: number;
   minimumBridgeWidthMm: number;
@@ -112,10 +114,96 @@ export interface ManufacturingLayerMetadata {
   role: ManufacturingLayerRole;
   material: ManufacturingMaterial;
   thicknessMm: number;
+  stockThicknessDesignation?: StockThicknessDesignation | null | undefined;
   process: ManufacturingLayerProcess;
   notes: string;
   registrationGroup: string | null;
   registrationHoleIds: string[];
+}
+
+export type StockThicknessDesignationKind =
+  | "gauge"
+  | "fractional-inch"
+  | "millimeter"
+  | "custom";
+
+export type StockThicknessDesignation =
+  | {
+      kind: "gauge";
+      label: string;
+      /** Gauge tables differ by material and must never be reused cross-material. */
+      material: Extract<ManufacturingMaterial, "mild-steel" | "stainless-steel" | "aluminum">;
+    }
+  | {
+      kind: Exclude<StockThicknessDesignationKind, "gauge">;
+      label: string;
+      material: null;
+    };
+
+export interface StockThicknessChoice {
+  id: string;
+  label: string;
+  thicknessMm: number;
+  designation: StockThicknessDesignation;
+}
+
+const GAUGE_THICKNESSES_INCH: Readonly<Record<
+  Extract<ManufacturingMaterial, "mild-steel" | "stainless-steel" | "aluminum">,
+  readonly (readonly [label: string, inches: number])[]
+>> = {
+  "mild-steel": [
+    ["20 ga", 0.0359], ["18 ga", 0.0478], ["16 ga", 0.0598],
+    ["14 ga", 0.0747], ["12 ga", 0.1046], ["11 ga", 0.1196], ["10 ga", 0.1345],
+  ],
+  "stainless-steel": [
+    ["20 ga", 0.0375], ["18 ga", 0.05], ["16 ga", 0.0625],
+    ["14 ga", 0.078125], ["12 ga", 0.109375], ["11 ga", 0.125], ["10 ga", 0.140625],
+  ],
+  aluminum: [
+    ["20 ga", 0.032], ["18 ga", 0.0403], ["16 ga", 0.0508],
+    ["14 ga", 0.0641], ["12 ga", 0.0808], ["10 ga", 0.1019], ["8 ga", 0.1285],
+  ],
+};
+
+const FRACTIONAL_STOCK_INCH: readonly (readonly [label: string, inches: number])[] = [
+  ["1/32 in", 1 / 32], ["1/16 in", 1 / 16], ["3/32 in", 3 / 32],
+  ["1/8 in", 1 / 8], ["3/16 in", 3 / 16], ["1/4 in", 1 / 4],
+  ["3/8 in", 3 / 8], ["1/2 in", 1 / 2],
+];
+
+const METRIC_STOCK_MM = [1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12] as const;
+
+export function stockThicknessChoicesForMaterial(
+  material: ManufacturingMaterial,
+): StockThicknessChoice[] {
+  const gaugeMaterial = material === "mild-steel" ||
+    material === "stainless-steel" ||
+    material === "aluminum"
+    ? material
+    : null;
+  const gaugeChoices: StockThicknessChoice[] = gaugeMaterial === null
+    ? []
+    : GAUGE_THICKNESSES_INCH[gaugeMaterial].map(([label, inches]) => ({
+        id: `gauge:${gaugeMaterial}:${label}`,
+        label: `${label} (${(inches * MILLIMETERS_PER_INCH).toFixed(3)} mm)`,
+        thicknessMm: inches * MILLIMETERS_PER_INCH,
+        designation: { kind: "gauge", label, material: gaugeMaterial },
+      }));
+  return [
+    ...gaugeChoices,
+    ...FRACTIONAL_STOCK_INCH.map(([label, inches]) => ({
+      id: `fractional-inch:${label}`,
+      label: `${label} (${(inches * MILLIMETERS_PER_INCH).toFixed(3)} mm)`,
+      thicknessMm: inches * MILLIMETERS_PER_INCH,
+      designation: { kind: "fractional-inch" as const, label, material: null },
+    })),
+    ...METRIC_STOCK_MM.map((millimeters) => ({
+      id: `millimeter:${String(millimeters)}`,
+      label: `${String(millimeters)} mm`,
+      thicknessMm: millimeters,
+      designation: { kind: "millimeter" as const, label: `${String(millimeters)} mm`, material: null },
+    })),
+  ];
 }
 
 export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
@@ -123,6 +211,11 @@ export const DEFAULT_MANUFACTURING_SETTINGS: Readonly<ManufacturingSettings> = {
   process: "laser",
   material: "mild-steel",
   thicknessMm: 3,
+  stockThicknessDesignation: {
+    kind: "millimeter",
+    label: "3 mm",
+    material: null,
+  },
   kerfWidthMm: 0.2,
   minimumFeatureWidthMm: 1,
   minimumBridgeWidthMm: 2,
@@ -682,6 +775,7 @@ const MANUFACTURING_SETTING_FIELDS: readonly ManufacturingSettingField[] = [
   "process",
   "material",
   "thicknessMm",
+  "stockThicknessDesignation",
   "kerfWidthMm",
   "minimumFeatureWidthMm",
   "minimumBridgeWidthMm",
@@ -710,6 +804,36 @@ const MANUFACTURING_TOLERANCE_PRESETS: readonly ManufacturingTolerancePreset[] =
   "robust",
 ];
 
+function validateStockThicknessDesignation(
+  designation: StockThicknessDesignation | null,
+  material: ManufacturingMaterial,
+  thicknessMm: number,
+): void {
+  if (designation === null) return;
+  if (
+    !["gauge", "fractional-inch", "millimeter", "custom"].includes(designation.kind) ||
+    designation.label.trim().length === 0 ||
+    designation.label.length > 50
+  ) {
+    throw new RangeError("Stock thickness designation must have a supported kind and a 1 to 50 character label.");
+  }
+  if (designation.kind === "custom") {
+    return;
+  }
+  const choice = stockThicknessChoicesForMaterial(material).find(
+    (candidate) =>
+      candidate.designation.kind === designation.kind &&
+      candidate.designation.label === designation.label &&
+      candidate.designation.material === designation.material,
+  );
+  if (choice === undefined) {
+    throw new RangeError("Stock thickness designation is not valid for the selected material.");
+  }
+  if (Math.abs(choice.thicknessMm - thicknessMm) > 0.000001) {
+    throw new RangeError("Canonical stock thickness does not match its selected designation.");
+  }
+}
+
 export function validateManufacturingSettings(
   settings: ManufacturingSettings,
 ): void {
@@ -726,6 +850,11 @@ export function validateManufacturingSettings(
     throw new RangeError("Manufacturing tolerance preset is not supported.");
   }
   assertPositiveFinite(settings.thicknessMm, "Material thickness");
+  validateStockThicknessDesignation(
+    settings.stockThicknessDesignation ?? null,
+    settings.material,
+    settings.thicknessMm,
+  );
   assertPositiveFinite(settings.kerfWidthMm, "Kerf width");
   assertPositiveFinite(settings.minimumFeatureWidthMm, "Minimum feature width");
   assertPositiveFinite(settings.minimumBridgeWidthMm, "Minimum bridge width");
@@ -754,6 +883,9 @@ export function copyManufacturingSettings(
   return {
     ...settings,
     presetId: settings.presetId.trim(),
+    stockThicknessDesignation: settings.stockThicknessDesignation == null
+      ? null
+      : { ...settings.stockThicknessDesignation, label: settings.stockThicknessDesignation.label.trim() },
     customizedFields: [...settings.customizedFields],
   };
 }
@@ -1101,6 +1233,11 @@ export function validateManufacturingLayerMetadata(
     throw new RangeError("Manufacturing layer process is not supported.");
   }
   assertPositiveFinite(metadata.thicknessMm, "Manufacturing layer thickness");
+  validateStockThicknessDesignation(
+    metadata.stockThicknessDesignation ?? null,
+    metadata.material,
+    metadata.thicknessMm,
+  );
   if (metadata.notes.length > 500) {
     throw new RangeError("Manufacturing layer notes support at most 500 characters.");
   }
@@ -1151,6 +1288,9 @@ export function copyManufacturingLayerMetadata(
   validateManufacturingLayerMetadata(metadata);
   return {
     ...metadata,
+    stockThicknessDesignation: metadata.stockThicknessDesignation == null
+      ? null
+      : { ...metadata.stockThicknessDesignation, label: metadata.stockThicknessDesignation.label.trim() },
     notes: metadata.notes.trim(),
     registrationGroup: metadata.registrationGroup?.trim() ?? null,
     registrationHoleIds: [...metadata.registrationHoleIds],
