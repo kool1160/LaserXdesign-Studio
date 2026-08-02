@@ -1,0 +1,118 @@
+name: M13 Controlled Beta Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing exact reviewed beta tag (for example v0.13.0-beta.1)
+        required: true
+        type: string
+      confirmation:
+        description: Type PUBLISH REVIEWED BETA
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-reviewed-beta:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Validate owner release gate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          LASERX_EXPECTED_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_CODE_SIGNING_THUMBPRINT }}
+        run: node scripts/validate-controlled-beta-release.mjs
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.18.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify exact tagged source
+        run: pnpm verify
+
+      - name: Build release desktop sources without signing credentials
+        run: pnpm --filter @laserx/desktop build
+
+      - name: Build production-signed upgrade fixture
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm --filter @laserx/desktop package:installer:upgrade-fixture:prepared
+
+      - name: Build production-signed beta with forceCodeSigning
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm --filter @laserx/desktop package:installer:signed:prepared
+
+      - name: Verify packaged app identity without signing credentials
+        run: pnpm --filter @laserx/desktop audit:packaged-identity
+
+      - name: Validate production-signed installer lifecycle
+        shell: pwsh
+        env:
+          LASERX_EXPECTED_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_CODE_SIGNING_THUMBPRINT }}
+        run: |
+          ./scripts/validate-windows-installer.ps1 `
+            -UpgradeFixtureInstaller "apps/desktop/dist-packaged-upgrade-fixture/LaserX-Design-Studio-Setup-0.12.99-beta.1-x64.exe" `
+            -CurrentInstaller "apps/desktop/dist-packaged/LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe" `
+            -ExpectedVersion "0.13.0-beta.1"
+
+      - name: Write production provenance
+        shell: pwsh
+        env:
+          LASERX_EXPECTED_SIGNER_THUMBPRINT: ${{ vars.WINDOWS_CODE_SIGNING_THUMBPRINT }}
+        run: |
+          $sourceCommit = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          ./scripts/write-release-provenance.ps1 `
+            -ArtifactDirectory "apps/desktop/dist-packaged" `
+            -ExpectedVersion "0.13.0-beta.1" `
+            -SourceCommit $sourceCommit `
+            -OutputPath "artifacts/m13/laserx-release-provenance.json"
+
+      - name: Upload immutable workflow evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: laserx-${{ inputs.tag }}-signed
+          path: |
+            apps/desktop/dist-packaged/LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe
+            apps/desktop/dist-packaged/*.blockmap
+            artifacts/m13/laserx-release-provenance.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish controlled GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create $env:RELEASE_TAG `
+            "apps/desktop/dist-packaged/LaserX-Design-Studio-Setup-0.13.0-beta.1-x64.exe" `
+            "artifacts/m13/laserx-release-provenance.json" `
+            --verify-tag `
+            --prerelease `
+            --title "LaserX Design Studio 0.13.0-beta.1" `
+            --notes-file "docs/releases/0.13.0-beta.1.md"

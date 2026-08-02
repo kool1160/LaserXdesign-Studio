@@ -75,6 +75,12 @@ pnpm verify
 
 `pnpm test:e2e` packages and launches the Windows application. `pnpm verify` runs lint, typecheck, unit/integration tests, build, package, and packaged end-to-end tests.
 
+M13 local installer inspection uses
+`pnpm --filter @laserx/desktop package:installer`. Publishable builds require
+the separate fail-closed signing and manual release gate documented in
+[`docs/WINDOWS_BETA_RELEASE.md`](docs/WINDOWS_BETA_RELEASE.md); local unsigned
+artifacts must never be distributed.
+
 M06 SVG/DXF interoperability keeps native paths and untrusted file contents in
 Electron main. Import is preview-first and commits as one undoable edit. Export
 writes explicit millimeter metadata and reports path count, warnings, units,

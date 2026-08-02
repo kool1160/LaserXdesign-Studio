@@ -77,6 +77,7 @@ export interface LaunchEnvironment {
   exportPath?: string;
   rasterPath?: string;
   productionPath?: string;
+  useDefaultUserData?: boolean;
 }
 
 export async function launchPackaged(
@@ -84,18 +85,50 @@ export async function launchPackaged(
   closeResponse: "save" | "discard" | "cancel" = "cancel",
   launchEnvironment: LaunchEnvironment = {},
 ): Promise<TestLaunch> {
+  return launchLaserxExecutable(
+    executablePath,
+    directory,
+    closeResponse,
+    launchEnvironment,
+  );
+}
+
+export async function launchInstalledBeta(
+  installedExecutablePath: string,
+  directory?: string,
+  launchEnvironment: LaunchEnvironment = {},
+): Promise<TestLaunch> {
+  return launchLaserxExecutable(
+    installedExecutablePath,
+    directory,
+    "discard",
+    launchEnvironment,
+  );
+}
+
+async function launchLaserxExecutable(
+  targetExecutablePath: string,
+  directory: string | undefined,
+  closeResponse: "save" | "discard" | "cancel",
+  launchEnvironment: LaunchEnvironment,
+): Promise<TestLaunch> {
   const testDirectory =
     directory ?? (await mkdtemp(join(tmpdir(), "laserx-e2e-")));
   const projectPath = join(testDirectory, "lifecycle.laserx");
-  const userDataPath = join(testDirectory, "user-data");
+  const isolatedUserDataPath = join(testDirectory, "user-data");
+  const processEnvironment = { ...process.env };
+  if (launchEnvironment.useDefaultUserData === true) {
+    delete processEnvironment.LASERX_USER_DATA_PATH;
+  } else {
+    processEnvironment.LASERX_USER_DATA_PATH = isolatedUserDataPath;
+  }
   const electronApp = await launchElectron({
-    executablePath,
+    executablePath: targetExecutablePath,
     env: {
-      ...process.env,
+      ...processEnvironment,
       LASERX_AUTOSAVE_INTERVAL_MS: "40",
       LASERX_TEST_CLOSE_RESPONSE: closeResponse,
       LASERX_TEST_PROJECT_PATH: projectPath,
-      LASERX_USER_DATA_PATH: userDataPath,
       ...(launchEnvironment.aiMock === true
         ? { LASERX_TEST_AI_MOCK: "1" }
         : {}),
@@ -134,6 +167,9 @@ export async function launchPackaged(
         : { LASERX_TEST_PRODUCTION_PATH: launchEnvironment.productionPath }),
     },
   });
+  const userDataPath = launchEnvironment.useDefaultUserData === true
+    ? await electronApp.evaluate(({ app }) => app.getPath("userData"))
+    : isolatedUserDataPath;
   return {
     electronApp,
     directory: testDirectory,

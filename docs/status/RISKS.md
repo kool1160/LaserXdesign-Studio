@@ -38,9 +38,9 @@ allowlist explicitly.
 
 ## M01 known limitations
 
-- Packaging produces a reviewed unpacked Windows smoke application, not an
-  installer, branded application icon, or production signing/update flow;
-  those remain M12 work.
+- M13 replaces the unpacked-only M01 package with an assisted signed installer;
+  production publication still requires the external Windows signing secrets
+  and an exact reviewed tag.
 - Recovery holds one active local snapshot and has no history/retention UI.
 - Recent projects are path-based and do not yet detect moved files until open.
 - Schema v1 intentionally stores only an empty document and settings. It has no
@@ -61,8 +61,20 @@ allowlist explicitly.
   booleans, offsets, imports, and exports remain later milestone work.
 - Windows tests cover a forced 2× scale factor locally and in packaged
   Playwright. Broader multi-monitor/DPI-transition coverage remains M12.
-- Project files remain capped at 10 MB and the packaged application continues
-  to use the default icon and development signing behavior recorded for M01.
+- Project files remain capped at 10 MB. M11 supplied the branded icon and M13
+  supplies fail-closed production signing.
+
+## M13 beta limitations
+
+- The first controlled installer is Windows x64 only; ARM64-native and 32-bit
+  artifacts are not release targets.
+- Auto-update remains deferred. Installer identity is stable so a reviewed
+  newer beta can upgrade the existing installation without deleting per-user
+  data.
+- CI's disposable signing certificate proves only technical signing and
+  installer behavior. It is not a trusted production publisher; release stays
+  blocked until the repository has the real signing secrets.
+- Crash dumps and logs remain local and must be reviewed before manual sharing.
 
 ## M03 known limitations
 

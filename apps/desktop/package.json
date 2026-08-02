@@ -1,9 +1,13 @@
 {
   "name": "@laserx/desktop",
-  "version": "0.0.0",
+  "productName": "LaserX Design Studio",
+  "version": "0.13.0-beta.1",
   "private": true,
   "description": "Secure Windows desktop shell for LaserX Design Studio",
-  "author": "LaserX Design Studio contributors",
+  "author": {
+    "name": "LaserX Design Studio"
+  },
+  "homepage": "https://www.laserxdesign.com/",
   "packageManager": "pnpm@11.18.0",
   "type": "module",
   "main": "dist/electron/main.cjs",
@@ -12,8 +16,14 @@
     "build:electron": "node build.mjs",
     "build:renderer": "vite build",
     "dev": "pnpm build:electron && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist/electron/main.cjs\"",
-    "package:win": "pnpm build && electron-builder --win dir",
+    "package:win": "pnpm build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.config.cjs --win dir && pnpm audit:packaged-identity",
+    "package:installer": "pnpm build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.config.cjs --win nsis && pnpm audit:packaged-identity",
+    "package:installer:signed": "pnpm build && pnpm package:installer:signed:prepared && pnpm audit:packaged-identity",
+    "package:installer:signed:prepared": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false LASERX_REQUIRE_CODE_SIGNING=1 electron-builder --config electron-builder.config.cjs --win nsis",
+    "package:installer:upgrade-fixture": "pnpm build && pnpm package:installer:upgrade-fixture:prepared",
+    "package:installer:upgrade-fixture:prepared": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false LASERX_REQUIRE_CODE_SIGNING=1 LASERX_PACKAGE_VERSION=0.12.99-beta.1 LASERX_PACKAGE_OUTPUT=dist-packaged-upgrade-fixture electron-builder --config electron-builder.config.cjs --win nsis",
     "brand:assets": "node scripts/generate-brand-assets.mjs",
+    "audit:packaged-identity": "electron ../../scripts/verify-packaged-app-identity.cjs dist-packaged/win-unpacked/resources/app.asar 0.13.0-beta.1",
     "test": "vitest run",
     "test:e2e": "pnpm package:win && playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -51,23 +61,5 @@
     "vite": "8.2.0",
     "vitest": "4.1.10",
     "wait-on": "9.1.0"
-  },
-  "build": {
-    "appId": "studio.laserx.desktop",
-    "productName": "LaserX Design Studio",
-    "asar": true,
-    "directories": {
-      "output": "dist-packaged"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "win": {
-      "icon": "public/laserx-icon.png",
-      "target": [
-        "dir"
-      ]
-    }
   }
 }

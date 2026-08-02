@@ -87,3 +87,24 @@ All notable project changes will be documented here.
   locks, visibility, and order, with deterministic v1/v2 migration fixtures.
 - Packaged Windows editing save/reopen coverage and renderer boundary
   regressions proving that React does not own or mutate document geometry.
+
+## 0.13.0-beta.1 — 2026-08-02
+
+### Added
+
+- Signed assisted x64 Windows installer and controlled release workflow.
+- Start Menu shortcut plus optional desktop shortcut selection.
+- Upgrade, installed-launch, primary-workflow, and uninstall validation.
+- Preserve-by-default and explicit-remove application-data uninstall choices.
+- Signed-artifact SHA-256 and source/signing provenance manifest.
+- Local renderer/main failure recovery and Windows-owned runtime paths.
+- Beta performance, accessibility, security, feedback, and known-issue gates.
+
+### Included from the M13 repair prerequisite
+
+- Fail-closed DXF spline conversion, explicit import repair, stock fitting, and
+  partial-import evidence.
+- U.S. gauge/fractional stock designations with canonical millimeters and
+  schema-v9 persistence.
+- Application-owned secure AI credential entry with cancel, timeout, retry,
+  prior-state restoration, and Windows encryption.

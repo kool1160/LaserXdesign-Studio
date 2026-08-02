@@ -242,6 +242,41 @@ afterEach(async () => {
 });
 
 describe("autosave recovery coordination", () => {
+  it("settles an older autosave and writes the latest dirty state before fatal exit", async () => {
+    const directory = await temporaryDirectory();
+    const recoveryStore = new ControlledRecoveryStore();
+    const scheduler = new ManualAutosaveScheduler();
+    const controller = makeController({
+      userDataPath: join(directory, "user-data"),
+      dialogs: plannedDialogs({}),
+      recoveryStore,
+      scheduler,
+    });
+    await controller.initialize();
+    await controller.setDisplayUnit("inches");
+
+    const delayedSave = recoveryStore.delayNextSave();
+    scheduler.trigger();
+    await delayedSave.started;
+    await controller.setDisplayUnit("millimeters");
+
+    const emergencyRecovery = controller.prepareEmergencyRecovery();
+    delayedSave.release();
+    await emergencyRecovery;
+
+    expect(scheduler.active).toBe(false);
+    expect(recoveryStore.events).toEqual([
+      "save:start",
+      "save:finish",
+      "save:start",
+      "save:finish",
+    ]);
+    expect(recoveryStore.current?.project.document.settings.displayUnit).toBe(
+      "millimeters",
+    );
+    expect(controller.state.dirty).toBe(true);
+  });
+
   it("settles an in-flight autosave before explicit Save clears recovery", async () => {
     const directory = await temporaryDirectory();
     const projectPath = join(directory, "saved-project.laserx");
