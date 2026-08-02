@@ -52,21 +52,38 @@ function Get-InstallEntry {
 }
 
 function Get-InstalledExecutable {
-  $entry = Get-InstallEntry
-  $path = Join-Path ([string]$entry.InstallLocation) $executableName
+  $path = Join-Path (Split-Path -Parent (Get-UninstallerPath)) $executableName
   if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
     throw "The installed executable is missing: $path"
   }
   return $path
 }
 
+function Get-UninstallerPath {
+  $entry = Get-InstallEntry
+  foreach ($propertyName in @("QuietUninstallString", "UninstallString")) {
+    $property = $entry.PSObject.Properties[$propertyName]
+    if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+      continue
+    }
+    $command = [Environment]::ExpandEnvironmentVariables([string]$property.Value)
+    $path = $null
+    if ($command -match '^\s*"(?<path>[^"]+\.exe)"') {
+      $path = $Matches.path
+    }
+    elseif ($command -match '^\s*(?<path>.+?\.exe)(?:\s|$)') {
+      $path = $Matches.path
+    }
+    if ($null -ne $path -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+      return $path
+    }
+  }
+  throw "The $uninstallerName path is missing from the uninstall registry entry."
+}
+
 function Invoke-Uninstaller {
   param([switch]$DeleteAppData)
-  $entry = Get-InstallEntry
-  $uninstaller = Join-Path ([string]$entry.InstallLocation) $uninstallerName
-  if (-not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
-    throw "The uninstaller is missing: $uninstaller"
-  }
+  $uninstaller = Get-UninstallerPath
   $arguments = @("/currentuser", "/S")
   if ($DeleteAppData) {
     $arguments += "--delete-app-data"
