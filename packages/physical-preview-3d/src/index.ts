@@ -8,6 +8,8 @@ import {
   formatStockThickness,
   type LaserxDocument,
   type LaserxProject,
+  type Layer,
+  type ManufacturingLayerMetadata,
   type ManufacturingLayerRole,
   type ManufacturingMaterial,
   type StockThicknessDesignation,
@@ -107,6 +109,18 @@ function cloneStockThicknessDesignation(
     : { ...designation };
 }
 
+/**
+ * The exact non-physical-layer exclusion predicate replicated from
+ * `@laserx/production-export`'s `buildProductionPackage`/
+ * `buildProductionAssemblyPreview` (see ENGINE_DECISION.md) — a physical
+ * manufacturing layer is one explicitly tagged and not `non-cut-preview`.
+ */
+export function isPhysicalManufacturingLayer(
+  layer: Layer,
+): layer is Layer & { manufacturing: ManufacturingLayerMetadata } {
+  return layer.manufacturing !== undefined && layer.manufacturing.role !== "non-cut-preview";
+}
+
 function layerScopedDocument(
   document: LaserxDocument,
   layerId: string,
@@ -180,8 +194,8 @@ function hashChunk(value: string, seed: number): number {
  * Node-enabled main process, so a Node-only hash primitive would break
  * browser bundling.
  */
-function fingerprintScene(scene: Omit<PhysicalPreviewScene, "fingerprint">): string {
-  const canonical = JSON.stringify(scene);
+function computeFingerprint(value: unknown): string {
+  const canonical = JSON.stringify(value);
   return [
     hashChunk(canonical, 2_166_136_261),
     hashChunk(canonical, 2_166_136_261 ^ 0x9e3779b9),
@@ -192,26 +206,22 @@ function fingerprintScene(scene: Omit<PhysicalPreviewScene, "fingerprint">): str
     .join("");
 }
 
-export function buildPhysicalPreviewScene(
-  project: LaserxProject,
-  options: BuildPhysicalPreviewSceneOptions,
-): PhysicalPreviewScene {
-  const layer = project.document.layers.find(
-    (candidate) => candidate.id === options.layerId,
-  );
-  if (layer === undefined) {
-    throw new RangeError(
-      `Physical preview layer ${options.layerId} does not exist in the project document.`,
-    );
-  }
-  const metadata = layer.manufacturing;
-  if (metadata === undefined || metadata.role === "non-cut-preview") {
-    throw new RangeError(
-      `Layer ${options.layerId} is not an explicitly declared physical manufacturing layer.`,
-    );
-  }
+interface LayerProjection {
+  previewLayer: PhysicalPreviewLayer;
+  findings: PhysicalPreviewFinding[];
+}
 
-  const scoped = layerScopedDocument(project.document, layer.id);
+/**
+ * The single source of per-layer contour/topology projection, shared by
+ * `buildPhysicalPreviewScene` (one layer) and `buildPhysicalPreviewAssembly`
+ * (all physical layers) so neither duplicates cutability's region logic.
+ */
+function buildLayerProjection(
+  document: LaserxDocument,
+  layer: Layer & { manufacturing: ManufacturingLayerMetadata },
+): LayerProjection {
+  const metadata = layer.manufacturing;
+  const scoped = layerScopedDocument(document, layer.id);
   const analysis = analyzeDocumentCutability(scoped);
 
   const findings: PhysicalPreviewFinding[] = analysis.issues
@@ -228,7 +238,7 @@ export function buildPhysicalPreviewScene(
   const previewLayer: PhysicalPreviewLayer = {
     layerId: layer.id,
     name: layer.name,
-    role: metadata.role,
+    role: metadata.role as Exclude<ManufacturingLayerRole, "non-cut-preview">,
     thicknessMm: metadata.thicknessMm,
     material: {
       material: metadata.material,
@@ -244,6 +254,29 @@ export function buildPhysicalPreviewScene(
     boundsMm: shapesBounds(shapes),
   };
 
+  return { previewLayer, findings };
+}
+
+export function buildPhysicalPreviewScene(
+  project: LaserxProject,
+  options: BuildPhysicalPreviewSceneOptions,
+): PhysicalPreviewScene {
+  const layer = project.document.layers.find(
+    (candidate) => candidate.id === options.layerId,
+  );
+  if (layer === undefined) {
+    throw new RangeError(
+      `Physical preview layer ${options.layerId} does not exist in the project document.`,
+    );
+  }
+  if (!isPhysicalManufacturingLayer(layer)) {
+    throw new RangeError(
+      `Layer ${options.layerId} is not an explicitly declared physical manufacturing layer.`,
+    );
+  }
+
+  const { previewLayer, findings } = buildLayerProjection(project.document, layer);
+
   const sceneWithoutFingerprint: Omit<PhysicalPreviewScene, "fingerprint"> = {
     identity: {
       projectId: project.project.id,
@@ -257,6 +290,163 @@ export function buildPhysicalPreviewScene(
 
   return {
     ...sceneWithoutFingerprint,
-    fingerprint: fingerprintScene(sceneWithoutFingerprint),
+    fingerprint: computeFingerprint(sceneWithoutFingerprint),
+  };
+}
+
+// --- Multi-layer assembly (Phase 2 slice 2) -------------------------------
+
+/**
+ * Ephemeral presentation spacing only — never persisted, never schema
+ * fields, and distinct from the exact material `thicknessMm` carried by
+ * each `PhysicalPreviewAssemblyLayer`. `assembledGapMm` is the (typically
+ * zero, bonded-flush) gap between adjacent physical layers in the finished
+ * stack; `explodedGapMm` is additional separation added only in the
+ * exploded presentation, on top of `assembledGapMm`.
+ */
+export interface PhysicalPreviewSpacingOptionsMm {
+  assembledGapMm: number;
+  explodedGapMm: number;
+}
+
+export const DEFAULT_ASSEMBLED_GAP_MM = 0;
+export const DEFAULT_EXPLODED_GAP_MM = 20;
+
+export interface PhysicalPreviewZRangeMm {
+  minZmm: number;
+  maxZmm: number;
+}
+
+export interface PhysicalPreviewAssemblyLayer extends PhysicalPreviewLayer {
+  /** 0-based position among physical layers, in authoritative document order. */
+  order: number;
+  assembledZRangeMm: PhysicalPreviewZRangeMm;
+  explodedZRangeMm: PhysicalPreviewZRangeMm;
+}
+
+/**
+ * `"complete"` — every physical layer produced shapes (or was legitimately
+ * empty with no findings). `"partial"` — at least one physical layer exists
+ * but at least one produced no shapes because its geometry was ambiguous
+ * (see its findings); still positioned and readable (name/material/
+ * thickness), just not rendered. `"unavailable"` — the document declares no
+ * physical manufacturing layers at all, so there is nothing to assemble.
+ * Never invented or repaired: an ambiguous layer's geometry is never
+ * silently closed, simplified, or guessed.
+ */
+export type PhysicalPreviewAssemblyStatus = "complete" | "partial" | "unavailable";
+
+export interface PhysicalPreviewAssembly {
+  identity: PhysicalPreviewIdentity;
+  stockMm: { widthMm: number; heightMm: number };
+  status: PhysicalPreviewAssemblyStatus;
+  spacing: PhysicalPreviewSpacingOptionsMm;
+  layers: PhysicalPreviewAssemblyLayer[];
+  /** Sum of every physical layer's exact `thicknessMm` plus `assembledGapMm` between them. Real depth, not presentation. */
+  assembledDepthMm: number;
+  findings: PhysicalPreviewFinding[];
+  fingerprint: string;
+}
+
+export interface BuildPhysicalPreviewAssemblyOptions {
+  spacing?: Partial<PhysicalPreviewSpacingOptionsMm>;
+}
+
+function resolveSpacing(
+  spacing: Partial<PhysicalPreviewSpacingOptionsMm> | undefined,
+): PhysicalPreviewSpacingOptionsMm {
+  const assembledGapMm = spacing?.assembledGapMm ?? DEFAULT_ASSEMBLED_GAP_MM;
+  const explodedGapMm = spacing?.explodedGapMm ?? DEFAULT_EXPLODED_GAP_MM;
+  if (!Number.isFinite(assembledGapMm) || assembledGapMm < 0) {
+    throw new RangeError("Assembled spacing must be a nonnegative finite number of millimeters.");
+  }
+  if (!Number.isFinite(explodedGapMm) || explodedGapMm < 0) {
+    throw new RangeError("Exploded spacing must be a nonnegative finite number of millimeters.");
+  }
+  return { assembledGapMm, explodedGapMm };
+}
+
+/**
+ * Builds a renderer-independent assembly from every explicit physical
+ * manufacturing layer, in authoritative `document.layers` order. Untagged
+ * and `non-cut-preview` layers are excluded mechanically before any other
+ * processing (`isPhysicalManufacturingLayer`).
+ *
+ * Z convention (deterministic, documented — no existing contract mandates a
+ * direction, so this is the one this package defines): the first physical
+ * layer in document order is placed front-most, at the top of the Z range
+ * (`maxZmm` of the whole stack); each subsequent layer stacks behind it
+ * toward `Z = 0`, which is the back face of the last physical layer. This
+ * keeps the degenerate single-physical-layer case identical to
+ * `buildPhysicalPreviewScene`'s implicit `[0, thicknessMm]` extrusion range.
+ */
+export function buildPhysicalPreviewAssembly(
+  project: LaserxProject,
+  options: BuildPhysicalPreviewAssemblyOptions = {},
+): PhysicalPreviewAssembly {
+  const spacing = resolveSpacing(options.spacing);
+  const physicalLayers = project.document.layers.filter(isPhysicalManufacturingLayer);
+  const projections = physicalLayers.map((layer) =>
+    buildLayerProjection(project.document, layer),
+  );
+
+  const totalThicknessMm = projections.reduce(
+    (sum, projection) => sum + projection.previewLayer.thicknessMm,
+    0,
+  );
+  const assembledDepthMm =
+    physicalLayers.length === 0
+      ? 0
+      : totalThicknessMm + spacing.assembledGapMm * (physicalLayers.length - 1);
+  const explodedTotalDepthMm =
+    physicalLayers.length === 0
+      ? 0
+      : totalThicknessMm +
+        (spacing.assembledGapMm + spacing.explodedGapMm) * (physicalLayers.length - 1);
+
+  let assembledFrontZmm = assembledDepthMm;
+  let explodedFrontZmm = explodedTotalDepthMm;
+  const layers: PhysicalPreviewAssemblyLayer[] = projections.map((projection, index) => {
+    const { previewLayer } = projection;
+
+    const assembledBackZmm = assembledFrontZmm - previewLayer.thicknessMm;
+    const assembledZRangeMm: PhysicalPreviewZRangeMm = {
+      minZmm: assembledBackZmm,
+      maxZmm: assembledFrontZmm,
+    };
+    assembledFrontZmm = assembledBackZmm - spacing.assembledGapMm;
+
+    const explodedBackZmm = explodedFrontZmm - previewLayer.thicknessMm;
+    const explodedZRangeMm: PhysicalPreviewZRangeMm = {
+      minZmm: explodedBackZmm,
+      maxZmm: explodedFrontZmm,
+    };
+    explodedFrontZmm = explodedBackZmm - (spacing.assembledGapMm + spacing.explodedGapMm);
+
+    return { ...previewLayer, order: index, assembledZRangeMm, explodedZRangeMm };
+  });
+
+  const findings = projections.flatMap((projection) => projection.findings);
+  const hasAmbiguousLayer = projections.some((projection) => projection.findings.length > 0);
+  const status: PhysicalPreviewAssemblyStatus =
+    physicalLayers.length === 0 ? "unavailable" : hasAmbiguousLayer ? "partial" : "complete";
+
+  const assemblyWithoutFingerprint: Omit<PhysicalPreviewAssembly, "fingerprint"> = {
+    identity: {
+      projectId: project.project.id,
+      documentId: project.document.id,
+      projectUpdatedAt: project.project.updatedAt,
+    },
+    stockMm: { ...project.document.dimensions },
+    status,
+    spacing,
+    layers,
+    assembledDepthMm,
+    findings,
+  };
+
+  return {
+    ...assemblyWithoutFingerprint,
+    fingerprint: computeFingerprint(assemblyWithoutFingerprint),
   };
 }

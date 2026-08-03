@@ -36,8 +36,31 @@ body,
   outline: 2px solid #6db4ff;
 }
 
+.lab-mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid #3a3a3a;
+}
+
 .lab-readout {
   margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.lab-layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  font-size: 0.9rem;
+  background: #202020;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.lab-layer-list li {
   font-variant-numeric: tabular-nums;
 }
 

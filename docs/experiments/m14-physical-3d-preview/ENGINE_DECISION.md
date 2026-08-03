@@ -153,3 +153,51 @@ These are local-machine, single-sample measurements, not a CI-tracked performanc
 ### Verified against the fixture
 
 `fixtures/physical-preview/single-layer-face-plate.laserx` (200×120 mm stock, one `face` layer, mild steel, 3 mm, a 160×80 mm rectangle with one 30 mm-diameter through-hole) renders correctly in both front and perspective views: exact readout `160.0 mm × 80.0 mm × 3.0 mm`, the through-hole is visually faithful (confirmed by screenshot during manual verification, not committed), and the WebGL-unavailable fallback renders without throwing when `HTMLCanvasElement.prototype.getContext` is stubbed to return `null`.
+
+## Phase 2 slice 2 — multi-layer assembly foundation and assembled/exploded preview
+
+Completed 2026-08-02, same session, same branch. Closes the two non-blocking evidence gaps from the Phase 2 slice 1 review and builds the smallest coherent multi-layer vertical slice, per the READY review.
+
+### Multi-layer assembly in `@laserx/physical-preview-3d`
+
+- `buildPhysicalPreviewAssembly(project, options?)` is new and additive — `buildPhysicalPreviewScene` (single layer) is unchanged in behavior (all 10 prior tests pass unmodified) and now shares its per-layer contour/topology logic with the new function through a private `buildLayerProjection` helper, so cutability's region classification is still called from exactly one place.
+- Physical-layer selection reuses the same `manufacturing !== undefined && role !== "non-cut-preview"` predicate (now named `isPhysicalManufacturingLayer` and exported), applied in `document.layers` order.
+- **Spacing is ephemeral presentation data, never authoritative or persisted:** `PhysicalPreviewSpacingOptionsMm { assembledGapMm, explodedGapMm }` is an optional argument to `buildPhysicalPreviewAssembly`, defaults `{ assembledGapMm: 0, explodedGapMm: 20 }`, is never written to schema v9, and is kept in a distinct `spacing` field of the returned assembly rather than mixed into any layer's exact `thicknessMm`.
+- **Z convention (this package's own deterministic definition — no existing LaserX contract mandates a direction):** the first physical layer in document order is placed front-most (the top of the stack's Z range); each subsequent layer stacks behind it toward `Z = 0`, the back face of the last physical layer. This keeps the degenerate single-physical-layer case numerically identical to `buildPhysicalPreviewScene`'s implicit `[0, thicknessMm]` extrusion range. `assembledGapMm` sits between adjacent layers in both modes; `explodedGapMm` adds further separation on top of it, only in exploded mode.
+- **Status semantics, defined and documented (never invented/repaired geometry):** `"complete"` — every physical layer produced shapes or was legitimately empty with no findings; `"partial"` — at least one physical layer exists but at least one produced no shapes because cutability's analysis was ambiguous for it (still positioned, still name/material/thickness-readable, just not rendered — the other layers are unaffected); `"unavailable"` — the document declares zero physical manufacturing layers, so there is nothing to assemble at all.
+- `assembledDepthMm` is the real physical stack depth: sum of every physical layer's exact `thicknessMm` plus `assembledGapMm` between them — distinct from any exploded-mode presentation spread.
+
+### Two evidence gaps closed
+
+1. **Hole-opening proof** (`apps/physical-3d-preview-lab/tests/sceneToThree.test.ts`): a new test casts a `THREE.Raycaster` ray straight through the extrusion's Z axis at the hole's center and asserts zero intersections (genuinely open through both caps), then casts through a point in retained material and asserts exactly two intersections at `z=0` and `z=thicknessMm` (front cap + back cap), and a third cast entirely outside the outer contour asserts zero. Building this test surfaced and fixed a real bug in the test helper itself: `Raycaster.intersectObject` on a default `MeshBasicMaterial` (implicit `FrontSide`) culls back-facing triangles, so the back cap was invisible to the ray until the test mesh was given an explicit `DoubleSide` material — evidence the proof is exercising real triangle geometry, not a tautology.
+2. **Deterministic camera poses**: `src/cameraPose.ts` is a new pure module (no React, no Three.js scene graph, no DOM) exporting `computeCameraPose(view, target, distance)` for `front | back | edge | perspective`, unit-tested with exact position/up assertions for all four views plus a front/back mirror-symmetry check. `CameraRig.tsx` now calls this function instead of inlining the pose math.
+
+### Browser lab: assembled/exploded, back/edge, material appearance, disposal
+
+- Switched the app's loaded fixture to the new two-layer `fixtures/physical-preview/two-layer-face-backing.laserx` (`face`: mild steel 3 mm with a circular through-hole; `backing`: acrylic 6 mm, larger, with a rectangular slot cutout; plus a third `non-cut-preview` layer that must be and is excluded).
+- Added an Assembled/Exploded mode toggle (`data-testid="mode-assembled"`/`"mode-exploded"`, `aria-pressed`) that only changes each layer's Z position (`assembledZRangeMm` vs `explodedZRangeMm`); the underlying 2D contour/hole geometry is built once per layer and never rebuilt on mode switch.
+- Added Back and Edge view buttons alongside the existing Front/Perspective/Reset, all driven by `computeCameraPose`.
+- Added a per-layer readout list (name, material, thickness) and the exact total assembled depth in the toolbar.
+- `src/materialAppearance.ts` maps each of domain's six `ManufacturingMaterial` values to a distinct presentation-only color/metalness/roughness/opacity (acrylic is semi-transparent) — confirmed visually distinct by screenshot during manual review (mild steel dark/matte, acrylic lighter and translucent enough to see the face layer's hole through the backing in back view), not committed as an artifact.
+- Geometries are built with `new THREE.ExtrudeGeometry(...)` outside React (unchanged architectural boundary) and attached to meshes via the `geometry` prop, so React Three Fiber does not auto-manage their disposal the way it does for JSX-declared geometries. Added an explicit `useEffect` cleanup that calls `.dispose()` on every generated geometry whenever the memoized geometry set changes or the component unmounts, preventing GPU resource accumulation across future fixture/mode changes.
+
+### Measured bundle size delta (`pnpm --filter @laserx/physical-3d-preview-lab build`)
+
+```text
+dist/assets/index-*.js   1,282.43 kB │ gzip: 351.36 kB   (was 1,276.81 kB / 350.13 kB)
+build time: 671ms
+```
+
++5.62 kB raw / +1.23 kB gzip for the entire slice 2 feature set (assembly logic, camera-pose module, material-appearance module, mode toggle UI) — no new runtime dependency was added, so the delta is application code only.
+
+### Measured startup timing delta
+
+Same methodology as slice 1 (Playwright, headless Chromium, `vite preview`, three consecutive navigations):
+
+| Run | `window.onload` | Canvas visible |
+|---|---|---|
+| Cold | 180 ms (was 190 ms) | 282 ms (was 281 ms) |
+| Warm | 29 ms (was 30 ms) | 84 ms (was 88 ms) |
+| Warm again | 29 ms (was 34 ms) | 71 ms (was 76 ms) |
+
+No measurable regression — within normal local-machine run-to-run noise. Still local-machine, single-sample measurements, not a CI-tracked performance budget.

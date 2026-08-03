@@ -1,34 +1,75 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("physical 3D preview lab", () => {
-  test("launches, loads the fixture, and shows exact dimension readouts", async ({ page }) => {
+  test("launches, loads the fixture, and shows exact dimension and per-layer readouts", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     await expect(page.getByTestId("preview-canvas")).toBeVisible();
     const dimensions = page.getByTestId("dimensions");
-    await expect(dimensions).toHaveText(/160\.0 mm/);
-    await expect(dimensions).toHaveText(/80\.0 mm/);
-    await expect(dimensions).toHaveText(/3\.0 mm/);
+    await expect(dimensions).toHaveText(/180\.0 mm/);
+    await expect(dimensions).toHaveText(/100\.0 mm/);
+    await expect(dimensions).toHaveText(/9\.0 mm total assembled depth/);
+
+    const layerList = page.getByTestId("layer-list");
+    await expect(layerList).toContainText("Face");
+    await expect(layerList).toContainText("mild-steel");
+    await expect(layerList).toContainText("3.0 mm");
+    await expect(layerList).toContainText("Backing");
+    await expect(layerList).toContainText("acrylic");
+    await expect(layerList).toContainText("6.0 mm");
+
     await expect(page.getByTestId("findings-banner")).toHaveCount(0);
   });
 
-  test("front, perspective, and reset controls toggle the active view", async ({ page }) => {
+  test("front, back, edge, perspective, and reset controls toggle the active view", async ({
+    page,
+  }) => {
     await page.goto("/");
 
-    const frontButton = page.getByRole("button", { name: "Front" });
-    const perspectiveButton = page.getByRole("button", { name: "Perspective" });
-    const resetButton = page.getByRole("button", { name: "Reset view" });
+    const front = page.getByRole("button", { name: "Front" });
+    const back = page.getByRole("button", { name: "Back" });
+    const edge = page.getByRole("button", { name: "Edge" });
+    const perspective = page.getByRole("button", { name: "Perspective" });
+    const reset = page.getByRole("button", { name: "Reset view" });
 
-    await expect(perspectiveButton).toHaveAttribute("aria-pressed", "true");
-    await expect(frontButton).toHaveAttribute("aria-pressed", "false");
+    await expect(perspective).toHaveAttribute("aria-pressed", "true");
 
-    await frontButton.click();
-    await expect(frontButton).toHaveAttribute("aria-pressed", "true");
-    await expect(perspectiveButton).toHaveAttribute("aria-pressed", "false");
+    for (const button of [front, back, edge]) {
+      await button.click();
+      await expect(button).toHaveAttribute("aria-pressed", "true");
+      for (const other of [front, back, edge, perspective]) {
+        if (other !== button) {
+          await expect(other).toHaveAttribute("aria-pressed", "false");
+        }
+      }
+    }
 
-    await resetButton.click();
-    await expect(perspectiveButton).toHaveAttribute("aria-pressed", "true");
-    await expect(frontButton).toHaveAttribute("aria-pressed", "false");
+    await reset.click();
+    await expect(perspective).toHaveAttribute("aria-pressed", "true");
+    await expect(edge).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("assembled and exploded mode toggle updates the mode indicator", async ({ page }) => {
+    await page.goto("/");
+
+    const assembled = page.getByTestId("mode-assembled");
+    const exploded = page.getByTestId("mode-exploded");
+
+    await expect(assembled).toHaveAttribute("aria-pressed", "true");
+    await expect(exploded).toHaveAttribute("aria-pressed", "false");
+
+    await exploded.click();
+    await expect(exploded).toHaveAttribute("aria-pressed", "true");
+    await expect(assembled).toHaveAttribute("aria-pressed", "false");
+
+    // Mode changes only Z placement/presentation, never the reported
+    // manufacturing dimensions or assembled depth.
+    await expect(page.getByTestId("dimensions")).toHaveText(/9\.0 mm total assembled depth/);
+
+    await assembled.click();
+    await expect(assembled).toHaveAttribute("aria-pressed", "true");
   });
 
   test("shows a clear, non-throwing fallback when WebGL is unavailable", async ({ page }) => {
@@ -44,7 +85,8 @@ test.describe("physical 3D preview lab", () => {
     await page.goto("/");
 
     await expect(page.getByTestId("webgl-unavailable")).toBeVisible();
-    await expect(page.getByTestId("dimensions")).toHaveText(/160\.0 mm/);
+    await expect(page.getByTestId("dimensions")).toHaveText(/180\.0 mm/);
+    await expect(page.getByTestId("layer-list")).toContainText("Backing");
     expect(pageErrors).toHaveLength(0);
   });
 });

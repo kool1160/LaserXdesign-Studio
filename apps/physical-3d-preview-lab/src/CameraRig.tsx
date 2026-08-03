@@ -2,7 +2,9 @@ import { OrbitControls } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useRef, type ComponentRef } from "react";
 
-export type PreviewView = "front" | "perspective";
+import { computeCameraPose, type PreviewView } from "./cameraPose";
+
+export type { PreviewView } from "./cameraPose";
 
 export interface CameraRigProps {
   view: PreviewView;
@@ -17,12 +19,9 @@ export function CameraRig({ view, target, distance, resetToken }: CameraRigProps
   const [tx, ty, tz] = target;
 
   useEffect(() => {
-    if (view === "front") {
-      camera.position.set(tx, ty, tz + distance);
-    } else {
-      camera.position.set(tx + distance * 0.7, ty + distance * 0.55, tz + distance * 0.9);
-    }
-    camera.up.set(0, 1, 0);
+    const pose = computeCameraPose(view, [tx, ty, tz], distance);
+    camera.position.set(...pose.position);
+    camera.up.set(...pose.up);
     camera.lookAt(tx, ty, tz);
     const controls = controlsRef.current;
     if (controls) {

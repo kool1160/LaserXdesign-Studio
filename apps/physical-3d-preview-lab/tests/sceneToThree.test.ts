@@ -1,5 +1,5 @@
 import type { PhysicalPreviewLayer } from "@laserx/physical-preview-3d";
-import type * as THREE from "three";
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 
 import { buildLayerGeometries } from "../src/sceneToThree";
@@ -50,6 +50,32 @@ function requirePositionAttribute(geometry: THREE.ExtrudeGeometry) {
   const position = geometry.attributes.position;
   if (position === undefined) throw new Error("Expected a position attribute.");
   return position;
+}
+
+/**
+ * Casts a ray straight through the extrusion's Z axis (through-thickness) at
+ * a world (x, y) point and returns every triangle it hits. A genuinely open
+ * through-hole has zero cap material anywhere along that column, so the ray
+ * passes clean through with no intersections; retained material has both a
+ * front-cap and a back-cap triangle, so the ray hits exactly twice.
+ */
+function castThroughThickness(
+  geometry: THREE.ExtrudeGeometry,
+  xMm: number,
+  yMm: number,
+  thicknessMm: number,
+): THREE.Intersection[] {
+  // DoubleSide: the raycaster otherwise culls back-facing triangles (e.g.
+  // the back cap, seen from inside the solid), which would under-count
+  // legitimate intersections through retained material.
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(xMm, yMm, thicknessMm + 10),
+    new THREE.Vector3(0, 0, -1),
+    0,
+    thicknessMm + 20,
+  );
+  return raycaster.intersectObject(mesh, false);
 }
 
 describe("buildLayerGeometries", () => {
@@ -109,5 +135,26 @@ describe("buildLayerGeometries", () => {
     expect(Array.from(requirePositionAttribute(second.geometry).array)).toEqual(
       Array.from(requirePositionAttribute(first.geometry).array),
     );
+  });
+
+  it("proves the hole is genuinely open through both caps, not merely a smaller vertex count", () => {
+    const layer = makeLayer();
+    const entry = buildLayerGeometries(layer)[0];
+    if (entry === undefined) throw new Error("Expected one shape geometry.");
+
+    // Hole spans (5,3)-(9,7); its center is unambiguously inside it.
+    const throughHole = castThroughThickness(entry.geometry, 7, 5, layer.thicknessMm);
+    expect(throughHole).toHaveLength(0);
+
+    // (2,2) is inside the outer rectangle (0,0)-(20,10) and outside the hole.
+    const throughSolid = castThroughThickness(entry.geometry, 2, 2, layer.thicknessMm);
+    expect(throughSolid).toHaveLength(2);
+    const hitZs = throughSolid.map((hit) => hit.point.z).sort((left, right) => left - right);
+    expect(hitZs[0]).toBeCloseTo(0, 9);
+    expect(hitZs[1]).toBeCloseTo(layer.thicknessMm, 9);
+
+    // Outside the outer contour entirely: no material either.
+    const throughOutside = castThroughThickness(entry.geometry, 25, 25, layer.thicknessMm);
+    expect(throughOutside).toHaveLength(0);
   });
 });
