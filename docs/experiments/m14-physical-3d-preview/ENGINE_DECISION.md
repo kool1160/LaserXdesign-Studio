@@ -294,7 +294,7 @@ Still local-machine, single-sample measurements, not a CI-tracked performance bu
 
 ## Phase 3 — superseding measurements (2026-08-03)
 
-Every timing in the Phase 2 sections above is a **single-sample** measurement. Phase 3 replaced them with warmup-plus-repeated-sample benchmarks reporting min/median/p95/max across ten reviewed fixtures. Where the two disagree, **Phase 3 supersedes** — see:
+Every timing in the Phase 2 sections above is a **single-sample** measurement. Phase 3 replaced them with warmup-plus-repeated-sample benchmarks reporting sample count, min, conventional median, nearest-rank p95, and max across ten reviewed fixtures. Where the two disagree, **Phase 3 supersedes** — see:
 
 - `docs/experiments/m14-physical-3d-preview/PHASE3_EVIDENCE.md`
 - `docs/experiments/m14-physical-3d-preview/phase3-results.json` (machine-readable)
@@ -306,7 +306,7 @@ Two corrections to earlier text, recorded because they matter for how the earlie
 
 Two facts established in Phase 3 that the engine decision depends on, both stated as measured, neither as a recommendation:
 
-- **Deterministic output is confirmed.** Across all ten fixtures, twelve independent re-parse-and-rebuild repeats each produced exactly one distinct scene fingerprint and one distinct geometry output, with the source project structurally unchanged.
+- **Deterministic output is confirmed.** Across all ten fixtures, twelve independent re-parse-and-rebuild repeats each produced exactly one distinct scene fingerprint and one distinct geometry output, with the source project structurally unchanged. The immutability half of that claim was **not soundly backed in the first Phase 3 submission** — the harness verified an object that was never passed to the converters — and was repaired before being relied on here; see §13 of `PHASE3_EVIDENCE.md`.
 - **Repeated interaction does not accumulate GPU resources.** Over 60 stress cycles on the high-complexity fixture, renderer-reported geometries, textures, and programs were exactly flat (net delta 0/0/0), sampled every 10 cycles rather than only at the endpoints.
 
 The bundle figure above is also superseded: bundling all ten reviewed fixtures moved the lab app to 1,344.38 kB raw / 356.93 kB gzip (**+54.97 kB / +3.96 kB**), with no new runtime dependency.

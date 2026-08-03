@@ -19,6 +19,24 @@ export function percentile(samples, fraction) {
   return sorted[Math.min(rank, sorted.length) - 1];
 }
 
+/**
+ * Conventional median: the middle value for an odd sample count, and the
+ * average of the two middle values for an even count.
+ *
+ * Deliberately *not* the nearest-rank p50: for `[1,2,3,4]` nearest-rank
+ * returns `2` while the conventional median is `2.5`. Reporting the former
+ * under the name "median" understated central timing, so the two are now
+ * separate functions with separate names.
+ */
+export function conventionalMedian(samples) {
+  if (samples.length === 0) throw new Error("conventionalMedian requires at least one sample.");
+  const sorted = [...samples].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 export function summarize(samples) {
   if (samples.length === 0) throw new Error("summarize requires at least one sample.");
   const sorted = [...samples].sort((left, right) => left - right);
@@ -26,7 +44,9 @@ export function summarize(samples) {
   return {
     sampleCount: sorted.length,
     minMs: round(sorted[0]),
-    medianMs: round(percentile(sorted, 0.5)),
+    // Conventional median; p95 stays nearest-rank so it remains an
+    // actually-observed sample rather than an interpolated invention.
+    medianMs: round(conventionalMedian(sorted)),
     p95Ms: round(percentile(sorted, 0.95)),
     maxMs: round(sorted[sorted.length - 1]),
     meanMs: round(total / sorted.length),

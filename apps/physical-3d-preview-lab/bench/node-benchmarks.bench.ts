@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { FIXTURE_REGISTRY } from "../src/fixtureRegistry";
 import { buildLayerGeometries } from "../src/sceneToThree";
+import { runWithImmutabilityCheck } from "./project-immutability.mjs";
 import { writeResultsSection } from "./results-io.mjs";
 import { runSampled } from "./stats.mjs";
 
@@ -135,29 +136,40 @@ describe("Phase 3 Node benchmarks", () => {
     () => {
       const determinism = FIXTURE_REGISTRY.map((descriptor) => {
         const source = readFixture(descriptor.file);
-        const project = parseProject(source);
-        const snapshotBefore = structuredClone(project);
 
         const fingerprints = new Set<string>();
         const geometryDigests = new Set<string>();
+        let repeatsUnchanged = 0;
 
         for (let repeat = 0; repeat < DETERMINISM_REPEATS; repeat += 1) {
           // Re-parse from source each repeat so determinism is proven end to
           // end, not just for a single retained in-memory object.
           const repeatProject = parseProject(source);
-          const assembly = buildPhysicalPreviewAssembly(repeatProject);
-          fingerprints.add(assembly.fingerprint);
 
-          const positions: number[] = [];
-          for (const layer of assembly.layers) {
-            for (const entry of buildLayerGeometries(layer)) {
-              const attribute = entry.geometry.attributes["position"];
-              if (attribute !== undefined) {
-                positions.push(...Array.from(attribute.array as Float32Array));
+          // Both conversions run *inside* the immutability check, so the
+          // object verified afterwards is necessarily the object that was
+          // passed through scene and Three geometry conversion.
+          const { value: positions, unchanged } = runWithImmutabilityCheck(
+            repeatProject,
+            (converted) => {
+              const assembly = buildPhysicalPreviewAssembly(converted);
+              fingerprints.add(assembly.fingerprint);
+
+              const vertexFloats: number[] = [];
+              for (const layer of assembly.layers) {
+                for (const entry of buildLayerGeometries(layer)) {
+                  const attribute = entry.geometry.attributes["position"];
+                  if (attribute !== undefined) {
+                    vertexFloats.push(...Array.from(attribute.array as Float32Array));
+                  }
+                  entry.geometry.dispose();
+                }
               }
-              entry.geometry.dispose();
-            }
-          }
+              return vertexFloats;
+            },
+          );
+
+          if (unchanged) repeatsUnchanged += 1;
           // Fixed-precision join: a stable textual digest of the actual
           // emitted vertex data, not just a vertex count.
           geometryDigests.add(positions.map((value) => value.toFixed(6)).join(","));
@@ -165,7 +177,7 @@ describe("Phase 3 Node benchmarks", () => {
 
         expect(fingerprints.size).toBe(1);
         expect(geometryDigests.size).toBe(1);
-        expect(project).toEqual(snapshotBefore);
+        expect(repeatsUnchanged).toBe(DETERMINISM_REPEATS);
 
         const [fingerprint] = [...fingerprints];
         const [geometryDigest] = [...geometryDigests];
@@ -176,7 +188,10 @@ describe("Phase 3 Node benchmarks", () => {
           distinctGeometryOutputs: geometryDigests.size,
           fingerprint: fingerprint ?? "",
           geometryVertexFloatCount: (geometryDigest ?? "").split(",").filter(Boolean).length,
-          sourceProjectUnchanged: true,
+          immutabilityCheckedRepeats: DETERMINISM_REPEATS,
+          repeatsWithUnchangedSource: repeatsUnchanged,
+          // Derived from the per-repeat checks above, never hard-coded.
+          sourceProjectUnchanged: repeatsUnchanged === DETERMINISM_REPEATS,
         };
       });
 

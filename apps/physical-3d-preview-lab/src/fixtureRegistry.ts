@@ -73,7 +73,7 @@ export const FIXTURE_REGISTRY: readonly FixtureDescriptor[] = [
     key: "high-complexity",
     file: "high-complexity-sign.laserx",
     purpose:
-      "Representative high-complexity sign: 57 objects across two layers, 10 solid shapes, 48 interior cutouts.",
+      "Representative high-complexity sign: 58 objects across two layers, 10 solid shapes, 48 interior cutouts.",
     expectedStatus: "complete",
   },
 ];

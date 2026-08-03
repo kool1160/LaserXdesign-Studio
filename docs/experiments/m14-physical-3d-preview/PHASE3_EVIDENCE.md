@@ -1,6 +1,6 @@
 # Phase 3 Evidence — Stress, Determinism, and Performance
 
-Captured 2026-08-03 on `experiment/m14-physical-3d-preview-lab` for GitHub Issue #34, under the "Phase 3 authorization — stress, determinism, and performance evidence only" review.
+Captured 2026-08-03 on `experiment/m14-physical-3d-preview-lab` for GitHub Issue #34, under the "Phase 3 authorization — stress, determinism, and performance evidence only" review. Regenerated after the "REPAIR Phase 3 evidence integrity" review; see §13 for what changed and why.
 
 This document records **measured facts only**. It deliberately contains **no integration recommendation** — that remains explicitly deferred. M14 is not activated, and nothing here is merge-ready or a production performance budget.
 
@@ -14,7 +14,7 @@ Every timing below is from **one developer machine**, single configuration, loca
 
 Two properties are stronger than timings and are stated as correctness claims rather than measurements:
 
-- **Determinism** — repeated conversion produces byte-identical output (§4).
+- **Determinism and source immutability** — repeated conversion produces byte-identical output and does not modify the project it was given (§4).
 - **Resource boundedness** — repeated interaction does not accumulate GPU resources (§7).
 
 ### Environment
@@ -29,19 +29,20 @@ Two properties are stronger than timings and are stated as correctness claims ra
 | Browser viewport | 1280×800 CSS px, device-pixel-ratio 1 |
 | `--expose-gc` available | yes (heap sampled after a forced collection) |
 
-### Method
+### Statistical method
 
 - Every timing series uses **discarded warmup runs followed by timed samples** — never a single anecdote.
-- Reported as **sample count, min, median, p95, max** (mean is also in the JSON).
-- p95 uses **nearest-rank**, so every reported p95 is a value that was actually observed. It never interpolates a number that was never measured. At n=30 the nearest-rank p95 is the 29th-fastest of 30 samples.
+- Reported as **sample count (n), min, median, p95, max**. Mean is also in the JSON.
+- **Median is the conventional median**: the middle value for an odd sample count, the average of the two middle values for an even count. This is why several even-sample medians below end in `.5`.
+- **p95 is nearest-rank**, so every reported p95 is a value that was actually observed rather than an interpolated invention. At n=30 that is the 29th-fastest of 30 samples.
+- Median and p95 are deliberately *different* statistics computed by *different* helpers. An earlier revision computed the median as a nearest-rank p50, which returns `2` for `[1,2,3,4]` where the conventional median is `2.5` — that understated central timing and mislabelled the method. Both helpers are now separately unit-tested, including a test asserting they disagree on even samples.
 - Rounding is fixed at 4 decimals to avoid implying more precision than was measured.
-- Sampling/statistics helpers are themselves unit-tested (`tests/benchStats.test.ts`), including that warmup runs are executed but excluded from the samples.
 
 ### Harnesses
 
 | Harness | Command | Scope |
 |---|---|---|
-| Node | `pnpm --filter @laserx/physical-3d-preview-lab bench:node` | Parsing, scene conversion, Three geometry conversion, determinism |
+| Node | `pnpm --filter @laserx/physical-3d-preview-lab bench:node` | Parsing, scene conversion, Three geometry conversion, determinism, source immutability |
 | Browser | `pnpm --filter @laserx/physical-3d-preview-lab bench:browser` | Canvas readiness, regeneration, PNG capture, frame pacing, resource growth, real context loss |
 
 Both write into the same `phase3-results.json`, each owning its own top-level section, so neither depends on running first. The Node harness runs under Vitest (needed to resolve the workspace TypeScript packages); the browser harness is a Playwright driver that starts its own `vite preview` server on port 4174.
@@ -79,7 +80,17 @@ Their reviewed properties are pinned by `tests/phase3Fixtures.test.ts`, so a fix
 
 ### The high-complexity fixture, described honestly
 
-It is **representative, not a worst case**: a 500×290 mm two-layer sign — a face plate with 36 rectangular letter-strokes cut out of it and 8 mounting holes, over a backing plate with 12 vent slots. That resolves to **57 document objects → 10 solid shapes containing 48 interior cutouts**, 640 flattened contour points. It is not an artificial stress ceiling and is not claimed to be one.
+It is **representative, not a worst case**: a 500×290 mm two-layer sign — a face plate with 36 rectangular letter-strokes cut out of it and 8 mounting holes, over a backing plate with 12 vent slots.
+
+Exact composition, **58 document objects**:
+
+| Layer | Contents | Objects |
+|---|---|---:|
+| Face (12 ga mild steel) | 1 border plate + 36 letter strokes + 8 mounting holes | 45 |
+| Backing (12 mm wood) | 1 plate + 12 vent slots | 13 |
+| **Total** | | **58** |
+
+Those resolve to **10 solid shapes containing 48 interior cutouts** and 640 flattened contour points. `tests/phase3Fixtures.test.ts` pins the object count at exactly 58, so prose and data cannot drift apart again. It is not an artificial stress ceiling and is not claimed to be one.
 
 ### Invalid geometry fails visibly
 
@@ -90,22 +101,54 @@ Both invalid fixtures produce **zero shapes** and a `partial` assembly with `dep
 
 ---
 
-## 3. Node-side timings (n=30 samples, 5 warmup runs each)
+## 3. Node-side timings
 
-Milliseconds.
+All series: **n=30 samples, 5 discarded warmup runs**. Milliseconds.
 
-| Fixture | Parse med | Parse p95 | Scene med | Scene p95 | Geometry med | Geometry p95 |
-|---|---:|---:|---:|---:|---:|---:|
-| `single-layer` | 0.0987 | 0.2135 | 5.8999 | 6.5106 | 0.2107 | 0.7666 |
-| `two-layer` | 0.1247 | 0.2228 | 5.3309 | 6.0336 | 0.1658 | 0.2688 |
-| `partial-assembly` | 0.0935 | 0.1918 | 0.1184 | 0.1801 | 0.0090 | 0.0127 |
-| `gauge-stock` | 0.0718 | 0.0881 | 8.1451 | 8.8139 | 0.2928 | 0.5727 |
-| `fractional-inch-stock` | 0.0749 | 0.1126 | 0.0929 | 0.1418 | 0.0155 | 0.0276 |
-| `transformed-group` | 0.0817 | 0.1457 | 0.1448 | 0.2681 | 0.0144 | 0.0173 |
-| `multi-layer-mixed-stock` | 0.1399 | 0.1758 | 5.6810 | 6.1769 | 0.1620 | 0.2663 |
-| `invalid-open-contour` | 0.0654 | 0.0705 | 0.0576 | 0.0799 | 0.0002 | 0.0003 |
-| `invalid-self-intersecting` | 0.0611 | 0.0738 | 0.0770 | 0.0930 | 0.0002 | 0.0003 |
-| `high-complexity` | 0.2065 | 0.2569 | 13.4394 | 15.2740 | 0.7828 | 1.5079 |
+### 3.1 Project parsing (`parseProject`)
+
+| Fixture | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| `single-layer` | 30 | 0.0944 | 0.1224 | 0.2536 | 0.5279 |
+| `two-layer` | 30 | 0.1196 | 0.1250 | 0.1958 | 0.2312 |
+| `partial-assembly` | 30 | 0.0924 | 0.0997 | 0.1558 | 0.1704 |
+| `gauge-stock` | 30 | 0.0723 | 0.0762 | 0.0931 | 0.0985 |
+| `fractional-inch-stock` | 30 | 0.0677 | 0.0706 | 0.1400 | 0.1662 |
+| `transformed-group` | 30 | 0.0702 | 0.0761 | 0.1282 | 0.1353 |
+| `multi-layer-mixed-stock` | 30 | 0.1270 | 0.1369 | 0.1695 | 0.1704 |
+| `invalid-open-contour` | 30 | 0.0598 | 0.0620 | 0.1301 | 0.2636 |
+| `invalid-self-intersecting` | 30 | 0.0590 | 0.0605 | 0.0704 | 0.0851 |
+| `high-complexity` | 30 | 0.1980 | 0.2209 | 0.2611 | 0.5225 |
+
+### 3.2 Scene conversion (`buildPhysicalPreviewAssembly`)
+
+| Fixture | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| `single-layer` | 30 | 5.2855 | 6.0447 | 7.2470 | 7.4842 |
+| `two-layer` | 30 | 5.1964 | 5.5643 | 6.2729 | 6.3552 |
+| `partial-assembly` | 30 | 0.1200 | 0.1272 | 0.2576 | 0.3539 |
+| `gauge-stock` | 30 | 7.8595 | 8.3256 | 9.3033 | 9.4511 |
+| `fractional-inch-stock` | 30 | 0.0945 | 0.1010 | 0.2102 | 0.4502 |
+| `transformed-group` | 30 | 0.1112 | 0.1433 | 0.2430 | 0.5503 |
+| `multi-layer-mixed-stock` | 30 | 5.2753 | 5.6368 | 6.3027 | 6.4594 |
+| `invalid-open-contour` | 30 | 0.0548 | 0.0579 | 0.0893 | 0.1350 |
+| `invalid-self-intersecting` | 30 | 0.0755 | 0.0805 | 0.0993 | 0.1027 |
+| `high-complexity` | 30 | 12.5836 | 13.9369 | 17.2909 | 18.9795 |
+
+### 3.3 Three geometry conversion (`buildLayerGeometries`)
+
+| Fixture | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| `single-layer` | 30 | 0.1598 | 0.2059 | 0.7177 | 0.7545 |
+| `two-layer` | 30 | 0.1670 | 0.1934 | 0.5080 | 0.6667 |
+| `partial-assembly` | 30 | 0.0083 | 0.0089 | 0.0104 | 0.0176 |
+| `gauge-stock` | 30 | 0.2430 | 0.2741 | 0.7059 | 0.9396 |
+| `fractional-inch-stock` | 30 | 0.0148 | 0.0161 | 0.0403 | 0.0409 |
+| `transformed-group` | 30 | 0.0134 | 0.0138 | 0.0211 | 0.0240 |
+| `multi-layer-mixed-stock` | 30 | 0.1335 | 0.1578 | 0.2348 | 0.3578 |
+| `invalid-open-contour` | 30 | 0.0002 | 0.0002 | 0.0003 | 0.0008 |
+| `invalid-self-intersecting` | 30 | 0.0002 | 0.0002 | 0.0004 | 0.0005 |
+| `high-complexity` | 30 | 0.8047 | 0.9831 | 1.4417 | 1.5300 |
 
 Full per-sample arrays are in `phase3-results.json`.
 
@@ -113,84 +156,90 @@ Full per-sample arrays are in `phase3-results.json`.
 
 The clearest signal in this data is that **scene-conversion cost tracks flattened contour points, not the number of document objects**:
 
-- `fractional-inch-stock` — 2 objects, both rectangles, 8 contour points → **0.0929 ms**
-- `gauge-stock` — 3 objects, but two are circles, 158 contour points → **8.1451 ms**
+- `fractional-inch-stock` — 2 objects, both rectangles, 8 contour points → median **0.1010 ms**
+- `gauge-stock` — 3 objects, but two are circles, 158 contour points → median **8.3256 ms**
 
-Same order of object count, ~88× the conversion time. Circles are flattened to ~87 segments each at the 0.01 mm tolerance, and the underlying cutability analysis does pairwise segment work, so curved geometry dominates. Every fixture containing circles lands in the 5–14 ms band; every all-rectangle fixture stays under 0.15 ms.
+Same order of object count, ~82× the conversion time. Circles are flattened to ~87 segments each at the 0.01 mm tolerance, and the underlying cutability analysis does pairwise segment work, so curved geometry dominates. Every fixture containing circles lands in the 5–14 ms band; every all-rectangle fixture stays under 0.15 ms.
 
 This is recorded as a measured observation about where the time goes. It is **not** a recommendation, an optimization proposal, or an integration judgement.
 
-The first fixture measured in an unwarmed process showed `parse` at 5.57 ms versus ~0.10 ms once warm — a 55× cold-start artifact. That is precisely why warmup runs are discarded, and why single-shot numbers were not accepted as evidence.
+Cold-start remains a real effect: the first fixture measured in an unwarmed process previously showed `parse` at 5.57 ms versus ~0.10 ms once warm — a 55× artifact. That is precisely why warmup runs are discarded, and why single-shot numbers were not accepted as evidence.
 
 ---
 
-## 4. Determinism (12 independent repeats per fixture)
+## 4. Determinism and source immutability (12 independent repeats per fixture)
 
 Each repeat **re-parses the fixture from source** and rebuilds the assembly and Three geometry from scratch, so determinism is proven end to end rather than for one retained in-memory object.
+
+**How immutability is verified.** Both conversions run *inside* a check that snapshots the project immediately before and immediately after (`bench/project-immutability.mjs`). Because the conversion happens inside that window, the object verified afterwards is necessarily the object that was passed through scene conversion *and* Three geometry conversion. `sourceProjectUnchanged` is derived from counting the per-repeat results — it is not a hard-coded literal.
+
+The snapshot uses a `JSON.stringify` replacer that makes `undefined` explicit. Plain stringification *omits* undefined-valued keys, which would make "key absent" and "key overwritten with `undefined`" indistinguishable and let that class of mutation escape detection.
+
+**The check is proven capable of failing.** `tests/projectImmutability.test.ts` runs the same helper against deliberately-mutating converters and asserts each is caught: mutated manufacturing thickness, mutated geometry coordinates, a removed object, and a value overwritten with `undefined`. A check that can only ever report "unchanged" is not evidence — see §13.
 
 For **all ten fixtures**:
 
 - **distinct scene fingerprints: 1**
 - **distinct geometry outputs: 1** — compared as a fixed-precision digest of every emitted vertex float, not merely a vertex count
-- **source project structurally unchanged** after conversion
+- **repeats with unchanged source: 12 of 12**
 
-| Fixture | Repeats | Distinct fingerprints | Distinct geometry outputs | Vertex floats |
-|---|---:|---:|---:|---:|
-| `single-layer` | 12 | 1 | 1 | 3276 |
-| `two-layer` | 12 | 1 | 1 | 3564 |
-| `partial-assembly` | 12 | 1 | 1 | 108 |
-| `gauge-stock` | 12 | 1 | 1 | 5724 |
-| `fractional-inch-stock` | 12 | 1 | 1 | 288 |
-| `transformed-group` | 12 | 1 | 1 | 288 |
-| `multi-layer-mixed-stock` | 12 | 1 | 1 | 3672 |
-| `invalid-open-contour` | 12 | 1 | 1 | 0 |
-| `invalid-self-intersecting` | 12 | 1 | 1 | 0 |
-| `high-complexity` | 12 | 1 | 1 | 22860 |
+| Fixture | Repeats | Distinct fingerprints | Distinct geometry outputs | Repeats source unchanged | Vertex floats |
+|---|---:|---:|---:|---:|---:|
+| `single-layer` | 12 | 1 | 1 | 12 / 12 | 3276 |
+| `two-layer` | 12 | 1 | 1 | 12 / 12 | 3564 |
+| `partial-assembly` | 12 | 1 | 1 | 12 / 12 | 108 |
+| `gauge-stock` | 12 | 1 | 1 | 12 / 12 | 5724 |
+| `fractional-inch-stock` | 12 | 1 | 1 | 12 / 12 | 288 |
+| `transformed-group` | 12 | 1 | 1 | 12 / 12 | 288 |
+| `multi-layer-mixed-stock` | 12 | 1 | 1 | 12 / 12 | 3672 |
+| `invalid-open-contour` | 12 | 1 | 1 | 12 / 12 | 0 |
+| `invalid-self-intersecting` | 12 | 1 | 1 | 12 / 12 | 0 |
+| `high-complexity` | 12 | 1 | 1 | 12 / 12 | 22860 |
 
 The two invalid fixtures deterministically emit **zero** vertex floats — they fail visibly and identically every time.
 
 ---
 
-## 5. Browser: initial canvas readiness (n=10 samples, 2 warmup runs each)
+## 5. Browser: initial canvas readiness
 
-Measured from `page.goto` until the canvas is visible **and React Three Fiber has finished creating its `WebGLRenderer`**, plus one rendered frame.
+Measured from `page.goto` until the canvas is visible **and React Three Fiber has finished creating its `WebGLRenderer`**, plus one rendered frame. Includes full page load and bundle parse.
 
 That readiness definition was chosen after direct measurement: R3F's `onCreated` lands materially later than the canvas element becoming visible (null at 2 rAFs, populated by 500 ms), so a fixed rAF count is not a sound readiness gate. An earlier draft of this harness used one and consequently failed to run the real context-loss test at all.
 
-Milliseconds, including full page load and bundle parse.
+Milliseconds.
 
-| Fixture | min | median | p95 | max |
-|---|---:|---:|---:|---:|
-| `single-layer` | 184 | 201 | 230 | 230 |
-| `two-layer` | 275 | 288 | 324 | 324 |
-| `partial-assembly` | 195 | 217 | 248 | 248 |
-| `gauge-stock` | 265 | 283 | 326 | 326 |
-| `fractional-inch-stock` | 206 | 217 | 227 | 227 |
-| `transformed-group` | 212 | 224 | 237 | 237 |
-| `multi-layer-mixed-stock` | 319 | 337 | 362 | 362 |
-| `invalid-open-contour` | 166 | 167 | 183 | 183 |
-| `invalid-self-intersecting` | 166 | 167 | 184 | 184 |
-| `high-complexity` | 305 | 323 | 333 | 333 |
+| Fixture | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| `single-layer` | 10 | 182 | 199.0 | 219 | 219 |
+| `two-layer` | 10 | 265 | 298.5 | 327 | 327 |
+| `partial-assembly` | 10 | 212 | 228.0 | 246 | 246 |
+| `gauge-stock` | 10 | 271 | 284.5 | 289 | 289 |
+| `fractional-inch-stock` | 10 | 204 | 231.0 | 253 | 253 |
+| `transformed-group` | 10 | 215 | 227.5 | 257 | 257 |
+| `multi-layer-mixed-stock` | 10 | 298 | 320.0 | 339 | 339 |
+| `invalid-open-contour` | 10 | 166 | 167.0 | 185 | 185 |
+| `invalid-self-intersecting` | 10 | 166 | 167.0 | 182 | 182 |
+| `high-complexity` | 10 | 298 | 315.0 | 322 | 322 |
 
 ---
 
 ## 6. Browser: assembled/exploded regeneration and frame pacing
 
-**Mode toggle → next painted frame** (n=20 samples, 3 warmup, alternating assembled/exploded):
+**Mode toggle → next painted frame**, alternating assembled/exploded, 3 discarded warmup runs. Milliseconds.
 
-| Fixture | min | median | p95 | max |
-|---|---:|---:|---:|---:|
-| `two-layer` | — | 21.2 | 21.9 | — |
-| `high-complexity` | — | 18.0 | 19.6 | — |
+| Fixture | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| `two-layer` | 20 | 17.2 | 22.20 | 23.4 | 23.5 |
+| `high-complexity` | 20 | 18.0 | 20.05 | 20.7 | 21.1 |
 
 This measures *click through React commit to the next rendered frame*. It is **not** a raw GPU timing. Both sit near one 60 Hz frame interval, and the high-complexity fixture is not slower than the two-layer one — consistent with mode switching only repositioning already-built geometry along Z rather than rebuilding it.
 
-**Frame intervals** sampled over a 2000 ms window:
+**Frame intervals** sampled over a 2000 ms window. Milliseconds.
 
-| Fixture | samples | min | median | p95 | max |
+| Fixture | n | min | median | p95 | max |
 |---|---:|---:|---:|---:|---:|
 | `two-layer` | 120 | 16.6 | 16.7 | 16.7 | 16.8 |
-| `high-complexity` | 121 | 16.6 | 16.7 | 16.7 | 16.8 |
+| `high-complexity` | 120 | 16.6 | 16.7 | 16.8 | 16.8 |
 
 Both are pinned at the ~16.7 ms (60 Hz) scheduler cadence with essentially no variance. **Stated plainly: in headless Chromium, `requestAnimationFrame` pacing is scheduler-driven and this is not a real-display GPU frame-rate measurement.** What it does show is that neither fixture stalls or drops below the scheduler's cadence.
 
@@ -204,26 +253,33 @@ Resources were sampled every 10 cycles after a forced garbage collection, so gro
 
 | Cycle | Geometries | Textures | Programs | JS heap (bytes) | DOM nodes | Listeners |
 |---:|---:|---:|---:|---:|---:|---:|
-| 10 | 10 | 1 | 1 | 119,051,404 | 177 | 200 |
-| 20 | 10 | 1 | 1 | 115,262,876 | 96 | 199 |
-| 30 | 10 | 1 | 1 | 115,339,884 | 96 | 199 |
-| 40 | 10 | 1 | 1 | 115,396,320 | 96 | 199 |
-| 50 | 10 | 1 | 1 | 115,511,264 | 96 | 199 |
-| 60 | 10 | 1 | 1 | 115,566,088 | 96 | 199 |
+| baseline | 10 | 1 | 1 | 114,499,144 | 76 | 199 |
+| 10 | 10 | 1 | 1 | 115,066,996 | 96 | 199 |
+| 20 | 10 | 1 | 1 | 115,274,868 | 96 | 199 |
+| 30 | 10 | 1 | 1 | 115,363,036 | 96 | 199 |
+| 40 | 10 | 1 | 1 | 115,408,180 | 96 | 199 |
+| 50 | 10 | 1 | 1 | 115,545,704 | 96 | 199 |
+| 60 | 10 | 1 | 1 | 115,579,360 | 96 | 199 |
 
 **GPU resources are exactly flat.** Renderer-reported geometries (10), textures (1), and programs (1) do not move at all across 60 cycles — net delta **0 / 0 / 0**. This is the primary resource-growth finding: repeated mode/view/visibility/readback cycling does not accumulate GPU resources.
 
-JS heap settles after the first sample and then drifts by ~0.3 MB across the remaining 50 cycles (~6 KB/cycle, within allocator noise, and partly the harness's own retained sample arrays). Measured against the pre-stress baseline the net heap delta is **−2,927,636 bytes** — it finished *lower* than it started. DOM nodes are flat at 96 from cycle 20 onward (net −61 versus baseline); event listeners flat at 199 (net −1). None of these show linear growth.
+**DOM nodes take a single one-time step and then stop.** 76 → 96 between the baseline read and cycle 10, then **exactly 96 for the remaining 50 cycles**. Bounded, not accumulating. Event listeners are flat at 199 throughout (net delta 0).
 
-Heap is read via the CDP `Performance.getMetrics` `JSHeapUsedSize` counter rather than `performance.memory`. That choice was forced by measurement: `performance.memory.usedJSHeapSize` reported an identical, suspiciously round `64000000` both before and after a 60-cycle run in an earlier pass — Chromium quantizes it heavily, so a "zero delta" from that source would have been meaningless. The quantized value is still recorded alongside the accurate one in the JSON for contrast (it reads a flat `123000000` throughout).
+**JS heap** drifts +512,364 bytes across cycles 10→60 — roughly 10 KB per cycle, which includes the benchmark harness's own retained sample arrays. Net delta versus baseline is +1,079,828 bytes over the whole run. (The final `resourcesAfter` read is taken separately from the cycle-60 trail sample, so the two heap figures differ slightly; both are recorded in the JSON.) Small and non-linear in shape, but this is the one metric that is not perfectly flat and it is not claimed to be.
 
-Per-cycle wall time was median 586 ms / p95 883 ms, but that is **driver-measured, including a Playwright automation round-trip for every click and readback** — it is not an in-app cost and should not be read as one.
+Heap is read via the CDP `Performance.getMetrics` `JSHeapUsedSize` counter rather than `performance.memory`. That choice was forced by measurement: `performance.memory.usedJSHeapSize` reported an identical, suspiciously round `64000000` both before and after a 60-cycle run in an earlier pass — Chromium quantizes it heavily, so a "zero delta" from that source would have been meaningless. The quantized value is still recorded alongside the accurate one in the JSON for contrast.
+
+Per-cycle wall time was n=60, min 314 ms, median 680.5 ms, p95 951 ms, max 993 ms — but that is **driver-measured, including a Playwright automation round-trip for every click and readback**. It is not an in-app cost and should not be read as one.
 
 ---
 
 ## 8. Browser: PNG capture validation
 
-**Capture timing** through the real in-app "Capture PNG" button, click to completed browser download (n=12 samples, 2 warmup): min 100 ms, median 113 ms, p95 133 ms, max 133 ms.
+**Capture timing** through the real in-app "Capture PNG" button, click to completed browser download, 2 discarded warmup runs:
+
+| Metric | n | min | median | p95 | max |
+|---|---:|---:|---:|---:|---:|
+| App download path (ms) | 12 | 95 | 174.5 | 248 | 248 |
 
 **Content validation** goes well beyond file size:
 
@@ -266,7 +322,7 @@ Across the entire browser benchmark run — readiness, interaction, capture, 60 
 
 ## 10. Measured build impact of this phase
 
-Adding the fixture registry and bundling all ten reviewed fixtures into the lab app:
+Bundling all ten reviewed fixtures into the lab app:
 
 ```text
 dist/assets/index-*.js   1,344.38 kB │ gzip: 356.93 kB   (was 1,289.41 kB / 352.97 kB)
@@ -281,7 +337,8 @@ dist/assets/index-*.js   1,344.38 kB │ gzip: 356.93 kB   (was 1,289.41 kB / 35
 - **Single machine, single configuration.** No cross-hardware, cross-GPU, or cross-browser data. Nothing here establishes a production budget.
 - **Headless only.** Frame-interval numbers reflect the headless scheduler cadence, not real display/GPU behavior under a compositor.
 - **`high-complexity` is representative, not a ceiling.** No attempt was made to find the point where this approach degrades. Where that limit lies is unmeasured.
-- **Heap figures remain approximate** despite using the accurate CDP counter — they include the benchmark harness's own retained sample arrays, which were not isolated out.
+- **Heap figures remain approximate** despite using the accurate CDP counter — they include the benchmark harness's own retained sample arrays, which were not isolated out. Heap is the one stress metric that is not perfectly flat.
+- **The one-time +20 DOM node step is unexplained.** It is bounded and does not recur across the remaining 50 cycles, but its specific cause was not chased down.
 - **Stress cycling covered mode/view/visibility/readback**, not fixture switching, window resizing, or sustained multi-hour operation.
 - **Capture pixel analysis is heuristic.** It proves the image is non-blank and structurally sound; it does not verify that the rendered geometry is *correct*. Geometric correctness is covered separately by the deterministic contour/hole assertions in the package and app unit tests.
 - **No conclusion is drawn here about adopting, revising, or rejecting this approach.** That is the deferred integration recommendation and is deliberately absent.
@@ -296,4 +353,18 @@ pnpm --filter @laserx/physical-3d-preview-lab bench:node
 pnpm --filter @laserx/physical-3d-preview-lab bench:browser
 ```
 
-Both harnesses rewrite their own section of `phase3-results.json`. The browser harness starts and stops its own preview server on port 4174 and requires the production build to exist first. Absolute timings will differ per machine; the determinism and resource-boundedness results should not.
+Both harnesses rewrite their own section of `phase3-results.json`. The browser harness starts and stops its own preview server on port 4174 and requires the production build to exist first. Absolute timings will differ per machine; the determinism, immutability, and resource-boundedness results should not.
+
+---
+
+## 13. Corrections made after the evidence-integrity review
+
+Three defects were found in the first Phase 3 submission and repaired. All numbers in this document are from harnesses re-run after those repairs.
+
+1. **The source-immutability proof was vacuous.** The harness snapshotted one project object but passed a *separately parsed* object into the converters, so the comparison proved only that an unused object stayed unchanged — and `sourceProjectUnchanged` was additionally hard-coded to `true` in the output. The check now wraps both conversions (§4), so the verified object is necessarily the converted one, the flag is derived from counted per-repeat results, and four regression tests prove the check actually fails when a converter mutates the project.
+
+2. **`medianMs` was a nearest-rank p50, not a conventional median.** For `[1,2,3,4]` it returned `2` rather than `2.5`, understating central timing while being labelled "median". A separate conventional-median helper now computes `medianMs`; p95 remains nearest-rank. Both harnesses were re-run because every even-sized series could change — visible in this document as medians ending in `.5`.
+
+3. **The high-complexity fixture's object count was reported inconsistently.** Machine-readable results said 58; `fixtureRegistry.ts` and prose said 57. The correct count is 58 (45 face + 13 backing, itemized in §2). Every statement is corrected, and the fixture test now pins the exact object count so prose and data cannot diverge again.
+
+Two earlier measurement corrections, made during the original Phase 3 work and retained here for completeness: the readiness gate (§5) and the heap metric source (§7).

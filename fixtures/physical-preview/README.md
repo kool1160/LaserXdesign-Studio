@@ -16,6 +16,6 @@ Added for the Phase 3 evidence work (see `docs/experiments/m14-physical-3d-previ
 - `multi-layer-mixed-stock.laserx` — three physical layers spanning **all three** designation kinds and three materials: `14 ga` mild steel (`1.89738 mm`), `1/4 in` aluminum (`6.35 mm`), `6 mm` acrylic. Declared depth sums to exactly `14.24738 mm`.
 - `invalid-open-contour.laserx` — deliberately open contour. Must yield zero shapes, an `OPEN_CONTOUR` finding, and `"partial"` status.
 - `invalid-self-intersecting.laserx` — deliberate bowtie self-intersection. Must yield zero shapes plus `SELF_INTERSECTION` and `UNSUPPORTED_GEOMETRY` findings.
-- `high-complexity-sign.laserx` — **representative** (not worst-case) high-complexity sign: 500×290 mm, two layers, 57 objects → 10 solid shapes with 48 interior cutouts. Face plate with 36 letter-stroke cutouts and 8 mounting holes over a backing plate with 12 vent slots.
+- `high-complexity-sign.laserx` — **representative** (not worst-case) high-complexity sign: 500×290 mm, two layers, **58 objects** → 10 solid shapes with 48 interior cutouts. Composition: face plate + 36 letter-stroke cutouts + 8 mounting holes (45) over a backing plate + 12 vent slots (13).
 
 Every fixture's reviewed properties are pinned by `apps/physical-3d-preview-lab/tests/phase3Fixtures.test.ts`, and the authoritative key/file/status list lives in `apps/physical-3d-preview-lab/src/fixtureRegistry.ts`. The lab app can load any of them via `?fixture=<key>`.

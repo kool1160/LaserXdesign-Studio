@@ -83,9 +83,13 @@ describe("reviewed physical-preview fixtures", () => {
   });
 
   it("pins the high-complexity fixture's reviewed composition", () => {
-    const assembly = buildPhysicalPreviewAssembly(
-      parseProject(readFixture("high-complexity-sign.laserx")),
-    );
+    const project = parseProject(readFixture("high-complexity-sign.laserx"));
+    // Pinned exactly: face plate + 36 letter strokes + 8 mounting holes (45)
+    // plus backing plate + 12 vent slots (13) = 58 document objects. Any
+    // documentation claiming a different count is wrong, not this.
+    expect(project.document.objects).toHaveLength(58);
+
+    const assembly = buildPhysicalPreviewAssembly(project);
     expect(assembly.status).toBe("complete");
     expect(assembly.layers).toHaveLength(2);
     const shapes = assembly.layers.reduce((sum, layer) => sum + layer.shapes.length, 0);
