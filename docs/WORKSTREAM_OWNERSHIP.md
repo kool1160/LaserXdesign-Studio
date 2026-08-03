@@ -2,204 +2,128 @@
 
 ## Status and authority
 
-This document records an explicit owner directive dated **2026-08-02**.
+This document records the owner's post-M13 implementation and review directive dated **2026-08-03**.
 
-It supplements `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, and
-`docs/status/CURRENT.md`. It does not activate a blocked milestone or weaken any
-milestone acceptance gate.
-
-When an agent, planning chat, or review chat begins work, it must read this file
-before assigning implementation ownership.
+It supplements `AGENTS.md`, Issues #44 and #37, `docs/OPERATOR_PROTOCOL.md`, and `docs/status/CURRENT.md`. It does not weaken any milestone gate.
 
 ## Current delivery gate
 
-**M13 — Windows installer, packaging, and beta hardening** remains the active
-product milestone under GitHub Issue #13.
+**M14 — Production Physical 3D Preview Integration** is the active product milestone under GitHub Issue #30 and `docs/milestones/M14-production-physical-3d-preview.md`.
 
-M14 is blocked until every M13 exit condition is satisfied, M13 is reviewed and
-merged on its exact final head, Issue #13 is closed, and the owner explicitly
-advances the project.
+M13 is complete. M15 and all later milestones remain blocked until M14 is independently audited, merged, closed, recorded complete, and explicitly advanced by the owner.
 
-## Codex stop boundary
+## Claude implementation ownership
 
-Codex owns completion and repair of the active M13 delivery gate.
+Claude is the designated implementation lead for the active M14 milestone while the owner uses expanded Claude capacity and promotional credit.
 
-After M13 is completed and merged, Codex must stop in
-`OWNER_HANDOFF_REQUIRED` state.
+Claude may implement only the next bounded M14 slice recorded in:
 
-Codex must not, without a new explicit owner authorization:
+- `docs/milestones/M14-production-physical-3d-preview.md`;
+- `docs/CLAUDE_EXECUTION_PLAN.md`;
+- Issue #30;
+- the active PR and its review findings.
 
-- begin M14 or any later milestone;
-- create an M14 implementation branch or worktree;
-- duplicate Claude's physical 3D preview research or implementation;
-- add Three.js, React Three Fiber, RepliCAD, OpenCascade.js, JSCAD, or another
-  3D/CAD dependency to the production application;
-- merge or cherry-pick the experimental 3D branch into `main`;
-- reinterpret `Continue LaserX` as permission to start M14 after M13.
+Claude must:
 
-A planning or orchestration chat must not automatically hand M14 to Codex merely
-because M13 has closed. It must report that the Codex stop boundary has been
-reached and request or read the owner's next direction.
+- start fresh slices from current `main`;
+- use one branch, one issue, and one reviewable PR per bounded slice;
+- preserve authoritative manufacturing geometry and non-mutation boundaries;
+- add tests and exact evidence;
+- stop for independent audit;
+- never merge, close Issue #30, activate M15, or approve its own work.
 
-## Claude physical 3D workstream
+Temporary capacity is an execution resource, not product authority. It does not allow speculative scope, duplicate research, parallel future milestones, or broad rewrites.
 
-Claude is the designated lead for the **physical 3D sign-preview workstream**.
+## ChatGPT planning and audit ownership
 
-The approved product boundary is the physical preview defined by:
+ChatGPT is the independent planning, review, merge, and advancement authority for now.
 
-- GitHub Issue #30 — M14 beta validation and Version 1.0 release;
-- `docs/milestones/M14-beta-validation-v1-release.md`;
-- GitHub Issue #34 — parallel physical 3D sign-preview research.
+ChatGPT owns:
 
-Claude's current authority is **parallel research only** on:
+- translating owner decisions into GitHub requirements, milestones, ADRs, issues, and status;
+- defining the next bounded Claude slice;
+- exact-head PR review;
+- CI, test, migration, architecture, security, scope, and acceptance audits;
+- posting detailed findings to GitHub;
+- returning `READY`, `REPAIR`, or `BLOCKED`;
+- merging and recording advancement only after owner command.
 
-`experiment/m14-physical-3d-preview-lab`
+ChatGPT must not treat Claude's report as proof without inspecting GitHub evidence.
 
-The research worktree and branch must remain isolated from active M13 work.
-Nothing on the experiment branch is product-ready or merge-authorized merely
-because it runs successfully.
+## Codex hold boundary
 
-Claude must understand the complete LaserX product and reuse the authoritative
-contracts already present in the repository, including:
+Codex is held from default post-M13 implementation.
 
-- editable 2D geometry;
-- canonical millimeter units;
-- physical manufacturing-layer metadata;
-- material and stock designation metadata;
-- exact normalized `thicknessMm`;
-- contour and cutability evidence;
-- SVG/DXF and production-package authority;
-- project parsing and migration rules;
-- Electron security and non-mutation boundaries.
+Codex may not begin M14 or another product milestone unless the owner explicitly assigns it a task and `docs/status/CURRENT.md` or the active issue records that assignment.
 
-Claude's write authority for this research is limited to:
+Codex remains available for a future independent repair, comparison, audit experiment, or machine-platform task only after explicit authorization.
 
-- `apps/physical-3d-preview-lab/`;
-- `packages/physical-preview-3d/`;
-- `docs/experiments/m14-physical-3d-preview/`;
-- `fixtures/physical-preview/`;
-- the experiment branch's own tests and configuration required to run those
-  isolated paths.
+## M14 physical-preview authority
 
-The root `CLAUDE.md` remains the repository-wide independent-audit charter. The
-experiment-specific builder contract is located at:
+The accepted research basis is:
 
-`apps/physical-3d-preview-lab/CLAUDE.md`
+- Issue #34 at exact head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`;
+- Issue #42 at exact head `76fa77a8edeb976b46e8e345a4a232b938768b3f`;
+- the accepted integration recommendation under `docs/experiments/m14-physical-3d-preview/`.
 
-## Technology direction
+Production direction:
 
-Claude must not build a custom 3D renderer or a general-purpose CAD kernel.
+- promote `packages/physical-preview-3d/` component by component;
+- create `packages/physical-preview-three/` for renderer conversion;
+- use Three.js plus React Three Fiber;
+- do not add a CAD kernel;
+- rewrite the production React UI against the open document;
+- use typed Electron preload/main IPC for PNG capture;
+- lazy-load the entire feature;
+- do not merge the experiment branch wholesale;
+- do not ship lab shell, benchmark hooks, fixture registry, or research fixture payloads.
 
-The default Phase 1 direction is:
+## M14 approved slice order
 
-- Three.js and React Three Fiber for rendering, cameras, interaction, lighting,
-  materials, and screenshots;
-- a pure renderer-independent LaserX-to-preview scene adapter in
-  `packages/physical-preview-3d`;
-- existing LaserX domain, geometry, project-format, cutability, and production
-  contracts as authoritative input.
+1. G0 — governance, ADR, and repository prerequisites.
+2. G1 — text-heavy scaling and topology-cost evidence.
+3. G2 — pure scene package promotion.
+4. G3 — Three renderer-adapter package.
+5. G4 — lazy desktop integration.
+6. G5 — privileged PNG capture.
+7. G6 — exact-head Windows validation and owner retest.
 
-Claude must complete the engine decision and evidence before substantial
-implementation. RepliCAD/OpenCascade.js, CascadeStudio/cascade-core, and JSCAD
-may be benchmarked only where a visualization-first extrusion pipeline cannot
-represent the approved preview truthfully.
+Claude stops after every slice. ChatGPT audits before the next slice is authorized or merged.
 
-A CAD kernel must not enter the production path without measured evidence,
-architecture review, licensing review, bundle/startup evaluation, worker and
-fallback design, and explicit owner approval.
+## Later workstreams
 
-## Approved physical-preview behavior
+The roadmap order is authoritative in `docs/MILESTONES.md`:
 
-The research and later M14 implementation may prove or deliver:
+- M15 guided onboarding and Learn Mode;
+- M16 material catalog and wood/acrylic expansion;
+- M17 process-aware manufacturability;
+- M18 downstream export profiles;
+- M19 optional AI idea-to-cuttable onboarding;
+- M20 licensing, trial, and purchase;
+- M21 community beta readiness;
+- M22 real-user usability validation;
+- M23 Version 1.0 release and launch;
+- M24 simulator-first machine platform;
+- M25 first approved controller vertical slice.
 
-- exact extrusion from canonical `thicknessMm`;
-- material-aware appearance;
-- single-layer and ordered multi-layer assemblies;
-- visible through-holes and interior cutouts;
-- orbit, pan, zoom, reset, front, back, edge, assembled, and exploded views;
-- deterministic regeneration from an unchanged authoritative project snapshot;
-- exact dimensions and assembled depth;
-- visible failure for open, self-intersecting, ambiguous, unsupported, or
-  nonphysical contours;
-- safe GPU fallback or a clear unavailable state;
-- keyboard, high-DPI, accessibility, performance, and screenshot evidence.
+No later workstream is active merely because research or a draft PR exists.
 
-The preview remains read-only and non-mutating. Preview interaction must not
-change:
+## Material research boundary
 
-- project geometry;
-- dirty state;
-- Undo/Redo history;
-- selection or editor state;
-- cutability evidence;
-- SVG or DXF output;
-- production-package output;
-- native project persistence.
+Issue #39 and draft PR #40 remain isolated inputs for M16. They are not production-merge-authorized during M14.
+
+Material-aware 3D research from Issue #42 may inform M14's current supported appearances and M16's broader truth model, but M14 must not silently absorb the M16 schema/catalog scope.
+
+## Durable operating loop
+
+1. Owner sends Claude `Continue LaserX`.
+2. Claude implements or repairs one approved slice and stops.
+3. Owner sends ChatGPT `Check LaserX`.
+4. ChatGPT posts findings to GitHub.
+5. Claude repairs on `REPAIR`.
+6. Owner sends ChatGPT `Advance LaserX` on `READY`.
+7. ChatGPT merges and records only the owner-approved next state.
 
 ## Explicit exclusions
 
-Neither the research branch nor M14 physical preview may implement:
-
-- general-purpose 3D CAD;
-- arbitrary solid or mesh editing;
-- bends, welds, bevels, embossing, or machining features;
-- STL, STEP, IGES, or 3MF manufacturing export;
-- CAM, nesting, toolpaths, G-code, or machine control;
-- a second authoritative document model;
-- silent contour repair, closing, scaling, union, discard, or reinterpretation;
-- schema changes invented solely for the experiment;
-- M13 installer or release changes.
-
-## Orchestration after M13
-
-When M13 reaches a verified `READY` verdict, the planning/review assistant may
-complete the normal M13 merge and status recording. It must then:
-
-1. stop Codex;
-2. report `OWNER_HANDOFF_REQUIRED`;
-3. verify the live state of Issue #30, Issue #34, the experiment branch, and the
-   latest Claude evidence;
-4. ask the owner whether to activate M14 and whether Claude should proceed from
-   research into product implementation;
-5. avoid assigning M14 implementation to Codex unless the owner explicitly
-   changes this directive.
-
-If the owner activates M14 with Claude:
-
-1. Claude first presents the engine decision, prototype evidence, known gaps,
-   and integration recommendation;
-2. the planning/review assistant audits that evidence;
-3. accepted architecture is recorded through an ADR and M14 issue/status update;
-4. Claude starts a fresh product implementation branch from the then-current
-   `main`, or the experiment is rebased/promoted only through an explicitly
-   reviewed plan;
-5. the experiment branch is never merged wholesale merely because it exists.
-
-## Durable GitHub locations
-
-- Active M13 gate: Issue #13 and `docs/status/CURRENT.md`
-- Future M14 gate: Issue #30 and
-  `docs/milestones/M14-beta-validation-v1-release.md`
-- Parallel Claude research: Issue #34
-- Research branch: `experiment/m14-physical-3d-preview-lab`
-- Research project brief:
-  `docs/experiments/m14-physical-3d-preview/PROJECT_BRIEF.md`
-- Engine decision:
-  `docs/experiments/m14-physical-3d-preview/ENGINE_DECISION.md`
-- Claude builder contract: `apps/physical-3d-preview-lab/CLAUDE.md`
-
-## Planning-chat instruction
-
-A planning or orchestrating chat receiving the instruction
-**"Check GitHub for new LaserX direction"** must read, in order:
-
-1. `AGENTS.md`;
-2. `docs/OPERATOR_PROTOCOL.md`;
-3. `docs/WORKSTREAM_OWNERSHIP.md`;
-4. `docs/status/CURRENT.md`;
-5. Issue #13;
-6. Issue #30;
-7. Issue #34.
-
-It must then summarize the live active gate, Codex stop boundary, Claude
-physical-preview ownership, experiment status, and next valid owner decision.
+No wholesale experiment merge, parallel product milestone, CAD kernel, general-purpose 3D CAD, solid-model export, broad CAM, machine control, licensing work, public beta work, or material-schema expansion belongs in M14 unless the M14 specification explicitly requires it.
