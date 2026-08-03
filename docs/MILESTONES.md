@@ -2,6 +2,8 @@
 
 Milestones are large, testable delivery gates. The active milestone is controlled by `docs/status/CURRENT.md`. Each milestone must leave a usable vertical slice and must pass its exit criteria before later work begins.
 
+> **Mandatory post-milestone planning context:** GitHub Issue #37 is the canonical owner direction for guided onboarding and Learn Mode, broader materials, AI-first creation, downstream flat-cut workflows, and community beta planning. It predates the isolated R&D streams and must be reviewed before interpreting, proposing, or sequencing work beyond the active milestone. It does not activate a future gate or authorize experiment merges.
+
 | ID | Name | User-visible result |
 |---|---|---|
 | M00 | Foundation | Codex-ready repository, architecture, policies, and CI guardrails |
@@ -23,3 +25,17 @@ Milestones are large, testable delivery gates. The active milestone is controlle
 | M16 | First LaserX controller vertical slice | One explicitly approved controller, machine, and process validated through dry run, hardware-in-the-loop safety tests, and one supervised job |
 
 Detailed scope and exit criteria live in `docs/milestones/Mxx-*.md`.
+
+## Post-milestone planning boundary
+
+When the owner opens the next planning boundary, Issue #37 must be evaluated alongside the completed milestone record and accepted research. The future sequence must compare, rather than automatically combine:
+
+- production integration of the physical 3D preview;
+- guided onboarding and Learn Mode;
+- acrylic, wood, MDF, plywood, and mixed-material expansion;
+- process-aware manufacturability profiles;
+- AI idea-to-manufacturable-design onboarding;
+- community beta distribution and real-user usability testing;
+- broader flat-cut market launch preparation.
+
+Experiments reduce uncertainty; they do not establish implementation priority, activate a milestone, or bypass owner approval.

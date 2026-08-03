@@ -6,6 +6,14 @@
 
 Issue #13 remains the active delivery gate. M13 is not complete and M14 is not active.
 
+## Mandatory strategic planning context
+
+GitHub Issue #37 — **Mandatory post-milestone direction: onboarding, broader materials, AI-first creation, and the flat-cut market** — is the canonical owner product-direction handoff for work beyond the active gate.
+
+Issue #37 predates and explains the isolated physical-3D, material-catalog, and material-aware-rendering research. Every planning assistant, reviewer, coding agent, and architecture agent must read it before evaluating, proposing, researching, or sequencing post-milestone work.
+
+Issue #37 does **not** activate M14 or any later milestone, authorize an experiment merge, override this active M13 gate, or establish an automatic implementation order. It preserves the owner's strategic direction so later milestone planning does not mistake governed R&D for unplanned scope expansion.
+
 ## M13 implementation — reviewed and merged
 
 The Windows installer and beta-hardening implementation was independently reviewed and merged through PR #33.
@@ -69,13 +77,19 @@ Before LaserX is sold or publicly distributed, a future commercialization gate m
 
 The existing fail-closed production-signing workflow remains dormant and available for that future decision. It is not an active M13 blocker.
 
-## Workstream ownership
+## Workstream ownership and completed research
 
 `docs/WORKSTREAM_OWNERSHIP.md` remains authoritative.
 
 After M13 is fully completed, closed, and recorded, Codex stops in `OWNER_HANDOFF_REQUIRED`. It must not begin M14 without new explicit owner authorization.
 
-Claude remains the designated lead for the physical 3D sign-preview workstream. Current Claude authority is isolated parallel research only under Issue #34 and branch `experiment/m14-physical-3d-preview-lab`. Nothing from that experiment is merge-authorized while M14 is blocked.
+Claude's original physical-3D research under Issue #34 is complete and accepted at exact head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`. The accepted result is a component-by-component promotion plan, not authorization to merge the experiment branch wholesale.
+
+Claude's material-aware 3D research under Issue #42 is also accepted at exact head `76fa77a8edeb976b46e8e345a4a232b938768b3f`. It remains isolated research and is not production-integrated or merge-authorized.
+
+The wood/acrylic material-catalog foundation remains separate under Issue #39 and draft PR #40. Its package-local TypeScript/Vitest wiring must be repaired and exact-head verified before it can support a later promotion decision.
+
+These research streams implement risk reduction within the pre-existing direction recorded in Issue #37. They do not change the active M13 gate or activate M14.
 
 ## Explicitly excluded
 
