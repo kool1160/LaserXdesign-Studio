@@ -39,9 +39,11 @@ describe("LightBurn-aligned starter taxonomy", () => {
   });
 
   it("prioritizes the wood materials laser users commonly recognize", () => {
-    expect(lightBurnStarterMaterialsForFamily("wood").map(({ materialName }) =>
-      materialName,
-    )).toEqual([
+    expect(
+      lightBurnStarterMaterialsForFamily("wood").map(({ materialName }) =>
+        materialName,
+      ),
+    ).toEqual([
       "MDF",
       "Basswood Plywood",
       "Birch Plywood",
@@ -70,16 +72,22 @@ describe("LightBurn-aligned starter taxonomy", () => {
   });
 
   it("uses the LightBurn material-thickness-description hierarchy for cuts", () => {
-    const keys = lightBurnCutLibraryKeys("acrylic-cast-clear", "Cut — polished edge");
+    const keys = lightBurnCutLibraryKeys(
+      "acrylic-cast-clear",
+      "Cut — polished edge",
+    );
     expect(keys.length).toBeGreaterThan(5);
     expect(keys[0]).toMatchObject({
       materialName: "Cast Acrylic — Clear",
       title: null,
       description: "Cut — polished edge",
     });
-    expect(keys.every(({ thicknessMm, thicknessLabel }) =>
-      thicknessMm !== null && thicknessLabel !== null,
-    )).toBe(true);
+    expect(
+      keys.every(
+        ({ thicknessMm, thicknessLabel }) =>
+          thicknessMm !== null && thicknessLabel !== null,
+      ),
+    ).toBe(true);
   });
 
   it("uses No Thickness titles for surface operations", () => {
@@ -101,7 +109,7 @@ describe("LightBurn-aligned starter taxonomy", () => {
     ]);
   });
 
-  it("keeps exact inch-to-millimeter conversion in the familiar thickness groups", () => {
+  it("keeps inch-to-millimeter conversion exact to practical precision", () => {
     const basswood = lightBurnStarterMaterialById("wood-basswood-plywood");
     const acrylic = lightBurnStarterMaterialById("acrylic-cast-clear");
     expect(
@@ -111,7 +119,7 @@ describe("LightBurn-aligned starter taxonomy", () => {
     expect(
       acrylic?.commonThicknesses.find(({ id }) => id === "3-16in")
         ?.thicknessMm,
-    ).toBe(4.762499999999999);
+    ).toBeCloseTo(4.7625, 12);
   });
 
   it("maps existing physical materials and explicitly marks planned additions", () => {
