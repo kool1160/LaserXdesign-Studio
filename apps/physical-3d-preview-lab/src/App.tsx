@@ -1,5 +1,6 @@
 import {
   buildPhysicalPreviewAssembly,
+  type PhysicalPreviewAssemblyDepthStatus,
   type PhysicalPreviewAssemblyLayer,
 } from "@laserx/physical-preview-3d";
 import { Canvas } from "@react-three/fiber";
@@ -25,6 +26,14 @@ const VIEWS: readonly PreviewView[] = ["front", "back", "edge", "perspective"];
 
 function formatMm(valueMm: number): string {
   return `${valueMm.toFixed(1)} mm`;
+}
+
+/**
+ * Never labels a `"declared-incomplete"` depth as exact, real, verified, or
+ * total — that phrasing is reserved for `"verified"` (status `"complete"`).
+ */
+function depthLabel(depthStatus: PhysicalPreviewAssemblyDepthStatus): string {
+  return depthStatus === "verified" ? "total assembled depth" : "declared stack depth — incomplete";
 }
 
 function unionBoundsMm(a: BoundsMmLike, b: BoundsMmLike): BoundsMmLike {
@@ -168,8 +177,8 @@ export function App() {
           </button>
         </div>
         <span className="lab-readout" data-testid="dimensions">
-          {formatMm(widthMm)} &times; {formatMm(heightMm)} &times; {formatMm(assembly.assembledDepthMm)}{" "}
-          total assembled depth
+          {formatMm(widthMm)} &times; {formatMm(heightMm)} &times;{" "}
+          {formatMm(assembly.assembledDepthMm)} {depthLabel(assembly.depthStatus)}
         </span>
       </div>
       <ul className="lab-layer-list" data-testid="layer-list">

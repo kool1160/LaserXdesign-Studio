@@ -90,6 +90,17 @@ test.describe("physical 3D preview lab", () => {
     await expect(layerList).toContainText("acrylic");
     await expect(layerList).toContainText("6.0 mm");
     await expect(layerList).toContainText("Face");
+
+    // A partial assembly's stack number must read as declared/incomplete —
+    // never as an exact, real, verified, or total assembled measurement.
+    const dimensions = page.getByTestId("dimensions");
+    const dimensionsText = (await dimensions.textContent()) ?? "";
+    expect(dimensionsText).toMatch(/declared/i);
+    expect(dimensionsText).toMatch(/incomplete/i);
+    expect(dimensionsText).not.toMatch(/total assembled depth/i);
+    expect(dimensionsText).not.toMatch(/exact/i);
+    expect(dimensionsText).not.toMatch(/\breal\b/i);
+    expect(dimensionsText).not.toMatch(/verified/i);
   });
 
   test("shows a clear, non-throwing fallback when WebGL is unavailable", async ({ page }) => {

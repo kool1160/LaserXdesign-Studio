@@ -357,13 +357,33 @@ export interface PhysicalPreviewAssemblyLayer extends PhysicalPreviewLayer {
  * `"complete"`. `"partial"` — at least one physical layer exists but at
  * least one produced no shapes, either because its geometry was ambiguous
  * or because it was empty; still positioned and readable (name/material/
- * thickness) and still counted in `assembledDepthMm`, just not rendered —
- * see its finding. `"unavailable"` — the document declares no physical
+ * thickness) and still occupies a declared Z slot and contributes to
+ * `assembledDepthMm`, just not rendered — see its finding, and see
+ * `depthStatus` below for why that number is not verified physical depth
+ * in this case. `"unavailable"` — the document declares no physical
  * manufacturing layers at all, so there is nothing to assemble. Never
  * invented or repaired: a missing or ambiguous layer's geometry is never
- * silently closed, simplified, or guessed.
+ * silently closed, simplified, or guessed. An empty/ambiguous layer's
+ * `assembledZRangeMm`/`explodedZRangeMm` are declared placement only — the
+ * space it *would* occupy if its geometry existed — not a rendered solid
+ * extent.
  */
 export type PhysicalPreviewAssemblyStatus = "complete" | "partial" | "unavailable";
+
+/**
+ * Mirrors `PhysicalPreviewAssemblyStatus` one-for-one but names what it
+ * means specifically for `assembledDepthMm`'s trustworthiness, so a
+ * consumer cannot read the number without also reading its confidence:
+ * `"verified"` (status `"complete"`) — every physical layer actually
+ * rendered, so `assembledDepthMm` is real, measured finished-stack depth.
+ * `"declared-incomplete"` (status `"partial"`) — `assembledDepthMm` is
+ * still the sum of every declared layer's `thicknessMm` plus spacing, but
+ * at least one layer contributed no rendered solid, so the number is
+ * declared/planned depth, not a verified physical measurement.
+ * `"unavailable"` (status `"unavailable"`) — no physical layers exist;
+ * `assembledDepthMm` is `0` and means nothing.
+ */
+export type PhysicalPreviewAssemblyDepthStatus = "verified" | "declared-incomplete" | "unavailable";
 
 export interface PhysicalPreviewAssembly {
   identity: PhysicalPreviewIdentity;
@@ -371,8 +391,18 @@ export interface PhysicalPreviewAssembly {
   status: PhysicalPreviewAssemblyStatus;
   spacing: PhysicalPreviewSpacingOptionsMm;
   layers: PhysicalPreviewAssemblyLayer[];
-  /** Sum of every physical layer's exact `thicknessMm` plus `assembledGapMm` between them. Real depth, not presentation. */
+  /**
+   * Sum of every declared physical layer's exact `thicknessMm` plus
+   * `assembledGapMm` between them. This always includes every declared
+   * layer's thickness, even one that rendered no geometry — it is
+   * verified, real finished-stack depth only when `depthStatus` is
+   * `"verified"`. When `depthStatus` is `"declared-incomplete"`, treat
+   * this as planned/declared depth, not a physical measurement. Kept for
+   * backward compatibility with the original single-status contract.
+   */
   assembledDepthMm: number;
+  /** See `PhysicalPreviewAssemblyDepthStatus` — always read alongside `assembledDepthMm`. */
+  depthStatus: PhysicalPreviewAssemblyDepthStatus;
   findings: PhysicalPreviewFinding[];
   fingerprint: string;
 }
@@ -463,6 +493,11 @@ export function buildPhysicalPreviewAssembly(
   const hasLayerWithFindings = projections.some((projection) => projection.findings.length > 0);
   const status: PhysicalPreviewAssemblyStatus =
     physicalLayers.length === 0 ? "unavailable" : hasLayerWithFindings ? "partial" : "complete";
+  // One-to-one with `status` — kept as a distinct field (rather than making
+  // callers re-derive it) specifically so `assembledDepthMm` can never be
+  // read without its confidence: see PhysicalPreviewAssemblyDepthStatus.
+  const depthStatus: PhysicalPreviewAssemblyDepthStatus =
+    status === "complete" ? "verified" : status === "partial" ? "declared-incomplete" : "unavailable";
 
   const assemblyWithoutFingerprint: Omit<PhysicalPreviewAssembly, "fingerprint"> = {
     identity: {
@@ -475,6 +510,7 @@ export function buildPhysicalPreviewAssembly(
     spacing,
     layers,
     assembledDepthMm,
+    depthStatus,
     findings,
   };
 

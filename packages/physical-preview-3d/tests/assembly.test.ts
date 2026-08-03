@@ -149,6 +149,11 @@ describe("empty physical layer handling", () => {
   it("marks the assembly partial when one physical layer is empty, with an EMPTY_PHYSICAL_LAYER finding", () => {
     const assembly = buildPhysicalPreviewAssembly(faceAndEmptyBackingProject());
     expect(assembly.status).toBe("partial");
+    // assembledDepthMm still sums every declared layer's thicknessMm, but
+    // depthStatus makes clear it is declared/planned depth here, not a
+    // verified measurement of finished geometry.
+    expect(assembly.depthStatus).toBe("declared-incomplete");
+    expect(assembly.assembledDepthMm).toBe(9);
 
     const face = assembly.layers.find((layer) => layer.layerId === FACE_ID);
     const backing = assembly.layers.find((layer) => layer.layerId === BACKING_ID);
@@ -177,8 +182,12 @@ describe("empty physical layer handling", () => {
     expect(
       assembly.findings.filter((finding) => finding.code === "EMPTY_PHYSICAL_LAYER"),
     ).toHaveLength(2);
-    // Declared thickness still contributes to the real assembled stack depth.
+    // Declared thickness still contributes to assembledDepthMm, but with
+    // every layer empty, depthStatus must never claim it is verified.
     expect(assembly.assembledDepthMm).toBe(9);
+    expect(assembly.depthStatus).toBe("declared-incomplete");
+    expect(assembly.depthStatus).not.toBe("verified");
+    expect(assembly.depthStatus).not.toBe("unavailable");
   });
 
   it("is deterministic across independently built empty-layer assemblies", () => {
@@ -203,6 +212,8 @@ describe("buildPhysicalPreviewAssembly", () => {
     expect(assembly.layers.map((layer) => layer.order)).toEqual([0, 1]);
     expect(assembly.layers.map((layer) => layer.role)).toEqual(["face", "backing"]);
     expect(assembly.status).toBe("complete");
+    // Every layer rendered, so assembledDepthMm is verified finished depth.
+    expect(assembly.depthStatus).toBe("verified");
   });
 
   it("computes deterministic assembled and exploded Z ranges with default spacing", () => {
@@ -264,6 +275,7 @@ describe("buildPhysicalPreviewAssembly", () => {
 
     const assembly = buildPhysicalPreviewAssembly(project);
     expect(assembly.status).toBe("partial");
+    expect(assembly.depthStatus).toBe("declared-incomplete");
     const face = assembly.layers.find((layer) => layer.layerId === FACE_ID);
     const backing = assembly.layers.find((layer) => layer.layerId === BACKING_ID);
     if (face === undefined || backing === undefined) throw new Error("Expected both layers.");
@@ -291,6 +303,7 @@ describe("buildPhysicalPreviewAssembly", () => {
     expect(assembly.status).toBe("unavailable");
     expect(assembly.layers).toEqual([]);
     expect(assembly.assembledDepthMm).toBe(0);
+    expect(assembly.depthStatus).toBe("unavailable");
   });
 
   it("is deterministic across independently built equivalent projects", () => {
