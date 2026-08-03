@@ -1,102 +1,129 @@
 # Current Project Status
 
-## Active gate
+## Current state
 
-**M13 — Windows Installer, Packaging, and Beta Hardening**
+**OWNER_HANDOFF_REQUIRED — M13 complete; M14 not active**
 
-Issue #13 remains the active delivery gate. M13 is not complete and M14 is not active.
+Issue #13 is closed as completed. The owner passed the repaired private-installer validation on 2026-08-03. No milestone is currently active until the owner explicitly decides whether to activate M14.
 
-## Mandatory strategic planning context
+`Continue LaserX` does not authorize Codex to begin M14. Codex stops here unless the owner explicitly reauthorizes post-M13 work.
 
-GitHub Issue #37 — **Mandatory post-milestone direction: onboarding, broader materials, AI-first creation, and the flat-cut market** — is the canonical owner product-direction handoff for work beyond the active gate.
+## M13 completion record
 
-Issue #37 predates and explains the isolated physical-3D, material-catalog, and material-aware-rendering research. Every planning assistant, reviewer, coding agent, and architecture agent must read it before evaluating, proposing, researching, or sequencing post-milestone work.
+M13 — Windows Installer, Packaging, and Beta Hardening — is complete.
 
-Issue #37 does **not** activate M14 or any later milestone, authorize an experiment merge, override this active M13 gate, or establish an automatic implementation order. It preserves the owner's strategic direction so later milestone planning does not mistake governed R&D for unplanned scope expansion.
+### Installer implementation
 
-## M13 implementation — reviewed and merged
-
-The Windows installer and beta-hardening implementation was independently reviewed and merged through PR #33.
-
+- PR: #33
 - Final reviewed head: `6cdfaf4fbf68e8c078b4b0b0cda095ea1fcad30f`
 - READY review: `4839609133`
 - Merge commit: `1231a0127a59fe87b38824d3fa11039c3a028422`
-- Repository Guard run: `30763625121`
-- M04–M13 exact-head workflows: all completed successfully
 - Verification: 290 unit/integration tests and 31/31 applicable packaged Windows Electron E2E scenarios
-- Exact-head M13 workflow: `30763625120`
-- Exact-head Windows artifact: `8838329615`
-- Artifact digest: `sha256:d3457ac6e470285e4efd4a5231b021f4aed34078fc542e2b388a4b7e8de9e601`
 
-The merged implementation delivers:
+### Persistence repair
 
-1. an assisted per-user x64 NSIS installer with stable LaserX identity, Start Menu shortcut, optional desktop shortcut, upgrade behavior, and clean uninstall;
-2. production runtime data under `%APPDATA%\LaserX Design Studio`, with default uninstall preserving actual app-created settings, encrypted credentials, recovery, logs, session data, and crash dumps, plus explicit deletion when selected;
-3. clean-installed launch, high-DPI, keyboard, representative SVG/analyze/save/DXF, upgrade, recovery, and uninstall validation;
-4. fail-closed Authenticode policy using an exact reviewed signer thumbprint, least-privilege signing-secret scope, packaged-identity inspection, schema-2 provenance, exact-tag validation, and a dormant controlled public-release workflow;
-5. local-only diagnostics, documented privacy/recovery behavior, release notes, known issues, beta feedback, dependency/security audits, and deferred auto-update.
+- PR: #35
+- Final reviewed head: `e642aa56cb70d6876a9af43024920349f0c8ab7a`
+- Merge commit: `5cf799273d55a2bc6df544d47b0fcc75d32c5d56`
+- Root cause: an unaccepted import preview could remain visible while Save serialized the blank underlying document
+- Repair: saving is blocked while vector, raster, sign-tool, or AI geometry remains an unaccepted preview; packaged regressions prove non-empty save, restart, direct reopen, identity, metadata, and correct-scale DXF export
 
-## Owner decision — private testing only
+### Repository maintenance prerequisite
 
-On 2026-08-02 the owner confirmed that LaserX is currently for personal testing on owner-controlled computers only. The owner has not purchased a Windows code-signing certificate and does not need trusted public signing for the current phase.
+- PR: #38
+- Merge commit: `a95a90e702ebc96ea4db46b918324327b118f5ef`
+- Issue #36 closed
+- Windows case-colliding PR-template paths resolved
+- Tracked-path collision guard added
 
-For the active M13 private-testing boundary:
+### Fresh repaired installer evidence
 
-- an unsigned installer or CI-generated disposable self-signed installer is acceptable;
-- Windows SmartScreen, `Unknown Publisher`, and certificate-trust warnings are expected and accepted;
-- the artifact must be treated as private test software, not a trusted public beta;
-- no `.pfx`, production signing secret, trusted signer variable, public tag, or public GitHub prerelease is required to close M13;
-- LaserX must not be sold or publicly distributed under this private-test exception.
+- M13 workflow: `30772354097`
+- Artifact: `8841019251`
+- Digest: `sha256:c5d4b890f532d73ac56adaa79f880ef9930c057aeb89578740d41d8eb2caab19`
 
-Trusted Windows code signing and controlled public publication are deferred until the owner decides to sell or distribute LaserX outside the controlled private test group. ADR 0023 records the durable distinction between private testing and future public/commercial release.
+## Owner hands-on validation — passed
 
-## Remaining M13 boundary — owner hands-on private validation
+The owner completed the repaired private-installer workflow on an owner-controlled Windows machine:
 
-No additional feature implementation is authorized. The remaining M13 work is:
+1. installed the fresh repaired installer and accepted the expected Windows trust warning;
+2. launched LaserX from the Start Menu;
+3. imported a representative DXF;
+4. explicitly accepted the import preview before saving;
+5. ran manufacturing analysis;
+6. saved a non-empty native project as `m13 test.laserx`;
+7. closed and restarted LaserX;
+8. reopened the saved project and confirmed the geometry returned instead of reopening blank;
+9. confirmed the project identity `m13 test`, saved state, and file path;
+10. exported `m13 test.dxf` after reopening;
+11. ran the assisted uninstaller and confirmed successful completion;
+12. confirmed the documented application-data choice was presented.
 
-1. obtain the current private-test installer artifact from reviewed `main` evidence;
-2. install it on at least one owner-controlled Windows machine;
-3. accept the expected Windows trust warning;
-4. launch LaserX from the Start Menu;
-5. complete a representative import/analyze/save/export workflow;
-6. verify normal uninstall and the documented app-data choice;
-7. record the owner-observed result in Issue #13.
+This evidence satisfies the private M13 exit gate. Issue #13 is closed.
 
-After that private validation is recorded, Issue #13 may close and M13 may complete through explicit owner advancement.
+## Private-testing and commercialization boundary
 
-Until those steps succeed:
+LaserX remains private test software for owner-controlled machines.
 
-- M13 remains open;
-- M14 remains blocked;
-- Codex must not begin M14;
-- the private artifact must not be presented as a public trusted release.
+For this private phase:
 
-## Future commercialization boundary
+- unsigned or disposable CI-self-signed installers are acceptable;
+- SmartScreen, `Unknown Publisher`, and certificate-trust warnings are expected;
+- no purchased certificate, production signing secrets, public tag, or public prerelease was required to complete M13.
 
-Before LaserX is sold or publicly distributed, a future commercialization gate must require a trusted Windows signing identity or separately accepted managed-signing design, exact signer validation, production provenance and checksums, controlled tagged publication, and appropriate public support/distribution documentation.
+Before public sale or distribution, LaserX must add trusted Windows signing or a separately accepted managed-signing design, exact signer validation, production provenance and checksums, controlled tagged publication, and public distribution/support documentation.
 
-The existing fail-closed production-signing workflow remains dormant and available for that future decision. It is not an active M13 blocker.
+## Mandatory strategic planning context
 
-## Workstream ownership and completed research
+GitHub Issue #37 is the canonical post-milestone product-direction handoff. Every planning assistant, reviewer, coding agent, and architecture agent must read it before proposing or sequencing post-M13 work.
 
-`docs/WORKSTREAM_OWNERSHIP.md` remains authoritative.
+Issue #37 preserves direction for:
 
-After M13 is fully completed, closed, and recorded, Codex stops in `OWNER_HANDOFF_REQUIRED`. It must not begin M14 without new explicit owner authorization.
+- guided onboarding and Learn Mode;
+- AI-first idea-to-manufacturable-design workflows;
+- acrylic, wood, MDF, plywood, and broader material expansion;
+- process-aware manufacturing guidance;
+- downstream software export profiles;
+- broader flat-cut market positioning;
+- community beta and real-user usability testing.
 
-Claude's original physical-3D research under Issue #34 is complete and accepted at exact head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`. The accepted result is a component-by-component promotion plan, not authorization to merge the experiment branch wholesale.
+It does not activate M14 or any later milestone and does not establish an automatic implementation order.
 
-Claude's material-aware 3D research under Issue #42 is also accepted at exact head `76fa77a8edeb976b46e8e345a4a232b938768b3f`. It remains isolated research and is not production-integrated or merge-authorized.
+## Completed and isolated research
 
-The wood/acrylic material-catalog foundation remains separate under Issue #39 and draft PR #40. Its package-local TypeScript/Vitest wiring must be repaired and exact-head verified before it can support a later promotion decision.
+### Physical 3D preview
 
-These research streams implement risk reduction within the pre-existing direction recorded in Issue #37. They do not change the active M13 gate or activate M14.
+Claude's Issue #34 research is complete and accepted at exact head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`.
 
-## Explicitly excluded
+Accepted direction:
 
-Do not add broad CAD, universal file-format support, DWG, general-purpose materials databases, new AI providers, physical 3D production implementation, CAM, nesting, G-code, machine control, marketplace, licensing, account-platform, public distribution infrastructure, or unrelated feature expansion. M14 owns the approved physical 3D sign viewer, real-world beta validation, and stable Version 1.0 publication decision.
+- adopt `@laserx/physical-preview-3d` largely intact;
+- promote renderer conversion into a new `@laserx/physical-preview-three` package;
+- use Three.js plus React Three Fiber;
+- do not add a CAD kernel for M14;
+- rewrite the production desktop UI against the open document;
+- move PNG capture through typed Electron preload/main IPC;
+- lazy-load the preview;
+- do not merge the experiment branch wholesale;
+- keep the lab shell, benchmark hooks, fixture registry, and bundled research fixtures out of production.
 
-## M13 exit rule
+### Material-aware 3D research
 
-Do not advance to M14 until the owner completes private hands-on installer validation, the result is recorded, Issue #13 is closed, this file records completion, and the owner explicitly decides the post-M13 handoff.
+Issue #42 research is accepted at exact head `76fa77a8edeb976b46e8e345a4a232b938768b3f`. It remains isolated and is not production-integrated or merge-authorized.
 
-Trusted public signing and public/commercial publication are deferred and are not current M13 exit requirements.
+### Material catalog
+
+Issue #39 and draft PR #40 remain separate isolated work. They do not activate a production material-expansion milestone or authorize schema/UI/export integration.
+
+## Next owner decision
+
+The owner must explicitly choose the next active gate.
+
+The expected decision is whether to activate M14 — Beta Validation and Version 1.0 Release — and authorize the staged component-by-component physical 3D promotion plan on fresh reviewed branches.
+
+Until that explicit decision:
+
+- M14 remains inactive;
+- Codex remains stopped in `OWNER_HANDOFF_REQUIRED`;
+- no experiment branch may be merged wholesale;
+- no production 3D, material, onboarding, export-profile, CAD, CAM, or machine-control implementation is authorized.
