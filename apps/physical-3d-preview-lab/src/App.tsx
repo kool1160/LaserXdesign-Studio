@@ -3,9 +3,11 @@ import {
   type PhysicalPreviewAssemblyDepthStatus,
   type PhysicalPreviewAssemblyLayer,
 } from "@laserx/physical-preview-3d";
-import { Canvas } from "@react-three/fiber";
-import { useEffect, useMemo, useState } from "react";
+import { Canvas, type RootState } from "@react-three/fiber";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { buildCaptureFilename, type AssemblyMode } from "./captureFilename";
+import { capturePreviewPng, downloadCapturedPng } from "./capturePng";
 import { CameraRig } from "./CameraRig";
 import type { PreviewView } from "./cameraPose";
 import { loadFixtureProject } from "./loadFixtureProject";
@@ -13,8 +15,12 @@ import { materialAppearance } from "./materialAppearance";
 import { buildLayerGeometries, type LayerShapeGeometry } from "./sceneToThree";
 import { isWebglAvailable } from "./webgl";
 
-type AssemblyMode = "assembled" | "exploded";
 type BoundsMmLike = NonNullable<PhysicalPreviewAssemblyLayer["boundsMm"]>;
+
+type CaptureStatus =
+  | { kind: "idle" }
+  | { kind: "success"; filename: string }
+  | { kind: "error"; message: string };
 
 const VIEW_LABELS: Record<PreviewView, string> = {
   front: "Front",
@@ -23,6 +29,10 @@ const VIEW_LABELS: Record<PreviewView, string> = {
   perspective: "Perspective",
 };
 const VIEWS: readonly PreviewView[] = ["front", "back", "edge", "perspective"];
+
+/** Bounded to [1, 2]: renders crisply on standard/retina displays without
+ * paying full native resolution on very-high-DPR devices (e.g. 3x phones). */
+const DPR_RANGE: [number, number] = [1, 2];
 
 function formatMm(valueMm: number): string {
   return `${valueMm.toFixed(1)} mm`;
@@ -73,11 +83,29 @@ function WebglUnavailable() {
   );
 }
 
+function ContextLostOverlay() {
+  return (
+    <div className="lab-context-lost-overlay" role="alert" data-testid="context-lost">
+      <h2>3D preview lost its graphics context</h2>
+      <p>
+        The browser reclaimed the WebGL context, so rendering paused. Nothing in
+        the LaserX project was changed, and the readouts above remain accurate.
+        The preview will resume automatically if the browser restores the
+        context.
+      </p>
+    </div>
+  );
+}
+
 export function App() {
   const [webglAvailable] = useState(() => isWebglAvailable());
   const [view, setView] = useState<PreviewView>("perspective");
   const [mode, setMode] = useState<AssemblyMode>("assembled");
   const [resetToken, setResetToken] = useState(0);
+  const [hiddenLayerIds, setHiddenLayerIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const [contextLost, setContextLost] = useState(false);
+  const [captureStatus, setCaptureStatus] = useState<CaptureStatus>({ kind: "idle" });
 
   const project = useMemo(() => loadFixtureProject(), []);
   const assembly = useMemo(() => buildPhysicalPreviewAssembly(project), [project]);
@@ -105,6 +133,57 @@ export function App() {
     [geometriesByLayer],
   );
 
+  const handleCreated = useCallback((state: RootState) => {
+    setCanvasElement(state.gl.domElement);
+  }, []);
+
+  // Runtime WebGL context-loss handling: preventDefault() signals the
+  // browser we want restoration attempted; state drives a readout-
+  // preserving overlay instead of an uncaught render-loop failure.
+  useEffect(() => {
+    if (canvasElement === null) return;
+    const handleLost = (event: Event) => {
+      event.preventDefault();
+      setContextLost(true);
+    };
+    const handleRestored = () => {
+      setContextLost(false);
+    };
+    canvasElement.addEventListener("webglcontextlost", handleLost);
+    canvasElement.addEventListener("webglcontextrestored", handleRestored);
+    return () => {
+      canvasElement.removeEventListener("webglcontextlost", handleLost);
+      canvasElement.removeEventListener("webglcontextrestored", handleRestored);
+    };
+  }, [canvasElement]);
+
+  const toggleLayerVisibility = (layerId: string) => {
+    setHiddenLayerIds((current) => {
+      const next = new Set(current);
+      if (next.has(layerId)) next.delete(layerId);
+      else next.add(layerId);
+      return next;
+    });
+  };
+
+  const handleCapture = () => {
+    if (canvasElement === null) {
+      setCaptureStatus({ kind: "error", message: "The preview canvas is not ready yet." });
+      return;
+    }
+    const filename = buildCaptureFilename({ projectName: project.project.name, view, mode });
+    const result = capturePreviewPng(canvasElement, filename);
+    if (!result.ok) {
+      setCaptureStatus({
+        kind: "error",
+        message: result.errorMessage ?? "PNG capture failed.",
+      });
+      return;
+    }
+    downloadCapturedPng(document, result);
+    setCaptureStatus({ kind: "success", filename: result.filename });
+  };
+
   if (assembly.status === "unavailable") {
     return (
       <div className="lab-app">
@@ -116,7 +195,9 @@ export function App() {
     );
   }
 
-  const overallBounds = assembly.layers.reduce<BoundsMmLike | null>((current, layer) => {
+  const visibleLayers = assembly.layers.filter((layer) => !hiddenLayerIds.has(layer.layerId));
+
+  const overallBounds = visibleLayers.reduce<BoundsMmLike | null>((current, layer) => {
     if (layer.boundsMm === null) return current;
     return current === null ? layer.boundsMm : unionBoundsMm(current, layer.boundsMm);
   }, null);
@@ -176,16 +257,42 @@ export function App() {
             Exploded
           </button>
         </div>
+        <button type="button" data-testid="capture-png" onClick={handleCapture}>
+          Capture PNG
+        </button>
         <span className="lab-readout" data-testid="dimensions">
           {formatMm(widthMm)} &times; {formatMm(heightMm)} &times;{" "}
           {formatMm(assembly.assembledDepthMm)} {depthLabel(assembly.depthStatus)}
         </span>
       </div>
+      {captureStatus.kind !== "idle" && (
+        <div
+          className={
+            captureStatus.kind === "success" ? "lab-status-banner" : "lab-warning-banner"
+          }
+          role="status"
+          data-testid="capture-status"
+        >
+          {captureStatus.kind === "success"
+            ? `Saved ${captureStatus.filename}`
+            : captureStatus.message}
+        </div>
+      )}
       <ul className="lab-layer-list" data-testid="layer-list">
         {assembly.layers.map((layer) => (
           <li key={layer.layerId} data-testid={`layer-${layer.layerId}`}>
-            <strong>{layer.name}</strong> — {layer.material.material} —{" "}
-            {formatMm(layer.thicknessMm)}
+            <label>
+              <input
+                type="checkbox"
+                checked={!hiddenLayerIds.has(layer.layerId)}
+                data-testid={`layer-visibility-${layer.layerId}`}
+                onChange={() => {
+                  toggleLayerVisibility(layer.layerId);
+                }}
+              />
+              <strong>{layer.name}</strong> — {layer.material.material} —{" "}
+              {formatMm(layer.thicknessMm)}
+            </label>
           </li>
         ))}
       </ul>
@@ -200,7 +307,9 @@ export function App() {
         {webglAvailable ? (
           <Canvas
             camera={{ fov: 45, near: 1, far: distance * 20 }}
-            gl={{ antialias: true }}
+            gl={{ antialias: true, preserveDrawingBuffer: true }}
+            dpr={DPR_RANGE}
+            onCreated={handleCreated}
             data-testid="preview-canvas"
           >
             <color attach="background" args={["#2b2b2b"]} />
@@ -210,7 +319,7 @@ export function App() {
               position={[-distance, distance * 0.5, -distance]}
               intensity={0.4}
             />
-            {assembly.layers.map((layer) => {
+            {visibleLayers.map((layer) => {
               const zRange =
                 mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;
               const appearance = materialAppearance(layer.material.material);
@@ -241,6 +350,7 @@ export function App() {
         ) : (
           <WebglUnavailable />
         )}
+        {contextLost && <ContextLostOverlay />}
       </div>
     </div>
   );

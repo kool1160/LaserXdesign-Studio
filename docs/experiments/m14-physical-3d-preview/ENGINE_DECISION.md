@@ -223,3 +223,71 @@ No measurable regression — within normal local-machine run-to-run noise. Still
 - Doc comments on `PhysicalPreviewAssemblyStatus`, `assembledDepthMm`, and the new `depthStatus` type were rewritten to state this explicitly, and the "real physical stack depth" phrase above (in the Phase 2 slice 2 section) was corrected.
 
 **Regression coverage added:** `assembly.test.ts` now asserts `depthStatus` for every existing status case — `"verified"` for a fully complete two-layer assembly, `"declared-incomplete"` for one-empty and all-empty assemblies (explicitly asserting it is neither `"verified"` nor `"unavailable"`), `"declared-incomplete"` for an ambiguous (open-contour) layer, and `"unavailable"` for zero declared physical layers — all covered by the same determinism/immutability assertions already in place (whole-object `toEqual` plus fingerprint equality). The Playwright partial-assembly test now asserts the dimensions readout text matches `/declared/i` and `/incomplete/i` and does **not** match `/total assembled depth/i`, `/exact/i`, `/\breal\b/i`, or `/verified/i`; the existing complete-fixture tests continue to assert the exact `"9.0 mm total assembled depth"` text, unchanged.
+
+## Final Phase 2 slice — visibility, accessibility, DPR, PNG capture, context loss, screenshots (2026-08-02/03)
+
+Completed on the same branch, per the READY review authorizing the final browser-prototype requirements. Scope is deliberately the remaining browser-prototype items only — no Phase 3, no integration recommendation, no schema/main/desktop changes.
+
+### Per-layer visibility (presentation-only)
+
+Each layer in the readout list has a native `<input type="checkbox">` (in `App.tsx`) toggling membership in a `hiddenLayerIds` React state `Set`. Hidden layers are excluded only from the JSX render list (`assembly.layers.filter(...)` before mapping to `<group>`/`<mesh>`) and from the visible-bounds calculation used for the width/height readout and camera framing. Nothing about `assembly`, `geometriesByLayer`, or `assembledDepthMm`/`depthStatus` changes when toggling visibility — confirmed by a Playwright test asserting the depth readout stays fixed at `"9.0 mm total assembled depth"` while the width/height readout changes to reflect only the visible layer(s)' footprint. Geometry for a hidden layer is *not* disposed (only unmounted from render) so it can be shown again without rebuilding.
+
+### Keyboard accessibility
+
+All controls (view buttons, mode toggle, reset, capture, layer-visibility checkboxes) are native `<button>`/`<input type="checkbox">` elements, which are keyboard-operable (`Tab` to focus, `Enter`/`Space` to activate) without any custom key handling — verified directly with Playwright tests that `.focus()` a control, assert `toBeFocused()`, dispatch `Enter`/`Space` via `page.keyboard.press`, and assert the resulting `aria-pressed`/`checked` state, proving focus is not lost or redirected by the resulting re-render.
+
+### Bounded device-pixel-ratio policy
+
+`<Canvas dpr={[1, 2]}>` — React Three Fiber clamps the actual render resolution to at most 2x CSS pixels regardless of the device's real `devicePixelRatio`, avoiding full-resolution rendering cost on 3x+ mobile/high-DPI screens while staying crisp on 1x/2x displays. Verified with three Playwright `deviceScaleFactor` contexts (1, 2, and 3): the canvas backing-store pixel size matches CSS size × 1 and × 2 respectively, and at a simulated 3x device the backing store stays clamped at 2x, not 3x — the actual bounding behavior, not just "works at 1 and 2."
+
+### Customer-preview PNG capture
+
+`src/captureFilename.ts` (pure, unit-tested) builds a deterministic `laserx-preview-<project-slug>-<view>-<mode>.png` name — same inputs always produce the same name. `src/capturePng.ts` (`capturePreviewPng`, unit-tested against a mock canvas-like object) validates the canvas has nonzero dimensions, catches and reports a thrown `toDataURL()` error without crashing, rejects the `"data:,"` empty-canvas sentinel, and rejects an implausibly small result (`< 64` decoded bytes) — all before attempting a download, so the "Capture PNG" button always ends in either a real download or a specific, user-visible error message (`data-testid="capture-status"`), never a silent no-op.
+
+**Documented readback tradeoff:** the `<Canvas>` WebGL context is created with `preserveDrawingBuffer: true` specifically so `toDataURL()` reads the actual last-rendered frame instead of a browser-cleared buffer — the accepted cost is the renderer retaining its drawing buffer every frame instead of discarding it, a small, deliberate cost for a capture-capable research lab, not a shipped product default.
+
+Download delivery converts the captured `data:` URL into a `Blob`/object URL (`URL.createObjectURL`), which Chromium recognizes as a real download far more reliably than a large inline `data:` URI in headless/automated contexts — confirmed necessary during this slice's own Playwright testing, where the `data:`-URI approach silently failed to trigger a `download` event at all. The temporary anchor element is removed immediately after the click completes; the object URL is revoked automatically on a bounded 5-second timer rather than synchronously, because revoking it immediately after `click()` risks canceling the download handoff in some engines — still bounded cleanup, not an indefinite leak.
+
+### Runtime WebGL context-loss handling
+
+`App.tsx` attaches `webglcontextlost`/`webglcontextrestored` listeners to the R3F-managed canvas element (obtained via `Canvas`'s `onCreated` callback) in a `useEffect` that removes them on unmount or when the canvas identity changes. The `webglcontextlost` handler calls `event.preventDefault()` (required by the WebGL spec to signal the browser that the app wants restoration attempted) and renders a distinct, readout-preserving overlay (`data-testid="context-lost"`) *over* the still-mounted canvas area — the toolbar, layer list, dimensions, and warning banner all remain visible and accurate underneath. `webglcontextrestored` clears the overlay. Verified with a Playwright test that dispatches synthetic `webglcontextlost`/`webglcontextrestored` events directly on the canvas element (a simulated event, not a real GPU driver crash — documented as such) and asserts zero uncaught `pageerror` events throughout, plus that the dimensions/layer-list readouts remain correct while the overlay is showing.
+
+### Material appearance coverage
+
+`materialAppearance.ts`'s `Record<ManufacturingMaterial, MaterialAppearance>` was already exhaustive by construction (TypeScript rejects a missing or extra key against domain's current union), but had no direct test coverage. `materialAppearance.test.ts` now parametrically tests all six current values — `mild-steel`, `stainless-steel`, `aluminum`, `wood`, `acrylic`, `other` — asserting a valid hex color, in-range metalness/roughness/opacity, a visually distinct color per material, determinism, and that `acrylic` is the only transparent/reduced-opacity material. No `galvanized-steel` or other value was added: domain's `ManufacturingMaterial` union does not currently declare one, and inventing a schema value here would be exactly the kind of fabrication this experiment's boundary forbids.
+
+### Committed screenshot evidence
+
+`docs/experiments/m14-physical-3d-preview/screenshots/` contains five real, captured (not mocked or hand-drawn) PNGs from the two-layer fixture — `front-assembled`, `back-assembled`, `edge-assembled`, `perspective-assembled`, `perspective-exploded` — each 960×640 CSS px at device-pixel-ratio 1, 11.6–18.8 KB, alongside `manifest.json` recording the source fixture path, viewport, device-pixel-ratio, and per-file view/mode/pixel-dimensions/byte-length/SHA-256 digest. Visually verified during this session: the front view shows the face plate's through-hole; the back view shows it faintly through the translucent acrylic backing alongside the backing's own rectangular slot cutout; the edge view shows both layers' relative thickness side-on with a visible exploded gap in the exploded capture.
+
+### Cleanup, confirmed complete
+
+- **Geometry:** unchanged from the prior slice — `entry.geometry.dispose()` for every generated `ExtrudeGeometry`, in a `useEffect` cleanup keyed on the memoized `geometriesByLayer`, so disposal runs whenever the fixture/assembly changes or the component unmounts. Hiding a layer does not dispose its geometry (only unmounts its render), so re-showing it doesn't require rebuilding.
+- **Materials:** declared via JSX (`<meshStandardMaterial>`), which React Three Fiber disposes automatically when the owning `<mesh>` unmounts or is replaced — unchanged from the prior slice, still correct with the new visibility filter (hiding a layer unmounts its meshes, so R3F disposes those materials; re-showing recreates fresh ones, a deliberate, cheap tradeoff versus manual material caching for this scope).
+- **Listeners:** the two new `webglcontextlost`/`webglcontextrestored` listeners are added and removed in the same `useEffect`, symmetric with the existing geometry-disposal pattern.
+- **Temporary capture resources:** the download anchor element and its object URL are both cleaned up as described above (anchor removed synchronously after click; object URL revoked on a bounded 5-second timer).
+
+### Measured bundle size and startup delta (`pnpm --filter @laserx/physical-3d-preview-lab build`)
+
+```text
+dist/assets/index-*.js   1,289.41 kB │ gzip: 352.97 kB   (was 1,286.14 kB / 351.73 kB)
+build time: 440ms
+```
+
++3.27 kB raw / +1.24 kB gzip for the entire final slice (visibility toggles, keyboard test coverage needs no runtime code, DPR prop, PNG capture pipeline, context-loss handling) — no new runtime dependency was added.
+
+### Measured startup and capture timing delta
+
+Same methodology as prior slices (Playwright, headless Chromium, `vite preview`):
+
+| Run | `window.onload` | Canvas visible |
+|---|---|---|
+| Cold | 111 ms (was 180 ms) | 166 ms (was 282 ms) |
+| Warm | 21 ms (was 29 ms) | 54 ms (was 84 ms) |
+| Warm again | 18 ms (was 29 ms) | 45 ms (was 71 ms) |
+
+These are faster than the prior slice's numbers, which reflects normal local-machine run-to-run variance (background load, OS caching), not a real improvement attributable to this slice's changes — reported honestly as measured, not attributed to a specific optimization.
+
+New measurement — PNG capture round-trip (button click to completed browser download event, same methodology): **69 ms**, single-sample, this machine, for the 960×640 default viewport used in this session's testing.
+
+Still local-machine, single-sample measurements, not a CI-tracked performance budget.

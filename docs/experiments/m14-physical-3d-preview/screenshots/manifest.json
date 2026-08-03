@@ -1,0 +1,56 @@
+{
+  "generatedAt": "2026-08-03T04:01:47.588Z",
+  "fixture": "fixtures/physical-preview/two-layer-face-backing.laserx",
+  "viewportCssPx": {
+    "width": 960,
+    "height": 640
+  },
+  "deviceScaleFactor": 1,
+  "captures": [
+    {
+      "file": "front-assembled.png",
+      "view": "front",
+      "mode": "assembled",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 16649,
+      "sha256": "bc169b16d27492e44d2d0961568f6f8d9e2ca26441d54679ac24a07ed4228f82"
+    },
+    {
+      "file": "back-assembled.png",
+      "view": "back",
+      "mode": "assembled",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 13291,
+      "sha256": "128e9cd6b41272737f5fc82b7c7a815ed3f15b65c57eb5e8c4cef00ca89ffa8b"
+    },
+    {
+      "file": "edge-assembled.png",
+      "view": "edge",
+      "mode": "assembled",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 11594,
+      "sha256": "eeb75ecf4be2965a61784a64f19af1df92abcc5ef92daaf935d418dc1109b307"
+    },
+    {
+      "file": "perspective-assembled.png",
+      "view": "perspective",
+      "mode": "assembled",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 18833,
+      "sha256": "1610c7ccbe054a6b5cef9ca87ab7682dd9ce49ba045a59008864a236484bb4b0"
+    },
+    {
+      "file": "perspective-exploded.png",
+      "view": "perspective",
+      "mode": "exploded",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 17508,
+      "sha256": "be3e8151634ac63c7ea9b04373f399f00fcd1de8bfbdfa3e4f7925f108334dc8"
+    }
+  ]
+}
