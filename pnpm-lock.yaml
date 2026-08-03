@@ -126,6 +126,9 @@ importers:
       '@laserx/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@laserx/material-catalog':
+        specifier: workspace:*
+        version: link:../../packages/material-catalog
       '@laserx/physical-preview-3d':
         specifier: workspace:*
         version: link:../../packages/physical-preview-3d
@@ -358,6 +361,8 @@ importers:
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
+
+  packages/material-catalog: {}
 
   packages/physical-preview-3d:
     dependencies:

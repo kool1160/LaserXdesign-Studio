@@ -1,0 +1,132 @@
+{
+  "generatedAt": "2026-08-03T15:33:42.404Z",
+  "viewportCssPx": {
+    "width": 960,
+    "height": 640
+  },
+  "deviceScaleFactor": 1,
+  "browser": "chromium 151.0.7922.34",
+  "catalogSourceHead": "17c78a259e99e711b0e035dc5b6824ae0e2073b8",
+  "captures": [
+    {
+      "file": "wood-baltic-birch.png",
+      "fixture": "material-swatch-wood",
+      "catalogMaterialId": "wood-baltic-birch-plywood",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 16368,
+      "sha256": "0d4593bacae82c5505ea16f39ea2691a68e762c59fe83fa9358297c370b4b1f9",
+      "note": "Wood — opaque, diffuse grain tone."
+    },
+    {
+      "file": "wood-mdf.png",
+      "fixture": "material-swatch-wood",
+      "catalogMaterialId": "wood-mdf",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 15887,
+      "sha256": "170851e8cdb3049b1bb204f8bc3d44e3f0df282e19ac820290ad09c5303224fd",
+      "note": "Wood — MDF, darker and rougher than birch."
+    },
+    {
+      "file": "acrylic-cast-clear.png",
+      "fixture": "material-swatch-acrylic",
+      "catalogMaterialId": "acrylic-cast-clear",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 18265,
+      "sha256": "706fa633ed37e810b217b45acb965fcfad773460cf92654199d72abae7f995b2",
+      "note": "Clear acrylic — transmits the dark studio background."
+    },
+    {
+      "file": "acrylic-cast-translucent.png",
+      "fixture": "material-swatch-acrylic",
+      "catalogMaterialId": "acrylic-cast-translucent",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 21229,
+      "sha256": "02c9a07ba9790b096dd5ebca25825eb8c88eb0d71b4e8dd7e55d6d51923a25c3",
+      "note": "Translucent acrylic — diffused colour, partial transmission."
+    },
+    {
+      "file": "acrylic-frosted.png",
+      "fixture": "material-swatch-acrylic",
+      "catalogMaterialId": "acrylic-frosted",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 17432,
+      "sha256": "c33890feaf8fb52f8cc1cd4421a03e7afbb91419abc94111580725cfd380e048",
+      "note": "Frosted acrylic — high roughness scatters light."
+    },
+    {
+      "file": "acrylic-mirrored.png",
+      "fixture": "material-swatch-acrylic",
+      "catalogMaterialId": "acrylic-mirrored",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 23924,
+      "sha256": "bc61af98f3a8900eee8fa3da3f9aa2ad90d59f06ea23114b4f43089017403733",
+      "note": "Mirrored acrylic — reflective, uses the generated environment."
+    },
+    {
+      "file": "mixed-assembly-perspective.png",
+      "fixture": "material-mixed-assembly",
+      "catalogMaterialId": null,
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 25710,
+      "sha256": "0cf67291129d816223741ba855269b7130c9a38a9f0a8fb5f9ac435431b764ce",
+      "note": "Mixed stack: mirrored face, clear spacer, translucent diffuser, MDF backing."
+    },
+    {
+      "file": "mixed-assembly-exploded.png",
+      "fixture": "material-mixed-assembly",
+      "catalogMaterialId": null,
+      "mode": "exploded",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 29313,
+      "sha256": "d918c8b4cdc1a97e448e2f3b07f7b53db3dc9820e53f1d375dc0b88d5eff01a1",
+      "note": "Same stack exploded; per-layer materials remain distinct."
+    },
+    {
+      "file": "mixed-assembly-edge.png",
+      "fixture": "material-mixed-assembly",
+      "catalogMaterialId": null,
+      "mode": "assembled",
+      "view": "edge",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 16947,
+      "sha256": "ca943eb36ea72896747c6aceadc9849b680998c3b5899fa669d1c70fdc9abfb8",
+      "note": "Edge view showing exact per-layer thickness across materials."
+    },
+    {
+      "file": "unknown-material-fallback.png",
+      "fixture": "material-swatch-wood",
+      "catalogMaterialId": "definitely-not-a-material",
+      "mode": "assembled",
+      "view": "perspective",
+      "widthPx": 960,
+      "heightPx": 640,
+      "byteLength": 20861,
+      "sha256": "1b11a2c953a6665f6540374e4cc37fad351ceaf002952b3d5c08df3a8542c0f3",
+      "note": "Unknown catalog ID — neutral visible fallback plus a finding."
+    }
+  ]
+}

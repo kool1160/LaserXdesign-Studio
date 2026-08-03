@@ -112,3 +112,8 @@ body,
 .lab-context-lost-overlay p {
   max-width: 32rem;
 }
+
+.lab-material-fallback {
+  color: #ffd479;
+  font-style: italic;
+}

@@ -76,6 +76,27 @@ export const FIXTURE_REGISTRY: readonly FixtureDescriptor[] = [
       "Representative high-complexity sign: 58 objects across two layers, 10 solid shapes, 48 interior cutouts.",
     expectedStatus: "complete",
   },
+  {
+    key: "material-swatch-wood",
+    file: "material-swatch-wood.laserx",
+    purpose:
+      "Single wood layer used to present each wood catalog material on an identical shape.",
+    expectedStatus: "complete",
+  },
+  {
+    key: "material-swatch-acrylic",
+    file: "material-swatch-acrylic.laserx",
+    purpose:
+      "Single acrylic layer used to present each acrylic catalog material on an identical shape.",
+    expectedStatus: "complete",
+  },
+  {
+    key: "material-mixed-assembly",
+    file: "material-mixed-assembly.laserx",
+    purpose:
+      "Four-layer mixed-material stack: mirrored face, clear spacer, translucent diffuser, opaque wood backing.",
+    expectedStatus: "complete",
+  },
 ];
 
 export function fixtureByKey(key: string): FixtureDescriptor | undefined {

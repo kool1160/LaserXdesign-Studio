@@ -205,6 +205,81 @@ describe("empty physical layer handling", () => {
   });
 });
 
+describe("ephemeral catalog material identifiers", () => {
+  it("defaults every layer to null when no map is supplied", () => {
+    const assembly = buildPhysicalPreviewAssembly(twoLayerProject());
+    expect(assembly.layers.map((layer) => layer.catalogMaterialId)).toEqual([null, null]);
+  });
+
+  it("carries supplied identifiers through verbatim, per layer", () => {
+    const assembly = buildPhysicalPreviewAssembly(twoLayerProject(), {
+      catalogMaterialIds: { [FACE_ID]: "wood-mdf", [BACKING_ID]: "acrylic-frosted" },
+    });
+    expect(assembly.layers.map((layer) => layer.catalogMaterialId)).toEqual([
+      "wood-mdf",
+      "acrylic-frosted",
+    ]);
+  });
+
+  it("does not interpret or validate the identifier — unknown values pass through unchanged", () => {
+    // Resolution and unknown-material findings belong to the renderer-side
+    // adapter; this package must stay catalog-agnostic.
+    const assembly = buildPhysicalPreviewAssembly(twoLayerProject(), {
+      catalogMaterialIds: { [FACE_ID]: "totally-made-up-material" },
+    });
+    expect(assembly.layers[0]?.catalogMaterialId).toBe("totally-made-up-material");
+    expect(assembly.layers[1]?.catalogMaterialId).toBeNull();
+    expect(assembly.findings).toEqual([]);
+    expect(assembly.status).toBe("complete");
+  });
+
+  it("ignores identifiers for layers that are not physical", () => {
+    const assembly = buildPhysicalPreviewAssembly(twoLayerProject(), {
+      catalogMaterialIds: { [PREVIEW_ID]: "wood-mdf", [UNTAGGED_ID]: "wood-mdf" },
+    });
+    expect(assembly.layers.map((layer) => layer.catalogMaterialId)).toEqual([null, null]);
+  });
+
+  it("changes the fingerprint, since the assembly genuinely differs", () => {
+    const plain = buildPhysicalPreviewAssembly(twoLayerProject());
+    const mapped = buildPhysicalPreviewAssembly(twoLayerProject(), {
+      catalogMaterialIds: { [FACE_ID]: "wood-mdf" },
+    });
+    expect(mapped.fingerprint).not.toBe(plain.fingerprint);
+  });
+
+  it("is deterministic for the same map", () => {
+    const options = { catalogMaterialIds: { [FACE_ID]: "wood-mdf" } };
+    const first = buildPhysicalPreviewAssembly(twoLayerProject(), options);
+    const second = buildPhysicalPreviewAssembly(twoLayerProject(), options);
+    expect(second).toEqual(first);
+    expect(second.fingerprint).toBe(first.fingerprint);
+  });
+
+  it("neither retains nor mutates the caller's map", () => {
+    const supplied: Record<string, string> = { [FACE_ID]: "wood-mdf" };
+    const before = { ...supplied };
+    const assembly = buildPhysicalPreviewAssembly(twoLayerProject(), {
+      catalogMaterialIds: supplied,
+    });
+    expect(supplied).toEqual(before);
+
+    // Mutating the caller's map afterwards must not retroactively alter the
+    // assembly that was already built.
+    supplied[FACE_ID] = "acrylic-mirrored";
+    expect(assembly.layers[0]?.catalogMaterialId).toBe("wood-mdf");
+  });
+
+  it("never mutates the source project", () => {
+    const project = twoLayerProject();
+    const snapshot = structuredClone(project);
+    buildPhysicalPreviewAssembly(project, {
+      catalogMaterialIds: { [FACE_ID]: "wood-mdf" },
+    });
+    expect(project).toEqual(snapshot);
+  });
+});
+
 describe("buildPhysicalPreviewAssembly", () => {
   it("includes only physical layers, in document order, excluding untagged and non-cut-preview", () => {
     const assembly = buildPhysicalPreviewAssembly(twoLayerProject());

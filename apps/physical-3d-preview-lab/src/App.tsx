@@ -12,7 +12,13 @@ import { capturePreviewPng, downloadCapturedPng } from "./capturePng";
 import { CameraRig } from "./CameraRig";
 import type { PreviewView } from "./cameraPose";
 import { fixtureKeyFromLocation, loadFixtureProject } from "./loadFixtureProject";
-import { materialAppearance } from "./materialAppearance";
+import { LayerMaterial } from "./LayerMaterial";
+import { resolveAssemblyMaterials, type ResolvedLayerMaterial } from "./materialAdapter";
+import {
+  catalogMaterialIdsForFixture,
+  requestedMaterialFromLocation,
+} from "./materialSelection";
+import { PreviewEnvironment } from "./PreviewEnvironment";
 import { buildLayerGeometries, type LayerShapeGeometry } from "./sceneToThree";
 import { isWebglAvailable } from "./webgl";
 
@@ -108,11 +114,35 @@ export function App() {
   const [contextLost, setContextLost] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<CaptureStatus>({ kind: "idle" });
 
-  const project = useMemo(
-    () => loadFixtureProject(fixtureKeyFromLocation(window.location.search)),
+  const fixtureKey = useMemo(() => fixtureKeyFromLocation(window.location.search), []);
+  const requestedMaterialId = useMemo(
+    () => requestedMaterialFromLocation(window.location.search),
     [],
   );
-  const assembly = useMemo(() => buildPhysicalPreviewAssembly(project), [project]);
+  const project = useMemo(() => loadFixtureProject(fixtureKey), [fixtureKey]);
+
+  // Built in two passes: the first establishes physical layer order so the
+  // ephemeral catalog assignment can be made by order rather than by
+  // hard-coded layer IDs, the second carries those identifiers.
+  const assembly = useMemo(() => {
+    const ordered = buildPhysicalPreviewAssembly(project);
+    const catalogMaterialIds = catalogMaterialIdsForFixture(
+      fixtureKey,
+      ordered.layers,
+      requestedMaterialId,
+    );
+    return Object.keys(catalogMaterialIds).length === 0
+      ? ordered
+      : buildPhysicalPreviewAssembly(project, { catalogMaterialIds });
+  }, [project, fixtureKey, requestedMaterialId]);
+
+  // All catalog knowledge is resolved here, once, outside the render tree.
+  const materials = useMemo(() => resolveAssemblyMaterials(assembly.layers), [assembly]);
+  const materialByLayerId = useMemo(() => {
+    const map = new Map<string, ResolvedLayerMaterial>();
+    for (const resolved of materials.layers) map.set(resolved.layerId, resolved);
+    return map;
+  }, [materials]);
 
   // Geometry is built outside React (sceneToThree.ts) and attached via the
   // `geometry` prop, so R3F does not auto-manage its lifecycle the way it
@@ -284,23 +314,38 @@ export function App() {
         </div>
       )}
       <ul className="lab-layer-list" data-testid="layer-list">
-        {assembly.layers.map((layer) => (
-          <li key={layer.layerId} data-testid={`layer-${layer.layerId}`}>
-            <label>
-              <input
-                type="checkbox"
-                checked={!hiddenLayerIds.has(layer.layerId)}
-                data-testid={`layer-visibility-${layer.layerId}`}
-                onChange={() => {
-                  toggleLayerVisibility(layer.layerId);
-                }}
-              />
-              <strong>{layer.name}</strong> — {layer.material.material} —{" "}
-              {formatMm(layer.thicknessMm)}
-            </label>
-          </li>
-        ))}
+        {assembly.layers.map((layer) => {
+          const resolved = materialByLayerId.get(layer.layerId);
+          return (
+            <li key={layer.layerId} data-testid={`layer-${layer.layerId}`}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!hiddenLayerIds.has(layer.layerId)}
+                  data-testid={`layer-visibility-${layer.layerId}`}
+                  onChange={() => {
+                    toggleLayerVisibility(layer.layerId);
+                  }}
+                />
+                <strong>{layer.name}</strong> —{" "}
+                <span data-testid={`layer-material-${layer.layerId}`}>
+                  {resolved?.displayLabel ?? layer.material.material}
+                </span>{" "}
+                — {formatMm(layer.thicknessMm)}
+                {resolved !== undefined && resolved.status !== "catalog" && (
+                  <span className="lab-material-fallback"> (fallback)</span>
+                )}
+              </label>
+            </li>
+          );
+        })}
       </ul>
+      {materials.findings.length > 0 && (
+        <div className="lab-warning-banner" role="alert" data-testid="material-findings-banner">
+          {materials.findings.length} material finding(s) —{" "}
+          {materials.findings.map((finding) => finding.message).join(" ")}
+        </div>
+      )}
       {assembly.status === "partial" && (
         <div className="lab-warning-banner" role="alert" data-testid="findings-banner">
           {assembly.findings.length} preview finding(s) — at least one declared physical layer
@@ -324,22 +369,18 @@ export function App() {
               position={[-distance, distance * 0.5, -distance]}
               intensity={0.4}
             />
+            <PreviewEnvironment />
             {visibleLayers.map((layer) => {
               const zRange =
                 mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;
-              const appearance = materialAppearance(layer.material.material);
+              const resolved = materialByLayerId.get(layer.layerId);
               const entries = geometriesByLayer.get(layer.layerId) ?? [];
+              if (resolved === undefined) return null;
               return (
                 <group key={layer.layerId} position={[0, 0, zRange.minZmm]}>
                   {entries.map((entry) => (
                     <mesh key={entry.shapeId} geometry={entry.geometry}>
-                      <meshStandardMaterial
-                        color={appearance.color}
-                        metalness={appearance.metalness}
-                        roughness={appearance.roughness}
-                        opacity={appearance.opacity}
-                        transparent={appearance.transparent}
-                      />
+                      <LayerMaterial params={resolved.params} />
                     </mesh>
                   ))}
                 </group>

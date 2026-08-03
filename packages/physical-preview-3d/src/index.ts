@@ -346,6 +346,21 @@ export interface PhysicalPreviewAssemblyLayer extends PhysicalPreviewLayer {
   order: number;
   assembledZRangeMm: PhysicalPreviewZRangeMm;
   explodedZRangeMm: PhysicalPreviewZRangeMm;
+  /**
+   * Opaque, ephemeral presentation identifier naming an external material
+   * catalog entry for this layer, or `null` when none was supplied.
+   *
+   * This package deliberately does **not** interpret, validate, or resolve
+   * the value, and has no dependency on any catalog: it is carried through
+   * verbatim so a renderer-side adapter can resolve appearance without the
+   * pure scene contract acquiring catalog knowledge. Resolution failures
+   * (including unknown identifiers) are therefore the adapter's finding to
+   * report, not this package's.
+   *
+   * It is never persisted and is not schema data — same status as
+   * `PhysicalPreviewSpacingOptionsMm`.
+   */
+  catalogMaterialId: string | null;
 }
 
 /**
@@ -409,6 +424,12 @@ export interface PhysicalPreviewAssembly {
 
 export interface BuildPhysicalPreviewAssemblyOptions {
   spacing?: Partial<PhysicalPreviewSpacingOptionsMm>;
+  /**
+   * Ephemeral presentation-only map of physical layer ID to an external
+   * material catalog identifier. Never persisted, never schema data, and
+   * never interpreted here — see `PhysicalPreviewAssemblyLayer.catalogMaterialId`.
+   */
+  catalogMaterialIds?: Readonly<Record<string, string>>;
 }
 
 function resolveSpacing(
@@ -444,6 +465,10 @@ export function buildPhysicalPreviewAssembly(
   options: BuildPhysicalPreviewAssemblyOptions = {},
 ): PhysicalPreviewAssembly {
   const spacing = resolveSpacing(options.spacing);
+  // Copied, not retained by reference: the caller's map must not be able to
+  // change the assembly after the fact, and the assembly must not be able to
+  // mutate the caller's map.
+  const catalogMaterialIds: Record<string, string> = { ...options.catalogMaterialIds };
   const physicalLayers = project.document.layers.filter(isPhysicalManufacturingLayer);
   const projections = physicalLayers.map((layer) =>
     buildLayerProjection(project.document, layer),
@@ -482,7 +507,13 @@ export function buildPhysicalPreviewAssembly(
     };
     explodedFrontZmm = explodedBackZmm - (spacing.assembledGapMm + spacing.explodedGapMm);
 
-    return { ...previewLayer, order: index, assembledZRangeMm, explodedZRangeMm };
+    return {
+      ...previewLayer,
+      order: index,
+      assembledZRangeMm,
+      explodedZRangeMm,
+      catalogMaterialId: catalogMaterialIds[previewLayer.layerId] ?? null,
+    };
   });
 
   const findings = projections.flatMap((projection) => projection.findings);

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@laserx/domain": "workspace:*",
+    "@laserx/material-catalog": "workspace:*",
     "@laserx/physical-preview-3d": "workspace:*",
     "@laserx/project-format": "workspace:*",
     "@react-three/drei": "10.7.7",

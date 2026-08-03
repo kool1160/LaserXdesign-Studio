@@ -19,3 +19,11 @@ Added for the Phase 3 evidence work (see `docs/experiments/m14-physical-3d-previ
 - `high-complexity-sign.laserx` — **representative** (not worst-case) high-complexity sign: 500×290 mm, two layers, **58 objects** → 10 solid shapes with 48 interior cutouts. Composition: face plate + 36 letter-stroke cutouts + 8 mounting holes (45) over a backing plate + 12 vent slots (13).
 
 Every fixture's reviewed properties are pinned by `apps/physical-3d-preview-lab/tests/phase3Fixtures.test.ts`, and the authoritative key/file/status list lives in `apps/physical-3d-preview-lab/src/fixtureRegistry.ts`. The lab app can load any of them via `?fixture=<key>`.
+
+## Material-aware presentation fixtures
+
+Added for the Issue #42 material-aware 3D presentation slice (see `docs/experiments/material-aware-3d-presentation/`). Catalog material identity is supplied **ephemerally at preview time**, never stored in the fixture — these files carry only schema-v9 domain materials.
+
+- `material-swatch-wood.laserx` — one physical `wood` layer (6 mm), a 140×80 mm plate with a circular hole and a rectangular slot. The lab varies the catalog material via `?material=<id>` so every wood entry is judged on an identical shape.
+- `material-swatch-acrylic.laserx` — the same plate on a physical `acrylic` layer, used for the six acrylic catalog entries.
+- `material-mixed-assembly.laserx` — four ordered physical layers forming an illuminated-style stack: mirrored face (acrylic, 3 mm) → clear spacer frame (acrylic, 6 mm) → translucent diffuser (acrylic, 4 mm) → opaque backing (wood, 12 mm). 25 mm total assembled depth.
