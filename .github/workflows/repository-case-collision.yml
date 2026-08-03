@@ -1,0 +1,52 @@
+name: Repository Case Collision Guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "maintenance/**"
+      - "fix/**"
+      - "feat/**"
+
+permissions:
+  contents: read
+
+jobs:
+  tracked-paths:
+    name: Reject case-colliding tracked paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v4
+
+      - name: Detect case-insensitive path collisions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import subprocess
+          import sys
+
+          raw = subprocess.check_output(["git", "ls-files", "-z"])
+          paths = [path for path in raw.decode("utf-8").split("\0") if path]
+          first_by_casefold: dict[str, str] = {}
+          collisions: list[tuple[str, str]] = []
+
+          for path in paths:
+              key = path.casefold()
+              first = first_by_casefold.get(key)
+              if first is None:
+                  first_by_casefold[key] = path
+              elif first != path:
+                  collisions.append((first, path))
+
+          if collisions:
+              print("Case-insensitive tracked-path collisions detected:")
+              for first, second in collisions:
+                  print(f"- {first} <-> {second}")
+              sys.exit(1)
+
+          print(f"No case-insensitive collisions across {len(paths)} tracked paths.")
+          PY
