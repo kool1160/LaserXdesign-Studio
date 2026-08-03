@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { parseProject } from "@laserx/project-format";
+import { createBlankProject } from "@laserx/domain";
+import { parseProject, serializeProject } from "@laserx/project-format";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -114,6 +115,36 @@ describe("desktop project lifecycle", () => {
       snapping: { enabled: true },
     });
     expect(controller.state.dirty).toBe(false);
+  });
+
+  it("uses the file name when opening an older Untitled project", async () => {
+    const directory = await temporaryDirectory();
+    const projectPath = join(directory, "Client sign.laserx");
+    await writeFile(
+      projectPath,
+      serializeProject(
+        createBlankProject({
+          id: "c1000000-0000-4000-8000-000000000000",
+          now: "2026-08-02T00:00:00.000Z",
+        }),
+      ),
+      "utf8",
+    );
+    const controller = makeController(
+      join(directory, "user-data"),
+      dialogs(projectPath),
+    );
+    await controller.initialize();
+
+    const result = await controller.openProject();
+
+    expect(result.ok).toBe(true);
+    expect(controller.state.project.name).toBe("Client sign");
+    expect(controller.state.filePath).toBe(projectPath);
+    expect(controller.state.dirty).toBe(false);
+    expect(
+      parseProject(await readFile(projectPath, "utf8")).project.name,
+    ).toBe("Untitled");
   });
 
   it("cancels closing when dirty-state protection says cancel", async () => {

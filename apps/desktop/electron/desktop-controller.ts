@@ -135,6 +135,19 @@ import {
   type ProductionPackageFileService,
 } from "./production-storage.js";
 
+const UNTITLED_PROJECT_NAME = "Untitled";
+const MAX_PROJECT_NAME_LENGTH = 200;
+
+function projectNameForPath(currentName: string, filePath: string): string {
+  if (currentName !== UNTITLED_PROJECT_NAME) {
+    return currentName;
+  }
+  const fileName = basename(filePath, extname(filePath)).trim();
+  return fileName.length === 0
+    ? currentName
+    : fileName.slice(0, MAX_PROJECT_NAME_LENGTH);
+}
+
 export type UnsavedChoice = "save" | "discard" | "cancel";
 
 export interface DesktopDialogs {
@@ -1852,6 +1865,7 @@ export class DesktopController {
   async #openPath(filePath: string): Promise<void> {
     const normalized = validateProjectPath(filePath);
     const project = await this.#storage.read(normalized);
+    project.project.name = projectNameForPath(project.project.name, normalized);
     this.#session.open(project, normalized);
     this.#clearRasterState();
     await this.#settleAutosaveAndClearRecovery();
@@ -1864,6 +1878,26 @@ export class DesktopController {
 
   async #save(forceSaveAs: boolean): Promise<boolean> {
     const current = this.#session.state;
+    if (current.editor.importPreview !== null) {
+      throw new Error(
+        "The SVG or DXF artwork is still a preview and is not part of the project yet. Accept or cancel the vector import before saving.",
+      );
+    }
+    if (current.editor.rasterTracePreview !== null) {
+      throw new Error(
+        "The traced artwork is still a preview and is not part of the project yet. Accept or reject the raster trace before saving.",
+      );
+    }
+    if (current.editor.signToolPreview !== null) {
+      throw new Error(
+        "The generated sign is still a preview and is not part of the project yet. Accept or reject the sign preview before saving.",
+      );
+    }
+    if (current.editor.aiConceptPreview !== null) {
+      throw new Error(
+        "The AI concept is still a preview and is not part of the project yet. Accept or discard the concept before saving.",
+      );
+    }
     let filePath = forceSaveAs ? null : current.filePath;
     if (filePath === null) {
       filePath = await this.#dialogs.chooseSaveProject(
@@ -1875,6 +1909,10 @@ export class DesktopController {
     }
     const normalized = validateProjectPath(filePath);
     const project = this.#session.prepareSave();
+    project.project.name = projectNameForPath(
+      project.project.name,
+      normalized,
+    );
     await this.#storage.write(normalized, project);
     this.#session.completeSave(project, normalized);
     await this.#settleAutosaveAndClearRecovery();
