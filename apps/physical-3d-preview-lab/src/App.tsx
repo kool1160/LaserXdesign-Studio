@@ -6,11 +6,12 @@ import {
 import { Canvas, type RootState } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { registerBenchRenderer } from "./benchHook";
 import { buildCaptureFilename, type AssemblyMode } from "./captureFilename";
 import { capturePreviewPng, downloadCapturedPng } from "./capturePng";
 import { CameraRig } from "./CameraRig";
 import type { PreviewView } from "./cameraPose";
-import { loadFixtureProject } from "./loadFixtureProject";
+import { fixtureKeyFromLocation, loadFixtureProject } from "./loadFixtureProject";
 import { materialAppearance } from "./materialAppearance";
 import { buildLayerGeometries, type LayerShapeGeometry } from "./sceneToThree";
 import { isWebglAvailable } from "./webgl";
@@ -107,7 +108,10 @@ export function App() {
   const [contextLost, setContextLost] = useState(false);
   const [captureStatus, setCaptureStatus] = useState<CaptureStatus>({ kind: "idle" });
 
-  const project = useMemo(() => loadFixtureProject(), []);
+  const project = useMemo(
+    () => loadFixtureProject(fixtureKeyFromLocation(window.location.search)),
+    [],
+  );
   const assembly = useMemo(() => buildPhysicalPreviewAssembly(project), [project]);
 
   // Geometry is built outside React (sceneToThree.ts) and attached via the
@@ -135,6 +139,7 @@ export function App() {
 
   const handleCreated = useCallback((state: RootState) => {
     setCanvasElement(state.gl.domElement);
+    registerBenchRenderer(state.gl);
   }, []);
 
   // Runtime WebGL context-loss handling: preventDefault() signals the

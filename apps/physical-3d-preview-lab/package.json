@@ -9,6 +9,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "bench:node": "vitest run --config bench/vitest.bench.config.ts",
+    "bench:browser": "node bench/browser-benchmarks.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 9,
+  "project": {
+    "id": "f6000001-0000-4000-8000-000000000000",
+    "name": "Invalid Self Intersecting",
+    "createdAt": "2026-08-03T00:00:00.000Z",
+    "updatedAt": "2026-08-03T00:00:00.000Z"
+  },
+  "document": {
+    "kind": "document",
+    "id": "f6000002-0000-4000-8000-000000000000",
+    "dimensions": {
+      "widthMm": 150,
+      "heightMm": 120
+    },
+    "origin": {
+      "xMm": 0,
+      "yMm": 0
+    },
+    "settings": {
+      "displayUnit": "millimeters",
+      "viewport": {
+        "rulersVisible": true,
+        "gridVisible": true,
+        "gridSpacingMm": 10,
+        "snapping": {
+          "enabled": false,
+          "snapToGrid": true,
+          "snapToGuides": true,
+          "snapToObjects": true,
+          "snapToDocument": true
+        }
+      },
+      "manufacturing": {
+        "presetId": "laser-mild-steel-3mm",
+        "process": "laser",
+        "material": "mild-steel",
+        "thicknessMm": 3,
+        "kerfWidthMm": 0.2,
+        "minimumFeatureWidthMm": 1,
+        "minimumBridgeWidthMm": 2,
+        "minimumGapMm": 0.8,
+        "contourSpacingMm": 1,
+        "heatDistortionSpacingMm": null,
+        "tolerancePreset": "balanced",
+        "customizedFields": [],
+        "stockThicknessDesignation": {
+          "kind": "millimeter",
+          "label": "3 mm",
+          "material": null
+        }
+      }
+    },
+    "layers": [
+      {
+        "id": "a6000001-0000-4000-8000-000000000000",
+        "name": "Face",
+        "visible": true,
+        "locked": false,
+        "manufacturing": {
+          "role": "face",
+          "material": "mild-steel",
+          "thicknessMm": 3,
+          "stockThicknessDesignation": {
+            "kind": "millimeter",
+            "label": "3 mm",
+            "material": null
+          },
+          "process": "laser",
+          "notes": "Deliberate bowtie self-intersection; must fail visibly.",
+          "registrationGroup": null,
+          "registrationHoleIds": []
+        }
+      }
+    ],
+    "activeLayerId": "a6000001-0000-4000-8000-000000000000",
+    "guides": [],
+    "objects": [
+      {
+        "id": "b6000001-0000-4000-8000-000000000000",
+        "layerId": "a6000001-0000-4000-8000-000000000000",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "eMm": 0,
+          "fMm": 0
+        },
+        "type": "path",
+        "closed": true,
+        "points": [
+          {
+            "xMm": 20,
+            "yMm": 20
+          },
+          {
+            "xMm": 120,
+            "yMm": 90
+          },
+          {
+            "xMm": 120,
+            "yMm": 20
+          },
+          {
+            "xMm": 20,
+            "yMm": 90
+          }
+        ]
+      }
+    ],
+    "templates": []
+  },
+  "migrationHistory": []
+}

@@ -291,3 +291,24 @@ These are faster than the prior slice's numbers, which reflects normal local-mac
 New measurement — PNG capture round-trip (button click to completed browser download event, same methodology): **69 ms**, single-sample, this machine, for the 960×640 default viewport used in this session's testing.
 
 Still local-machine, single-sample measurements, not a CI-tracked performance budget.
+
+## Phase 3 — superseding measurements (2026-08-03)
+
+Every timing in the Phase 2 sections above is a **single-sample** measurement. Phase 3 replaced them with warmup-plus-repeated-sample benchmarks reporting min/median/p95/max across ten reviewed fixtures. Where the two disagree, **Phase 3 supersedes** — see:
+
+- `docs/experiments/m14-physical-3d-preview/PHASE3_EVIDENCE.md`
+- `docs/experiments/m14-physical-3d-preview/phase3-results.json` (machine-readable)
+
+Two corrections to earlier text, recorded because they matter for how the earlier numbers should be read:
+
+1. **The Phase 2 startup figures were measured before an unwarmed process had settled.** Phase 3 measured a 55× cold-versus-warm difference on the very first parse in a fresh process (5.57 ms → ~0.10 ms). Single-sample startup numbers from any phase should be treated as indicative only.
+2. **The Phase 2 "canvas visible" timings used a weaker readiness definition** (canvas element visible plus two animation frames). Phase 3 established by direct measurement that React Three Fiber's `onCreated` — the point at which a `WebGLRenderer` actually exists — lands materially later than that. Phase 3 readiness numbers use the stronger definition and are therefore larger; they are not a regression.
+
+Two facts established in Phase 3 that the engine decision depends on, both stated as measured, neither as a recommendation:
+
+- **Deterministic output is confirmed.** Across all ten fixtures, twelve independent re-parse-and-rebuild repeats each produced exactly one distinct scene fingerprint and one distinct geometry output, with the source project structurally unchanged.
+- **Repeated interaction does not accumulate GPU resources.** Over 60 stress cycles on the high-complexity fixture, renderer-reported geometries, textures, and programs were exactly flat (net delta 0/0/0), sampled every 10 cycles rather than only at the endpoints.
+
+The bundle figure above is also superseded: bundling all ten reviewed fixtures moved the lab app to 1,344.38 kB raw / 356.93 kB gzip (**+54.97 kB / +3.96 kB**), with no new runtime dependency.
+
+No integration recommendation is drawn from any of this yet; that remains deferred.

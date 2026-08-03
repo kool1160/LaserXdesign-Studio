@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 9,
+  "project": {
+    "id": "f3000001-0000-4000-8000-000000000000",
+    "name": "Transformed Group Sign",
+    "createdAt": "2026-08-03T00:00:00.000Z",
+    "updatedAt": "2026-08-03T00:00:00.000Z"
+  },
+  "document": {
+    "kind": "document",
+    "id": "f3000002-0000-4000-8000-000000000000",
+    "dimensions": {
+      "widthMm": 220,
+      "heightMm": 140
+    },
+    "origin": {
+      "xMm": 0,
+      "yMm": 0
+    },
+    "settings": {
+      "displayUnit": "millimeters",
+      "viewport": {
+        "rulersVisible": true,
+        "gridVisible": true,
+        "gridSpacingMm": 10,
+        "snapping": {
+          "enabled": false,
+          "snapToGrid": true,
+          "snapToGuides": true,
+          "snapToObjects": true,
+          "snapToDocument": true
+        }
+      },
+      "manufacturing": {
+        "presetId": "laser-mild-steel-3mm",
+        "process": "laser",
+        "material": "mild-steel",
+        "thicknessMm": 3,
+        "kerfWidthMm": 0.2,
+        "minimumFeatureWidthMm": 1,
+        "minimumBridgeWidthMm": 2,
+        "minimumGapMm": 0.8,
+        "contourSpacingMm": 1,
+        "heatDistortionSpacingMm": null,
+        "tolerancePreset": "balanced",
+        "customizedFields": [],
+        "stockThicknessDesignation": {
+          "kind": "millimeter",
+          "label": "3 mm",
+          "material": null
+        }
+      }
+    },
+    "layers": [
+      {
+        "id": "a3000001-0000-4000-8000-000000000000",
+        "name": "Face",
+        "visible": true,
+        "locked": false,
+        "manufacturing": {
+          "role": "face",
+          "material": "aluminum",
+          "thicknessMm": 3,
+          "stockThicknessDesignation": {
+            "kind": "millimeter",
+            "label": "3 mm",
+            "material": null
+          },
+          "process": "laser",
+          "notes": "Group scale/rotate/translate composed with child translations.",
+          "registrationGroup": null,
+          "registrationHoleIds": []
+        }
+      }
+    ],
+    "activeLayerId": "a3000001-0000-4000-8000-000000000000",
+    "guides": [],
+    "objects": [
+      {
+        "id": "b3000001-0000-4000-8000-000000000000",
+        "layerId": "a3000001-0000-4000-8000-000000000000",
+        "transform": {
+          "a": 0,
+          "b": 2,
+          "c": -2,
+          "d": 0,
+          "eMm": 120,
+          "fMm": 15
+        },
+        "type": "group",
+        "children": [
+          {
+            "id": "b3000002-0000-4000-8000-000000000000",
+            "layerId": "a3000001-0000-4000-8000-000000000000",
+            "transform": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "eMm": 5,
+              "fMm": 4
+            },
+            "type": "rectangle",
+            "origin": {
+              "xMm": 0,
+              "yMm": 0
+            },
+            "widthMm": 40,
+            "heightMm": 25
+          },
+          {
+            "id": "b3000003-0000-4000-8000-000000000000",
+            "layerId": "a3000001-0000-4000-8000-000000000000",
+            "transform": {
+              "a": 1,
+              "b": 0,
+              "c": 0,
+              "d": 1,
+              "eMm": 14,
+              "fMm": 12
+            },
+            "type": "path",
+            "closed": true,
+            "points": [
+              {
+                "xMm": 0,
+                "yMm": 0
+              },
+              {
+                "xMm": 8,
+                "yMm": 0
+              },
+              {
+                "xMm": 8,
+                "yMm": 8
+              },
+              {
+                "xMm": 0,
+                "yMm": 8
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "templates": []
+  },
+  "migrationHistory": []
+}

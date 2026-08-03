@@ -12,6 +12,8 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "tests/**/*.ts",
+    "bench/**/*.d.mts",
+    "bench/**/*.ts",
     "vite.config.ts",
     "playwright.config.ts"
   ]
