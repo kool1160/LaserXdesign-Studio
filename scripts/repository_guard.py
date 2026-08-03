@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M00 repository structure and policy guard."""
+"""LaserX repository structure and policy guard."""
 
 from __future__ import annotations
 
@@ -8,6 +8,35 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+MILESTONE_FILENAMES = (
+    "M00-foundation.md",
+    "M01-desktop-shell.md",
+    "M02-document-viewport.md",
+    "M03-editing-core.md",
+    "M04-text-fonts.md",
+    "M05-geometry-editing.md",
+    "M06-svg-dxf.md",
+    "M07-raster-tracing.md",
+    "M08-cutability.md",
+    "M09-sign-tools.md",
+    "M10-ai-generation.md",
+    "M11-ui-branding-polish.md",
+    "M12-layered-production.md",
+    "M13-windows-installer-beta-hardening.md",
+    "M14-production-physical-3d-preview.md",
+    "M15-guided-onboarding-learn-mode.md",
+    "M16-material-catalog-expansion.md",
+    "M17-process-aware-manufacturability.md",
+    "M18-downstream-export-profiles.md",
+    "M19-optional-ai-idea-to-cuttable.md",
+    "M20-licensing-trial-purchase.md",
+    "M21-community-beta-readiness.md",
+    "M22-real-user-usability-validation.md",
+    "M23-version-1-release-launch.md",
+    "M24-machine-platform-foundation.md",
+    "M25-first-controller-vertical-slice.md",
+)
 
 REQUIRED_FILES = (
     "AGENTS.md",
@@ -26,19 +55,17 @@ REQUIRED_FILES = (
     "docs/BETA_FEEDBACK.md",
     "docs/KNOWN_ISSUES.md",
     "docs/MILESTONES.md",
+    "docs/OPERATOR_PROTOCOL.md",
+    "docs/WORKSTREAM_OWNERSHIP.md",
+    "docs/CLAUDE_EXECUTION_PLAN.md",
     "docs/status/CURRENT.md",
-    "docs/milestones/M00-foundation.md",
-    "docs/milestones/M01-desktop-shell.md",
-    "docs/milestones/M13-windows-installer-beta-hardening.md",
-    "docs/milestones/M14-beta-validation-v1-release.md",
-    "docs/milestones/M15-machine-platform-foundation.md",
-    "docs/milestones/M16-first-controller-vertical-slice.md",
+    *(f"docs/milestones/{name}" for name in MILESTONE_FILENAMES),
     "docs/decisions/0016-secure-svg-dxf-interchange.md",
+    "docs/decisions/0017-user-owned-ai-provider-credentials.md",
     "docs/decisions/0019-secure-replaceable-raster-tracing.md",
     "docs/decisions/0020-deterministic-cutability-and-bridge-proposals.md",
     "docs/decisions/0022-explicit-manufacturing-layers-and-atomic-production-packages.md",
     "docs/decisions/0023-windows-beta-installer-and-release-boundary.md",
-    "docs/decisions/0017-user-owned-ai-provider-credentials.md",
     ".github/workflows/m06-svg-dxf.yml",
     ".github/workflows/m07-raster-tracing.yml",
     ".github/workflows/m08-cutability.yml",
@@ -97,26 +124,7 @@ REQUIRED_FILES = (
 )
 
 EXPECTED_MILESTONES = tuple(
-    ROOT / "docs" / "milestones" / filename
-    for filename in (
-        "M00-foundation.md",
-        "M01-desktop-shell.md",
-        "M02-document-viewport.md",
-        "M03-editing-core.md",
-        "M04-text-fonts.md",
-        "M05-geometry-editing.md",
-        "M06-svg-dxf.md",
-        "M07-raster-tracing.md",
-        "M08-cutability.md",
-        "M09-sign-tools.md",
-        "M10-ai-generation.md",
-        "M11-ui-branding-polish.md",
-        "M12-layered-production.md",
-        "M13-windows-installer-beta-hardening.md",
-        "M14-beta-validation-v1-release.md",
-        "M15-machine-platform-foundation.md",
-        "M16-first-controller-vertical-slice.md",
-    )
+    ROOT / "docs" / "milestones" / filename for filename in MILESTONE_FILENAMES
 )
 
 FONT_SUFFIXES = {".ttf", ".otf", ".woff", ".woff2"}
@@ -161,55 +169,89 @@ def check_required(errors: list[str]) -> None:
             errors.append(f"missing milestone: {relative(milestone)}")
 
 
+def require_terms(errors: list[str], path: Path, terms: tuple[str, ...], label: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    for term in terms:
+        if term not in text:
+            errors.append(f"{label} is missing required contract text: {term}")
+
+
 def check_instruction_links(errors: list[str]) -> None:
-    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    compatibility = (ROOT / "agent.md").read_text(encoding="utf-8")
-    milestone_index = (ROOT / "docs" / "MILESTONES.md").read_text(encoding="utf-8")
-    m13 = (
-        ROOT / "docs" / "milestones" / "M13-windows-installer-beta-hardening.md"
-    ).read_text(encoding="utf-8")
-
-    required_agent_terms = (
-        "docs/status/CURRENT.md",
-        "docs/milestones/",
-        "canonical stored length unit: millimeters",
-        "Native DWG editing is explicitly out of scope",
-        "packages/production-export/",
-        "Prompt text, reference media, concept alternatives",
-        "M11 - UI, branding, and product polish.",
-        "M14 - Beta validation and Version 1.0 release.",
-        "M15 - Simulator-first machine platform foundation.",
-        "M16 - First explicitly approved LaserX controller vertical slice.",
+    require_terms(
+        errors,
+        ROOT / "AGENTS.md",
+        (
+            "GitHub Issue #44",
+            "Claude — implementation lead",
+            "ChatGPT — planning, audit, and advancement authority",
+            "canonical stored length unit: millimeters",
+            "Native DWG editing is explicitly out of scope",
+            "M14 — Production physical 3D preview integration.",
+            "M15 — Guided onboarding and Learn Mode.",
+            "M23 — Version 1.0 release and broader-market launch.",
+            "M24 — Simulator-first machine platform foundation.",
+            "M25 — First explicitly approved LaserX controller vertical slice.",
+        ),
+        "AGENTS.md",
     )
-    for term in required_agent_terms:
-        if term not in agents:
-            errors.append(f"AGENTS.md is missing required contract text: {term}")
 
+    compatibility = (ROOT / "agent.md").read_text(encoding="utf-8")
     if "AGENTS.md" not in compatibility or "authoritative agent contract" not in compatibility:
         errors.append("agent.md must remain a compatibility pointer to authoritative AGENTS.md")
 
-    required_roadmap_terms = (
-        "| M11 | UI, branding, and product polish |",
-        "| M12 | Layered production |",
-        "| M13 | Windows installer and beta hardening |",
-        "| M14 | Beta validation and Version 1.0 release |",
-        "| M15 | Machine platform foundation |",
-        "| M16 | First LaserX controller vertical slice |",
+    milestone_index = ROOT / "docs" / "MILESTONES.md"
+    required_rows = tuple(
+        f"| M{number:02d} |" for number in range(14, 26)
     )
-    for term in required_roadmap_terms:
-        if term not in milestone_index:
-            errors.append(f"docs/MILESTONES.md is missing required roadmap row: {term}")
+    require_terms(errors, milestone_index, required_rows, "docs/MILESTONES.md")
 
-    required_m13_exit_terms = (
-        "status advances only after the private validation evidence is recorded and the owner explicitly advances",
-        "M14 physical 3D sign viewer remains blocked until M14 activation",
+    require_terms(
+        errors,
+        ROOT / "docs" / "status" / "CURRENT.md",
+        (
+            "M14 — Production Physical 3D Preview Integration",
+            "Implementation lead: Claude",
+            "Independent planning/review/advancement: ChatGPT",
+            "Current slice: **G0",
+            "Issues #44 and #37",
+        ),
+        "docs/status/CURRENT.md",
     )
-    for term in required_m13_exit_terms:
-        if term not in m13:
-            errors.append(
-                "M13 exit must remain owner-gated without implicitly activating M14: "
-                f"missing {term}"
-            )
+
+    require_terms(
+        errors,
+        ROOT / "docs" / "milestones" / "M14-production-physical-3d-preview.md",
+        (
+            "The experiment branch is never merged wholesale.",
+            "No CAD kernel is justified for M14.",
+            "typed Electron preload/main PNG capture",
+            "Status advances to M15 only after explicit owner approval.",
+        ),
+        "M14 milestone",
+    )
+
+    require_terms(
+        errors,
+        ROOT / "docs" / "CLAUDE_EXECUTION_PLAN.md",
+        (
+            "Slice G0",
+            "Slice G6",
+            "Claude is the implementation lead",
+            "ChatGPT is the independent planning and audit authority",
+        ),
+        "Claude execution plan",
+    )
+
+
+def check_no_legacy_milestones(errors: list[str]) -> None:
+    legacy_paths = (
+        ROOT / "docs" / "milestones" / "M14-beta-validation-v1-release.md",
+        ROOT / "docs" / "milestones" / "M15-machine-platform-foundation.md",
+        ROOT / "docs" / "milestones" / "M16-first-controller-vertical-slice.md",
+    )
+    for path in legacy_paths:
+        if path.exists():
+            errors.append(f"legacy milestone path must be removed: {relative(path)}")
 
 
 def check_secrets(errors: list[str]) -> None:
@@ -257,6 +299,7 @@ def main() -> int:
     errors: list[str] = []
     check_required(errors)
     check_instruction_links(errors)
+    check_no_legacy_milestones(errors)
     check_secrets(errors)
     check_fonts(errors)
 
