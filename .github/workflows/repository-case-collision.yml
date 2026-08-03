@@ -31,22 +31,43 @@ jobs:
 
           raw = subprocess.check_output(["git", "ls-files", "-z"])
           paths = [path for path in raw.decode("utf-8").split("\0") if path]
-          first_by_casefold: dict[str, str] = {}
-          collisions: list[tuple[str, str]] = []
 
-          for path in paths:
-              key = path.casefold()
-              first = first_by_casefold.get(key)
+          normalized: list[tuple[str, tuple[str, ...]]] = [
+              (path, tuple(part.casefold() for part in path.split("/")))
+              for path in paths
+          ]
+          exact_first: dict[tuple[str, ...], str] = {}
+          directory_descendant: dict[tuple[str, ...], str] = {}
+          collisions: set[tuple[str, str, str]] = set()
+
+          for path, parts in normalized:
+              first = exact_first.get(parts)
               if first is None:
-                  first_by_casefold[key] = path
+                  exact_first[parts] = path
               elif first != path:
-                  collisions.append((first, path))
+                  collisions.add(("case-folded path", first, path))
+
+              # Record every directory prefix represented by a tracked path.
+              # A tracked file whose normalized full path later matches one
+              # of these prefixes would have to be both a file and directory
+              # on a case-insensitive checkout (for example `foo` and
+              # `Foo/bar`).
+              for length in range(1, len(parts)):
+                  directory_descendant.setdefault(parts[:length], path)
+
+          for path, parts in normalized:
+              descendant = directory_descendant.get(parts)
+              if descendant is not None and descendant != path:
+                  collisions.add(("file/directory prefix", path, descendant))
 
           if collisions:
               print("Case-insensitive tracked-path collisions detected:")
-              for first, second in collisions:
-                  print(f"- {first} <-> {second}")
+              for kind, first, second in sorted(collisions):
+                  print(f"- {kind}: {first} <-> {second}")
               sys.exit(1)
 
-          print(f"No case-insensitive collisions across {len(paths)} tracked paths.")
+          print(
+              "No case-insensitive full-path or file/directory-prefix "
+              f"collisions across {len(paths)} tracked paths."
+          )
           PY
