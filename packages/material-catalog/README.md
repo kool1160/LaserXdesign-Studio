@@ -1,54 +1,41 @@
 # `@laserx/material-catalog`
 
-Pure experimental catalog for truthful wood and acrylic stock definitions plus a LightBurn-aligned starter taxonomy.
+Pure experimental catalog for truthful physical materials used in signs and other flat-made products.
 
-## Physical material scope
+LaserX is a companion to downstream software such as LightBurn, plasma CAM, fiber-laser software, router CAM, and waterjet workflows. This package describes **what the product is made from**. It does not contain machine speeds, power, passes, focus, firmware, motion control, or software-specific cut settings.
+
+## Current first slice
+
+### Wood-based sheet goods
 
 - MDF
 - Baltic birch plywood
 - Hardwood plywood
-- Hardboard / Masonite
-- Cast clear, opaque, and translucent acrylic
-- Extruded clear acrylic
-- Mirrored acrylic
-- Frosted acrylic
-
-Each physical material provides stable IDs, material-specific nominal stock presets, exact canonical millimeters, measurement policy, process compatibility, plain-shop-language notes, and renderer-independent appearance descriptors.
-
-## LightBurn alignment
-
-LightBurn does not publish one universal machine-independent Material Library. `.clb` libraries are user-created and are commonly maintained per laser because speed, power, passes, air assist, and focus depend on the exact machine and material.
-
-LaserX therefore copies the familiar LightBurn organization without inventing universal machine settings:
-
-1. Material Name
-2. Thickness for through-cutting, or a No Thickness operation title such as `Engrave` or `Score`
-3. Description such as `Cut — clean` or `Engrave — fill`
-
-The starter taxonomy prioritizes common laser-shop groups:
-
-### Wood
-
-- MDF
-- Basswood plywood
-- Birch plywood
-- Baltic birch plywood
-- Hardwood plywood
-- Solid hardwood
-- Wood veneer
 - Hardboard / Masonite
 
 ### Acrylic
 
 - Cast clear
-- Cast opaque color
-- Cast transparent or translucent color
+- Cast opaque
+- Cast translucent
 - Extruded clear
-- Extruded color
-- Frosted
 - Mirrored
+- Frosted
 
-`src/lightburn.ts` intentionally contains no speed, power, pass, air-assist, or focus values. Those belong to a device-specific process library or a future reviewed `.clb` import/export adapter.
+Each material provides stable IDs, material-specific nominal stock presets, exact canonical millimeters, measurement policy, process compatibility/caution metadata, plain-shop-language notes, and renderer-independent appearance descriptors.
+
+## Planned expansion
+
+Future reviewed slices should add the common materials LaserX users design for, including:
+
+- basswood and birch plywood;
+- solid hardwood and veneer;
+- additional acrylic colors and constructions;
+- glass families used for marking or engraving;
+- stone families such as slate, granite, and marble;
+- additional metals and mixed-material assemblies.
+
+Those families may differ in whether geometry is intended for through-cutting, marking, engraving, routing, or assembly. LaserX must represent that truthfully without turning into machine-control software.
 
 ## Measurement rule
 
@@ -57,6 +44,14 @@ A nominal stock choice is never treated as a user measurement.
 - Wood-based sheet goods currently use `measure-required` because actual thickness commonly differs from the nominal label.
 - Acrylic uses `measure-recommended` because fit, standoff, and layered-stack work should use the actual sheet when available.
 - `resolveCatalogThickness()` preserves the nominal exact value for selection and replaces it only when the caller supplies a positive measured thickness.
+
+## Downstream export boundary
+
+SVG, DXF, layered production packages, and future target-software export profiles are separate consumers of the authoritative LaserX geometry. The material catalog may inform labels, grouping, documentation, and physical preview, but it does not own downstream machine settings.
+
+## Physical 3D preview boundary
+
+The future renderer should consume these appearance descriptors so finished signs can distinguish materials such as wood, clear/colored/frosted/mirrored acrylic, glass, stone, painted metal, and bare metal. The renderer must not invent material identity and must remain derived and non-mutating.
 
 ## Experiment boundary
 
