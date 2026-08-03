@@ -2,13 +2,28 @@ import { expect, test, type Page } from "@playwright/test";
 
 declare global {
   var __materialLoseContext: WEBGL_lose_context | undefined;
+  /** Live WebGL object counts installed by {@link instrumentGlObjects}. */
+  var __glLive: { framebuffers: number; renderbuffers: number } | undefined;
 }
 
 /** Layer IDs from the generated material fixtures. */
 const SWATCH_WOOD_LAYER = "c1000001-0000-4000-8000-000000000000";
 const SWATCH_ACRYLIC_LAYER = "c2000001-0000-4000-8000-000000000000";
 const MIXED_FACE_LAYER = "c3000004-0000-4000-8000-000000000000";
+const MIXED_SPACER_LAYER = "c3000003-0000-4000-8000-000000000000";
+const MIXED_DIFFUSER_LAYER = "c3000002-0000-4000-8000-000000000000";
 const MIXED_BACKING_LAYER = "c3000001-0000-4000-8000-000000000000";
+
+/**
+ * The three mixed-assembly layers whose materials need an environment map
+ * (mirrored, clear, translucent). The MDF backing does not, so hiding these
+ * three unmounts `PreviewEnvironment` without touching the renderer.
+ */
+const ENVIRONMENT_LAYERS = [MIXED_FACE_LAYER, MIXED_SPACER_LAYER, MIXED_DIFFUSER_LAYER];
+
+/** Layer IDs from the pre-existing, pre-catalog two-layer fixture. */
+const TWO_LAYER_FACE = "10000000-0000-4000-8000-000000000011";
+const TWO_LAYER_BACKING = "10000000-0000-4000-8000-000000000012";
 
 async function openPreview(page: Page, url: string): Promise<void> {
   await page.goto(url);
@@ -20,6 +35,58 @@ async function openPreview(page: Page, url: string): Promise<void> {
 /** Reads renderer-reported GPU resource counts via the research bench hook. */
 async function rendererInfo(page: Page) {
   return page.evaluate(() => window.__laserxPreviewLab?.rendererInfo() ?? null);
+}
+
+/**
+ * Counts live WebGL framebuffers and renderbuffers by wrapping the context's
+ * create/delete methods before any context exists.
+ *
+ * `renderer.info.memory.textures` is deliberately *not* used as the leak
+ * signal here: disposing only a render target's texture decrements that
+ * counter while leaving the target's framebuffer and renderbuffer allocated,
+ * so the counter cannot distinguish a correct `target.dispose()` from the
+ * texture-only disposal this test exists to catch. Framebuffer identity can.
+ */
+async function instrumentGlObjects(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const live = { framebuffers: 0, renderbuffers: 0 };
+    window.__glLive = live;
+    const kinds = [
+      ["framebuffers", "createFramebuffer", "deleteFramebuffer"],
+      ["renderbuffers", "createRenderbuffer", "deleteRenderbuffer"],
+    ] as const;
+    for (const Ctx of [WebGLRenderingContext, WebGL2RenderingContext]) {
+      for (const [kind, create, remove] of kinds) {
+        const proto = Ctx.prototype as unknown as Record<string, unknown>;
+        const origCreate = proto[create] as (this: unknown) => unknown;
+        const origDelete = proto[remove] as (this: unknown, target: unknown) => unknown;
+        proto[create] = function (this: unknown) {
+          const created: unknown = origCreate.call(this);
+          if (created !== null) live[kind] += 1;
+          return created;
+        };
+        proto[remove] = function (this: unknown, target: unknown) {
+          if (target !== null && target !== undefined) live[kind] -= 1;
+          return origDelete.call(this, target);
+        };
+      }
+    }
+  });
+}
+
+async function liveGlObjects(page: Page) {
+  return page.evaluate(() => (window.__glLive ? { ...window.__glLive } : null));
+}
+
+/** Stamps and reads a stable id on the live renderer to prove it is the same one. */
+async function rendererIdentity(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const renderer = window.__laserxPreviewLab?.renderer ?? null;
+    if (renderer === null) return null;
+    const stamped = renderer as unknown as { __identity?: string };
+    stamped.__identity ??= Math.random().toString(36).slice(2);
+    return stamped.__identity;
+  });
 }
 
 test.describe("material-aware presentation", () => {
@@ -107,6 +174,10 @@ test.describe("material-aware presentation", () => {
   test("keeps assembled/exploded, visibility, and views working with materials applied", async ({
     page,
   }) => {
+    // Measured at ~43s against the 45s default budget on the reviewed head,
+    // before this repair — it drives seven transmissive re-renders. The margin
+    // is too thin to be reliable, so give it headroom rather than let it flake.
+    test.slow();
     await openPreview(page, "/?fixture=material-mixed-assembly");
 
     // Assembled/exploded still toggles and does not alter reported depth.
@@ -152,7 +223,78 @@ test.describe("material-aware presentation", () => {
     await download.delete();
   });
 
-  test("does not leak GPU resources across repeated material switches", async ({ page }) => {
+  test("keeps a non-catalog fixture on its own material with no fallback marker", async ({
+    page,
+  }) => {
+    // `two-layer` predates the catalog and is assigned no catalog material ID.
+    // Claiming no catalog material is not a resolution *failure*, so nothing
+    // here may be marked as a fallback or reported as a finding.
+    await openPreview(page, "/?fixture=two-layer");
+
+    await expect(page.getByTestId(`layer-material-${TWO_LAYER_FACE}`)).toHaveText("mild-steel");
+    await expect(page.getByTestId(`layer-material-${TWO_LAYER_BACKING}`)).toHaveText("acrylic");
+
+    await expect(page.getByTestId(`layer-${TWO_LAYER_FACE}`)).not.toContainText("(fallback)");
+    await expect(page.getByTestId(`layer-${TWO_LAYER_BACKING}`)).not.toContainText("(fallback)");
+    await expect(page.getByTestId("layer-list").locator(".lab-material-fallback")).toHaveCount(0);
+    await expect(page.getByTestId("material-findings-banner")).toHaveCount(0);
+
+    // Thickness and depth are untouched by material presentation.
+    await expect(page.getByTestId("dimensions")).toHaveText(/9\.0 mm total assembled depth/);
+  });
+
+  test("releases every environment render target across mount/unmount in one renderer", async ({
+    page,
+  }) => {
+    // Regression for the PMREM lifecycle defect: `PMREMGenerator.fromScene`
+    // returns a WebGLRenderTarget that owns a framebuffer and renderbuffer in
+    // addition to its texture. Disposing only the texture leaked the rest —
+    // invisible on a fresh page load, and only observable by mounting and
+    // unmounting the environment inside ONE long-lived renderer. This test
+    // therefore never navigates: `page.goto` would rebuild the renderer and
+    // hide exactly the defect it is meant to catch.
+    //
+    // Repeated mount/unmount cycles are the whole point, so this test is
+    // legitimately long-running rather than slow by accident.
+    test.slow();
+    await instrumentGlObjects(page);
+    await openPreview(page, "/?fixture=material-mixed-assembly");
+
+    const rendererAtStart = await rendererIdentity(page);
+    expect(rendererAtStart).not.toBeNull();
+
+    const baseline = await liveGlObjects(page);
+    expect(baseline).not.toBeNull();
+
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      // Hiding every environment-requiring material unmounts PreviewEnvironment.
+      for (const layerId of ENVIRONMENT_LAYERS) {
+        await page.getByTestId(`layer-visibility-${layerId}`).uncheck();
+      }
+      await page.waitForTimeout(250);
+
+      const unmounted = await liveGlObjects(page);
+      // The environment's own framebuffer/renderbuffer must actually be freed.
+      expect(unmounted?.framebuffers).toBeLessThan(baseline?.framebuffers ?? 0);
+
+      for (const layerId of ENVIRONMENT_LAYERS) {
+        await page.getByTestId(`layer-visibility-${layerId}`).check();
+      }
+      await page.waitForTimeout(250);
+
+      // Exact return to baseline, every cycle — not merely "bounded growth".
+      const remounted = await liveGlObjects(page);
+      expect(remounted).toEqual(baseline);
+    }
+
+    // Renderer-reported resources are bounded too, and it really was one renderer.
+    const info = await rendererInfo(page);
+    expect(info?.geometries).toBe(4);
+    expect(info?.textures).toBe(3);
+    expect(await rendererIdentity(page)).toBe(rendererAtStart);
+  });
+
+  test("does not leak GPU resources across repeated full page reloads", async ({ page }) => {
     await openPreview(page, "/?fixture=material-swatch-acrylic&material=acrylic-cast-clear");
     const before = await rendererInfo(page);
     expect(before).not.toBeNull();
@@ -172,8 +314,9 @@ test.describe("material-aware presentation", () => {
 
     const after = await rendererInfo(page);
     expect(after).not.toBeNull();
-    // Each navigation rebuilds the page, so counts must return to the same
-    // steady state rather than climbing.
+    // Each navigation rebuilds the page and the renderer, so this proves
+    // fresh-page steady state only — component mount/unmount lifecycle is
+    // covered by the same-renderer environment test above.
     expect(after?.geometries).toBe(before?.geometries);
     expect(after?.textures).toBe(before?.textures);
   });

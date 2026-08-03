@@ -232,6 +232,13 @@ export function App() {
 
   const visibleLayers = assembly.layers.filter((layer) => !hiddenLayerIds.has(layer.layerId));
 
+  // Mount the PMREM environment only while something visible actually needs
+  // it. When nothing does, the pre-catalog rendering path is preserved
+  // exactly and no render target is held open.
+  const needsEnvironment = visibleLayers.some(
+    (layer) => materialByLayerId.get(layer.layerId)?.params.needsEnvironment === true,
+  );
+
   const overallBounds = visibleLayers.reduce<BoundsMmLike | null>((current, layer) => {
     if (layer.boundsMm === null) return current;
     return current === null ? layer.boundsMm : unionBoundsMm(current, layer.boundsMm);
@@ -332,7 +339,11 @@ export function App() {
                   {resolved?.displayLabel ?? layer.material.material}
                 </span>{" "}
                 — {formatMm(layer.thicknessMm)}
-                {resolved !== undefined && resolved.status !== "catalog" && (
+                {/* Only a genuine resolution failure is marked. A layer that
+                    never claimed a catalog material has not failed, so it
+                    keeps its normal legacy/domain presentation — otherwise
+                    the fallback marker stops meaning anything. */}
+                {resolved?.status === "fallback-unknown-id" && (
                   <span className="lab-material-fallback"> (fallback)</span>
                 )}
               </label>
@@ -369,7 +380,7 @@ export function App() {
               position={[-distance, distance * 0.5, -distance]}
               intensity={0.4}
             />
-            <PreviewEnvironment />
+            {needsEnvironment && <PreviewEnvironment />}
             {visibleLayers.map((layer) => {
               const zRange =
                 mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;

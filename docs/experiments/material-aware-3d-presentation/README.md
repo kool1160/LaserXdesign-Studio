@@ -74,19 +74,40 @@ Out-of-range and non-finite inputs are clamped, not trusted — covered by a tes
 
 Mirrored acrylic needs an environment or a high-metalness surface renders **near-black**; transmissive acrylic needs something to refract or clear/translucent/frosted look nearly identical. `PreviewEnvironment.tsx` bakes Three's own `RoomEnvironment` through `PMREMGenerator` **in-process**.
 
-`RoomEnvironment` is procedural geometry and lights — **no texture is downloaded and no network request is made**, satisfying the "no remote texture downloads" constraint. The source room scene, the generator, and the generated PMREM texture are all disposed.
+`RoomEnvironment` is procedural geometry and lights — **no texture is downloaded and no network request is made**, satisfying the "no remote texture downloads" constraint.
+
+#### Lifecycle (repaired after review)
+
+`PMREMGenerator.fromScene()` returns a **`WebGLRenderTarget`, not a texture**. The target owns a framebuffer and a renderbuffer in addition to `target.texture`, so the whole target is retained and disposed with `target.dispose()`; disposing only the texture leaks the rest. On unmount the environment slot is cleared **only if it still holds our texture**, so a component that legitimately replaced it is not clobbered.
+
+`PreviewEnvironment` is mounted only while a *visible* material actually needs it (`needsEnvironment` on the resolved descriptor). When nothing does, no render target is held open and the pre-catalog rendering path is preserved exactly.
+
+This defect was invisible on a fresh page load and only appeared across mount/unmount inside one long-lived renderer, so the evidence is a same-renderer E2E test that never navigates. It counts **live WebGL framebuffers and renderbuffers** by wrapping the context's create/delete methods — deliberately *not* `renderer.info.memory.textures`, which decrements on texture-only disposal and therefore cannot distinguish the bug:
+
+| Cycle | Before repair | After repair |
+|---|---|---|
+| baseline (mounted) | 6 fb / 4 rb | 6 fb / 4 rb |
+| 1 | 7 fb / 5 rb | 6 fb / 4 rb |
+| 2 | 8 fb / 6 rb | 6 fb / 4 rb |
+| 3 | 9 fb / 7 rb | 6 fb / 4 rb |
+| 4 | 10 fb / 8 rb | 6 fb / 4 rb |
+| 5 | 11 fb / 9 rb | 6 fb / 4 rb |
+
+One framebuffer and one renderbuffer leaked per cycle, climbing monotonically and never released. After the repair every cycle returns **exactly** to baseline, and the test fails against the old implementation on the first cycle.
 
 ## Fallback behaviour
 
 Three distinct cases, deliberately kept separate:
 
-| Case | Appearance | Finding |
-|---|---|---|
-| Known catalog ID | Catalog appearance | none |
-| **Unknown** catalog ID | Neutral grey, fully opaque, clearly visible | `UNKNOWN_CATALOG_MATERIAL` |
-| No catalog ID claimed | Pre-existing domain-material appearance | none |
+| Case | Appearance | `(fallback)` marker | Finding |
+|---|---|---|---|
+| Known catalog ID | Catalog appearance | no | none |
+| **Unknown** catalog ID | Neutral grey, fully opaque, clearly visible | **yes** | `UNKNOWN_CATALOG_MATERIAL` |
+| No catalog ID claimed | Pre-existing domain-material appearance | no | none |
 
 The third case matters: an early draft degraded *every* non-catalog layer to neutral grey, which silently regressed the ten pre-existing fixtures. Nothing failed in that case, so it must not look like a failure — and keeping neutral grey reserved for genuine failures keeps it a meaningful signal.
+
+**Repaired after review:** the *appearance* was correct but the *label* still leaked the old assumption — the marker was driven by `status !== "catalog"`, so a layer that never claimed a catalog material was labelled `(fallback)` despite the adapter deliberately raising no finding. Only `fallback-unknown-id` is a genuine resolution failure, and only it is marked. A regression test pins this against the pre-existing, pre-catalog `two-layer` fixture: both layers keep their own domain material labels (`mild-steel`, `acrylic`), no `(fallback)` marker appears anywhere in the layer list, and no material-findings banner is shown.
 
 ## Fixtures
 
