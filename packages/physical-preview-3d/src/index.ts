@@ -16,7 +16,7 @@ import {
 } from "@laserx/domain";
 import { boundsFromPoints, type BoundsMm, type PointMm } from "@laserx/geometry";
 
-export type PhysicalPreviewFindingCode = Extract<
+export type CutabilityTopologyFindingCode = Extract<
   CutabilityIssueCode,
   | "OPEN_CONTOUR"
   | "SELF_INTERSECTION"
@@ -25,7 +25,17 @@ export type PhysicalPreviewFindingCode = Extract<
   | "UNSUPPORTED_GEOMETRY"
 >;
 
-const TOPOLOGY_FINDING_CODES: readonly PhysicalPreviewFindingCode[] = [
+/**
+ * `EMPTY_PHYSICAL_LAYER` is package-owned, not sourced from cutability: an
+ * explicit physical manufacturing layer that produced zero renderable
+ * shapes without cutability ever reporting *why* (no objects, or objects
+ * that resolve to no closed candidate contour). Without this finding such
+ * a layer would silently disappear from the preview while still counting
+ * toward `assembledDepthMm` — a fail-visible violation.
+ */
+export type PhysicalPreviewFindingCode = CutabilityTopologyFindingCode | "EMPTY_PHYSICAL_LAYER";
+
+const TOPOLOGY_FINDING_CODES: readonly CutabilityTopologyFindingCode[] = [
   "OPEN_CONTOUR",
   "SELF_INTERSECTION",
   "DUPLICATE_SEGMENT",
@@ -35,7 +45,7 @@ const TOPOLOGY_FINDING_CODES: readonly PhysicalPreviewFindingCode[] = [
 
 function isTopologyFindingCode(
   code: CutabilityIssueCode,
-): code is PhysicalPreviewFindingCode {
+): code is CutabilityTopologyFindingCode {
   return (TOPOLOGY_FINDING_CODES as readonly CutabilityIssueCode[]).includes(code);
 }
 
@@ -227,13 +237,27 @@ function buildLayerProjection(
   const findings: PhysicalPreviewFinding[] = analysis.issues
     .filter((issue) => isTopologyFindingCode(issue.code))
     .map((issue) => ({
-      code: issue.code as PhysicalPreviewFindingCode,
+      code: issue.code as CutabilityTopologyFindingCode,
       layerId: layer.id,
       objectIds: [...issue.objectIds],
       message: issue.message,
     }));
 
   const shapes = analysis.status === "complete" ? buildShapes(analysis.regions) : [];
+
+  if (shapes.length === 0 && findings.length === 0) {
+    // A declared physical layer with no topology failure and no renderable
+    // shape (no objects, or objects that resolve to no closed candidate
+    // contour) is not a supported "legitimately empty part" — fail visibly
+    // instead of letting it silently vanish from the preview while still
+    // occupying assembled Z space.
+    findings.push({
+      code: "EMPTY_PHYSICAL_LAYER",
+      layerId: layer.id,
+      objectIds: [],
+      message: `Physical layer "${layer.name}" has no renderable geometry and will not appear in the preview.`,
+    });
+  }
 
   const previewLayer: PhysicalPreviewLayer = {
     layerId: layer.id,
@@ -325,13 +349,18 @@ export interface PhysicalPreviewAssemblyLayer extends PhysicalPreviewLayer {
 }
 
 /**
- * `"complete"` — every physical layer produced shapes (or was legitimately
- * empty with no findings). `"partial"` — at least one physical layer exists
- * but at least one produced no shapes because its geometry was ambiguous
- * (see its findings); still positioned and readable (name/material/
- * thickness), just not rendered. `"unavailable"` — the document declares no
- * physical manufacturing layers at all, so there is nothing to assemble.
- * Never invented or repaired: an ambiguous layer's geometry is never
+ * `"complete"` — every declared physical layer produced at least one
+ * renderable shape and has no topology failure. There is no concept of a
+ * "legitimately empty" physical layer: a declared physical layer with zero
+ * shapes always carries a finding (either a cutability topology finding or
+ * the package-owned `EMPTY_PHYSICAL_LAYER`), which by definition rules out
+ * `"complete"`. `"partial"` — at least one physical layer exists but at
+ * least one produced no shapes, either because its geometry was ambiguous
+ * or because it was empty; still positioned and readable (name/material/
+ * thickness) and still counted in `assembledDepthMm`, just not rendered —
+ * see its finding. `"unavailable"` — the document declares no physical
+ * manufacturing layers at all, so there is nothing to assemble. Never
+ * invented or repaired: a missing or ambiguous layer's geometry is never
  * silently closed, simplified, or guessed.
  */
 export type PhysicalPreviewAssemblyStatus = "complete" | "partial" | "unavailable";
@@ -427,9 +456,13 @@ export function buildPhysicalPreviewAssembly(
   });
 
   const findings = projections.flatMap((projection) => projection.findings);
-  const hasAmbiguousLayer = projections.some((projection) => projection.findings.length > 0);
+  // Every layer with zero shapes carries a finding by construction (see
+  // buildLayerProjection), whether from cutability topology or the
+  // package-owned EMPTY_PHYSICAL_LAYER — so this single check correctly
+  // catches both ambiguous and empty layers, with no separate case needed.
+  const hasLayerWithFindings = projections.some((projection) => projection.findings.length > 0);
   const status: PhysicalPreviewAssemblyStatus =
-    physicalLayers.length === 0 ? "unavailable" : hasAmbiguousLayer ? "partial" : "complete";
+    physicalLayers.length === 0 ? "unavailable" : hasLayerWithFindings ? "partial" : "complete";
 
   const assemblyWithoutFingerprint: Omit<PhysicalPreviewAssembly, "fingerprint"> = {
     identity: {

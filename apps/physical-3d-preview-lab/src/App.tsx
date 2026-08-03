@@ -182,8 +182,9 @@ export function App() {
       </ul>
       {assembly.status === "partial" && (
         <div className="lab-warning-banner" role="alert" data-testid="findings-banner">
-          {assembly.findings.length} unsupported-geometry finding(s) — at least one physical
-          layer could not be rendered. Not a manufacturing certification.
+          {assembly.findings.length} preview finding(s) — at least one declared physical layer
+          has no renderable geometry or ambiguous geometry and could not be rendered. Its
+          name/material/thickness are still shown above. Not a manufacturing certification.
         </div>
       )}
       <div className="lab-canvas-area" data-testid="canvas-area">

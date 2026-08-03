@@ -72,6 +72,26 @@ test.describe("physical 3D preview lab", () => {
     await expect(assembled).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("shows an unmistakable warning and still lists an empty physical layer's identity in a partial assembly", async ({
+    page,
+  }) => {
+    await page.goto("/?fixture=partial-assembly");
+
+    await expect(page.getByTestId("preview-canvas")).toBeVisible();
+
+    const banner = page.getByTestId("findings-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("1");
+
+    // The empty layer's declared identity/material/thickness stay visible
+    // for inspection even though it contributed no geometry.
+    const layerList = page.getByTestId("layer-list");
+    await expect(layerList).toContainText("Backing");
+    await expect(layerList).toContainText("acrylic");
+    await expect(layerList).toContainText("6.0 mm");
+    await expect(layerList).toContainText("Face");
+  });
+
   test("shows a clear, non-throwing fallback when WebGL is unavailable", async ({ page }) => {
     await page.addInitScript(() => {
       HTMLCanvasElement.prototype.getContext = () => null;

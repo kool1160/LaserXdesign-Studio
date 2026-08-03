@@ -404,4 +404,40 @@ describe("buildPhysicalPreviewScene", () => {
 
     expect(project).toEqual(before);
   });
+
+  it("surfaces an EMPTY_PHYSICAL_LAYER finding instead of a finding-free empty scene", () => {
+    const emptyLayerId = "55555555-9999-4999-8999-999999999999";
+    const project = createBlankProject({
+      id: "66666666-9999-4999-8999-999999999999",
+      documentId: "77777777-9999-4999-8999-999999999999",
+      name: "Empty Face",
+      now: "2026-08-02T12:00:00.000Z",
+      width: 100,
+      height: 100,
+      inputUnit: "millimeters",
+      layers: [faceLayer(emptyLayerId, "Face", "face")],
+      activeLayerId: emptyLayerId,
+      objects: [],
+    });
+    const before = structuredClone(project);
+
+    const first = buildPhysicalPreviewScene(project, { layerId: emptyLayerId });
+    expect(first.layers[0]?.shapes).toEqual([]);
+    expect(first.layers[0]?.boundsMm).toBeNull();
+    // Declared identity/material/thickness remain inspectable.
+    expect(first.layers[0]?.name).toBe("Face");
+    expect(first.layers[0]?.thicknessMm).toBe(3);
+    expect(first.findings).toHaveLength(1);
+    const finding = first.findings[0];
+    if (finding === undefined) throw new Error("Expected an EMPTY_PHYSICAL_LAYER finding.");
+    expect(finding.code).toBe("EMPTY_PHYSICAL_LAYER");
+    expect(finding.layerId).toBe(emptyLayerId);
+    expect(finding.objectIds).toEqual([]);
+    expect(finding.message).toContain("no renderable geometry");
+
+    const second = buildPhysicalPreviewScene(project, { layerId: emptyLayerId });
+    expect(second).toEqual(first);
+    expect(second.fingerprint).toBe(first.fingerprint);
+    expect(project).toEqual(before);
+  });
 });

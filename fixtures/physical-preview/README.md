@@ -4,3 +4,4 @@ Reviewed, deterministic `.laserx` fixtures for `apps/physical-3d-preview-lab` an
 
 - `single-layer-face-plate.laserx` — one physical `face` layer, mild steel, 3 mm, a 160×80 mm rectangle with one 30 mm-diameter through-hole. 200×120 mm stock.
 - `two-layer-face-backing.laserx` — two ordered physical layers with distinct roles/materials/thicknesses (`face`: mild steel, 3 mm, rectangle with a circular through-hole; `backing`: acrylic, 6 mm, larger rectangle with a rectangular slot cutout), plus a third `non-cut-preview` layer that must be excluded from any physical assembly. 220×140 mm stock.
+- `partial-assembly-empty-layer.laserx` — one valid physical `face` layer (mild steel, 3 mm, rectangle) plus one declared physical `backing` layer (acrylic, 6 mm) with zero objects, exercising the `EMPTY_PHYSICAL_LAYER` finding and `"partial"` assembly status. 150×100 mm stock. Loaded by the lab app only via the `?fixture=partial-assembly` test hook, not the default view.

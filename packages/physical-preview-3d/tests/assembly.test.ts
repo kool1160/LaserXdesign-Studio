@@ -107,6 +107,95 @@ function twoLayerProject(): LaserxProject {
   });
 }
 
+/** One valid physical layer (Face, with geometry) plus one empty physical layer (Backing, zero objects). */
+function faceAndEmptyBackingProject(): LaserxProject {
+  return createBlankProject({
+    id: "eeeeeeee-1111-4000-8000-000000000001",
+    documentId: "eeeeeeee-1111-4000-8000-000000000002",
+    name: "Face Plus Empty Backing",
+    now: "2026-08-02T12:00:00.000Z",
+    width: 150,
+    height: 100,
+    inputUnit: "millimeters",
+    layers: [
+      physicalLayer(FACE_ID, "Face", "face", 3),
+      physicalLayer(BACKING_ID, "Backing", "backing", 6),
+    ],
+    activeLayerId: FACE_ID,
+    objects: [rectangle(FACE_RECT_ID, FACE_ID, 20, 60)],
+  });
+}
+
+/** Two declared physical layers, neither with any objects. */
+function allEmptyProject(): LaserxProject {
+  return createBlankProject({
+    id: "eeeeeeee-2222-4000-8000-000000000001",
+    documentId: "eeeeeeee-2222-4000-8000-000000000002",
+    name: "All Empty",
+    now: "2026-08-02T12:00:00.000Z",
+    width: 150,
+    height: 100,
+    inputUnit: "millimeters",
+    layers: [
+      physicalLayer(FACE_ID, "Face", "face", 3),
+      physicalLayer(BACKING_ID, "Backing", "backing", 6),
+    ],
+    activeLayerId: FACE_ID,
+    objects: [],
+  });
+}
+
+describe("empty physical layer handling", () => {
+  it("marks the assembly partial when one physical layer is empty, with an EMPTY_PHYSICAL_LAYER finding", () => {
+    const assembly = buildPhysicalPreviewAssembly(faceAndEmptyBackingProject());
+    expect(assembly.status).toBe("partial");
+
+    const face = assembly.layers.find((layer) => layer.layerId === FACE_ID);
+    const backing = assembly.layers.find((layer) => layer.layerId === BACKING_ID);
+    if (face === undefined || backing === undefined) throw new Error("Expected both layers.");
+    expect(face.shapes.length).toBeGreaterThan(0);
+    expect(backing.shapes).toEqual([]);
+
+    // Declared identity/material/thickness stay inspectable even with no geometry.
+    expect(backing.name).toBe("Backing");
+    expect(backing.material.material).toBe("acrylic");
+    expect(backing.thicknessMm).toBe(6);
+
+    const emptyFinding = assembly.findings.find(
+      (finding) => finding.code === "EMPTY_PHYSICAL_LAYER" && finding.layerId === BACKING_ID,
+    );
+    if (emptyFinding === undefined) throw new Error("Expected an EMPTY_PHYSICAL_LAYER finding.");
+    expect(emptyFinding.objectIds).toEqual([]);
+    expect(emptyFinding.message).toContain("Backing");
+  });
+
+  it("marks the assembly partial, never complete or unavailable, when every physical layer is empty", () => {
+    const assembly = buildPhysicalPreviewAssembly(allEmptyProject());
+    expect(assembly.status).toBe("partial");
+    expect(assembly.layers).toHaveLength(2);
+    expect(assembly.layers.every((layer) => layer.shapes.length === 0)).toBe(true);
+    expect(
+      assembly.findings.filter((finding) => finding.code === "EMPTY_PHYSICAL_LAYER"),
+    ).toHaveLength(2);
+    // Declared thickness still contributes to the real assembled stack depth.
+    expect(assembly.assembledDepthMm).toBe(9);
+  });
+
+  it("is deterministic across independently built empty-layer assemblies", () => {
+    const first = buildPhysicalPreviewAssembly(faceAndEmptyBackingProject());
+    const second = buildPhysicalPreviewAssembly(faceAndEmptyBackingProject());
+    expect(second).toEqual(first);
+    expect(second.fingerprint).toBe(first.fingerprint);
+  });
+
+  it("never mutates the source project when a physical layer is empty", () => {
+    const project = faceAndEmptyBackingProject();
+    const before = structuredClone(project);
+    buildPhysicalPreviewAssembly(project);
+    expect(project).toEqual(before);
+  });
+});
+
 describe("buildPhysicalPreviewAssembly", () => {
   it("includes only physical layers, in document order, excluding untagged and non-cut-preview", () => {
     const assembly = buildPhysicalPreviewAssembly(twoLayerProject());
