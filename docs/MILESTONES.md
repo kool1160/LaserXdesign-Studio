@@ -1,41 +1,55 @@
 # Milestone Index
 
-Milestones are large, testable delivery gates. The active milestone is controlled by `docs/status/CURRENT.md`. Each milestone must leave a usable vertical slice and must pass its exit criteria before later work begins.
+Milestones are large, testable delivery gates. The active milestone is controlled by `docs/status/CURRENT.md`. Each milestone must leave a usable vertical result and pass its exit criteria before later work begins.
 
-> **Mandatory post-milestone planning context:** GitHub Issue #37 is the canonical owner direction for guided onboarding and Learn Mode, broader materials, AI-first creation, downstream flat-cut workflows, and community beta planning. It predates the isolated R&D streams and must be reviewed before interpreting, proposing, or sequencing work beyond the active milestone. It does not activate a future gate or authorize experiment merges.
+> **Mandatory planning context:** GitHub Issues #44 and #37 define the product direction for usability, deterministic sign creation, optional AI, physical 3D, broader materials, downstream workflows, pricing, trial, community beta, and market positioning. Experiments reduce uncertainty; they do not establish implementation priority or authorize wholesale merges.
 
 | ID | Name | User-visible result |
 |---|---|---|
-| M00 | Foundation | Codex-ready repository, architecture, policies, and CI guardrails |
-| M01 | Desktop shell | Launchable Windows desktop app with new/open/save/recovery skeleton |
-| M02 | Document and viewport | Exact-size document rendered with pan, zoom, rulers, grid, and units |
+| M00 | Foundation | Repository, architecture, policies, and CI guardrails |
+| M01 | Desktop shell | Launchable Windows app with project lifecycle and recovery skeleton |
+| M02 | Document and viewport | Exact-size document with pan, zoom, rulers, grid, and units |
 | M03 | Editing core | Select, transform, group, layer, undo, and redo real objects |
 | M04 | Text and fonts | Browse fonts, edit text, control spacing, and convert text to paths |
 | M05 | Geometry editing | Node editing, joins, splits, booleans, offsets, and contour repair |
-| M06 | SVG and DXF | Dimensionally correct import/export with golden round-trip fixtures |
+| M06 | SVG and DXF | Dimensionally correct import/export with round-trip fixtures |
 | M07 | Raster tracing | PNG/JPEG preprocessing, tracing, smoothing, and editable path output |
-| M08 | Cutability | Detect islands and bad geometry, add bridges, preview retained metal |
-| M09 | Sign tools | Borders, holes, backing plates, templates, arcs, and sign helpers |
-| M10 | AI generation | Prompt/image concepts converted to editable validated designs |
-| M11 | UI, branding, and product polish | Website-aligned identity, clearer workflows, accessibility, and commercial desktop finish |
-| M12 | Layered production | Explicit manufacturing-layer separation, assembly preview, and organized export packages |
-| M13 | Windows installer and beta hardening | Signed installer, shortcuts, clean uninstall, versioned beta releases, recovery, performance, and release gates |
-| M14 | Beta validation and Version 1.0 release | Real-job beta validation, release-defect closure, final documentation, and signed Version 1.0 publication |
-| M15 | Machine platform foundation | Simulator-first machine profiles, privileged host, deterministic job plans, safety states, and future controller boundaries |
-| M16 | First LaserX controller vertical slice | One explicitly approved controller, machine, and process validated through dry run, hardware-in-the-loop safety tests, and one supervised job |
+| M08 | Cutability | Detect islands and bad geometry, add bridges, preview retained material |
+| M09 | Sign tools | Borders, holes, backing plates, templates, arcs, and deterministic sign helpers |
+| M10 | Optional AI generation | User-supplied AI concepts converted to editable validated designs |
+| M11 | UI, branding, and product polish | Website-aligned identity, clearer workflows, accessibility, and commercial finish |
+| M12 | Layered production | Physical-layer separation, assembly preview, and organized export packages |
+| M13 | Windows installer and private beta hardening | Installable private beta with recovery, clean uninstall, packaging, and release gates |
+| M14 | Production physical 3D preview integration | A finished sign becomes a truthful interactive physical object inside the desktop app |
+| M15 | Guided onboarding and Learn Mode | A first-time user follows real-project guidance and finishes a usable sign without outside instruction |
+| M16 | Material catalog and wood/acrylic expansion | Truthful material identity, nominal/measured thickness, and material-aware preview for broader maker workflows |
+| M17 | Process-aware manufacturability profiles | Plasma, laser, router, waterjet, and other reviewed workflows receive bounded process-specific guidance without machine control |
+| M18 | Downstream software export profiles | Deterministic target-aware handoff for LightBurn, plasma CAM, router, waterjet, fiber, and generic consumers |
+| M19 | Optional AI idea-to-cuttable onboarding | The optional AI path turns a plain-language idea into editable, validated, manufacturable sign geometry |
+| M20 | Licensing, trial, and purchase experience | A generous full-product trial and owner-approved affordable purchase model work without degrading the product |
+| M21 | Community beta distribution readiness | Outside users can install, learn, report problems, and complete real projects through a controlled beta |
+| M22 | Real-user usability validation | Observed users complete the ten-minute primary workflow and the product closes confirmed usability blockers |
+| M23 | Version 1.0 release and broader-market launch | LaserX ships as a supported, signed, documented, premium-feeling Version 1.0 product |
+| M24 | Machine platform foundation | Simulator-first profiles, privileged host, deterministic job plans, and safety-state contracts |
+| M25 | First LaserX controller vertical slice | One explicitly approved controller, machine, and process validated through HIL and one supervised job |
 
 Detailed scope and exit criteria live in `docs/milestones/Mxx-*.md`.
 
-## Post-milestone planning boundary
+## Sequencing rationale
 
-When the owner opens the next planning boundary, Issue #37 must be evaluated alongside the completed milestone record and accepted research. The future sequence must compare, rather than automatically combine:
+The roadmap follows the product logic in Issue #44:
 
-- production integration of the physical 3D preview;
-- guided onboarding and Learn Mode;
-- acrylic, wood, MDF, plywood, and mixed-material expansion;
-- process-aware manufacturability profiles;
-- AI idea-to-manufacturable-design onboarding;
-- community beta distribution and real-user usability testing;
-- broader flat-cut market launch preparation.
+1. **M14 integrates physical 3D first** because the guided first-run experience is expected to end in truthful preview and export.
+2. **M15 makes first-time usability a standalone gate**, not documentation buried inside release work.
+3. **M16–M18 broaden physical truth and downstream usefulness** without turning LaserX into machine software.
+4. **M19 strengthens the optional AI path** while preserving complete non-AI sign creation.
+5. **M20–M23 establish the commercial and beta path**: trial, distribution, real-user evidence, then Version 1.0.
+6. **M24–M25 preserve the owner’s future machine-platform path** after Version 1.0, behind explicit safety gates.
 
-Experiments reduce uncertainty; they do not establish implementation priority, activate a milestone, or bypass owner approval.
+## Agent assignment
+
+- Claude is the default implementation lead for the active milestone while the owner uses expanded Claude capacity and promotional credit.
+- ChatGPT performs independent exact-head audits, posts findings to GitHub, and controls merge/advancement after owner command.
+- Codex remains held unless the owner explicitly assigns a task.
+
+Capacity never overrides milestone order, issue scope, acceptance criteria, or owner approval.
