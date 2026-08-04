@@ -9,28 +9,33 @@ Updated: 2026-08-04
 - Active issue: #30
 - Milestone specification: `docs/milestones/M14-production-physical-3d-preview.md`
 - Senior engineering lead and orchestrator: ChatGPT
-- Current implementation agent: Claude
+- Current implementation agent: Claude, held until the strengthened G4 brief is merged and issued
 - Independent verifier: assigned by risk; Codex is available but not automatically active
 - Owner: product direction and milestone advancement
-- Current gate: **G3 — Three renderer adapter package**
-- Current state: **READY — awaiting checkpoint merge/advancement**
+- Current gate: **G4 — Lazy desktop integration**
+- Current state: **PLANNING — senior architecture brief being locked**
 
-## Live G3 work
+## G3 completion record
 
 - PR: #57 — `M14 G3 — Three renderer-adapter package`
 - Branch: `feat/m14-g3-three-adapter`
 - Exact reviewed head: `9785216183535917d8ab0c7f51f37e75ed8e7503`
+- Squash merge: `f0769507abfac2c7a999f509fad8ae348de8b86b`
 - Review verdict: `READY`
 - Exact-head workflows: 12/12 successful
 - Focused package verification: 162/162 tests passed on the Windows package gate
+- Changed files: 18
 - Scope status: correctly bounded to G3
-- Blocking implementation findings: none
-- Merge status: not merged
-- G4 status: not started
 
-G3 remains a senior checkpoint because it defines the production Three.js adapter contract consumed by G4.
+Delivered production package: `packages/physical-preview-three/`.
+
+G3 established deterministic exact-thickness extrusion, real holes and nested islands, authoritative assembled/exploded placement, solved camera fitting, presentation-only materials, source-attributed conversion failure, content-bound PNG validation primitives, deterministic filenames, renderer-package boundaries, and idempotent resource cleanup.
+
+G3 did not include React/R3F desktop UI, open-document wiring, workers, WebGL fallback/context-loss UI, privileged PNG save, Electron IPC, material-catalog promotion, G4 implementation, or M15 work.
 
 ## Active governance update
+
+Branch: `governance/senior-engineering-orchestration`
 
 The owner directed a senior-led delivery model on 2026-08-04:
 
@@ -46,6 +51,8 @@ The durable rules are in:
 - `docs/OPERATOR_PROTOCOL.md`;
 - `docs/WORKSTREAM_OWNERSHIP.md`;
 - `docs/CLAUDE_EXECUTION_PLAN.md`.
+
+The governance update must merge before G4 implementation begins so the implementation agent receives the strengthened brief rather than the older loose scope.
 
 ## Mandatory product interpretation
 
@@ -88,9 +95,16 @@ Locked interpretation:
 - Squash merge: `e8b10c67d61decd310ccf1d5a7ad76100047babb`
 - Result: deterministic renderer-independent scene/assembly contract with exact thickness, authoritative layer order, fail-closed geometry, findings, fingerprints, and source immutability.
 
-Detailed history remains available in the merged PRs, Issue #30, milestone documentation, ADRs, experiment evidence, and Git history. `CURRENT.md` is intentionally a live control panel rather than a duplicate historical archive.
+### G3 — Three renderer adapter
 
-## Next gate — G4 locked direction
+- PR #57
+- Reviewed head: `9785216183535917d8ab0c7f51f37e75ed8e7503`
+- Squash merge: `f0769507abfac2c7a999f509fad8ae348de8b86b`
+- Result: production Three adapter contract with deterministic geometry, camera, material, failure, capture-validation, and cleanup primitives.
+
+Detailed history remains available in merged PRs, Issue #30, milestone documentation, ADRs, experiment evidence, and Git history. `CURRENT.md` is intentionally a live control panel rather than a duplicate historical archive.
+
+## Active G4 direction
 
 G4 is the lazy production desktop integration against the currently open document.
 
@@ -121,7 +135,7 @@ Renderer-safety hardening before wiring:
 - production and test TypeScript environments must not hide renderer coupling;
 - UI-facing resource collections should be readonly while disposal ownership remains internal.
 
-G4 is a senior architecture and workflow checkpoint.
+G4 is a senior architecture and workflow checkpoint. The senior lead must issue a bounded implementation brief after the governance update merges. Claude must not begin from the older general G4 bullet list.
 
 ## G5 locked capture boundary
 
@@ -143,8 +157,8 @@ G5 is a critical independent checkpoint.
 1. G0 — complete
 2. G1 — complete
 3. G2 — complete
-4. G3 — READY, not merged
-5. G4 — not started
+4. G3 — complete
+5. G4 — planning, implementation not started
 6. G5 — not started
 7. G6 — not started
 
@@ -174,4 +188,4 @@ LaserX remains private test software until a later milestone explicitly approves
 
 ## Next engineering action
 
-Merge G3 only at the reviewed head after owner-authorized checkpoint advancement, record the merge, then activate the strengthened G4 brief. Do not begin G4 from the older loose wording.
+Merge the senior-orchestration governance update, then issue the strengthened G4 execution brief. Do not start G4 implementation before both are in GitHub.
