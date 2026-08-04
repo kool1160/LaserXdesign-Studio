@@ -9,7 +9,7 @@
 - Implementation lead: Claude
 - Independent planning/review/advancement: ChatGPT
 - Codex: held unless explicitly reassigned
-- Current slice: **G0 — governance, ADR, and repository prerequisites**
+- Current slice: **G1 — text-heavy and high-point-count scaling evidence**
 
 The owner explicitly activated M14 on 2026-08-03 after M13 completion and the Issue #44 planning reset.
 
@@ -29,6 +29,8 @@ Locked interpretation:
 - physical 3D is a major feature but remains derived and non-mutating;
 - Inkscape and downstream machine software are companions;
 - premium experience and generous pricing are product requirements;
+- the interface is workflow-first and uses contextual controls with progressive disclosure;
+- large finding sets are grouped into repair decisions, with **Fix safe problems** as the primary repair action when deterministic eligible repairs exist;
 - research reduces uncertainty but does not authorize wholesale merges or set priority by itself.
 
 ## M13 completion record
@@ -62,6 +64,22 @@ The owner installed the repaired build, accepted the expected trust warning, lau
 
 M13 closed through commit `04404690c1c089a46986915ea16628bb39a8fe94`.
 
+## M14 completed slice record
+
+### G0 — governance and architecture lock — complete
+
+- PR #54
+- Final reviewed head: `350214a70b3c9e5c1fe0a9855d703135f57c9959`
+- Review verdict: `READY`
+- Exact-head workflows: 13/13 green
+- Squash merge: `a3481541a7dd246a7c3d8074f6516de09bd5af75`
+- ADR: `docs/decisions/0024-production-physical-3d-preview-boundary.md`
+- Added mechanical audits:
+  - `pnpm audit:physical-preview`
+  - `pnpm audit:physical-preview-guard`
+
+G0 locked the authoritative 2D boundary, pure scene package, Three adapter package, no-CAD-kernel decision, no-drei decision, lazy-loading boundary, privileged PNG capture boundary, component-by-component promotion rule, and production exclusion of research fixtures, selectors, registries, benchmark hooks, and forbidden package couplings.
+
 ## M14 research basis
 
 ### Physical 3D research
@@ -94,14 +112,23 @@ It remains isolated. M14 may use approved current-material presentation behavior
 
 Issue #39 and draft PR #40 remain isolated inputs for M16. They are not production-merge-authorized during M14.
 
+## Current G1 scope
+
+G1 must produce realistic scaling evidence before arbitrary-document desktop wiring:
+
+- outlined text-heavy fixtures with many glyph contours;
+- materially larger/high-point-count fixtures beyond the research baseline;
+- repeated parse, scene-conversion, and Three-conversion timings reported as min, median, p95, and max;
+- memory/resource observations sufficient to identify obvious scaling regressions;
+- evidence about whether cost is dominated by reused cutability topology work or renderer conversion;
+- a decision on whether a narrow topology-only cutability entry point is justified.
+
+If a topology-only entry point is proposed, it must reuse the accepted region-classification algorithm rather than fork it, preserve fail-visible findings, receive a separate architecture decision, and remain optional. G1 does not promote production scene packages, add desktop UI, or begin G2.
+
 ## M14 approved execution order
 
-1. **G0 — governance and architecture lock**
-   - production physical-preview ADR;
-   - package boundaries;
-   - lazy-loading and privileged capture design;
-   - repository prerequisites and exact-head evidence path.
-2. **G1 — text-heavy scaling evidence**
+1. **G0 — governance and architecture lock** — complete
+2. **G1 — text-heavy scaling evidence** — active
 3. **G2 — pure physical scene package promotion**
 4. **G3 — Three renderer adapter package**
 5. **G4 — lazy desktop integration**
@@ -128,14 +155,14 @@ Do not advance to M15 until:
 
 M15 through M23 implement the product direction from Issues #44 and #37:
 
-- guided onboarding and Learn Mode;
+- guided onboarding, workflow-first UI, grouped repair, and Learn Mode;
 - material truth and wood/acrylic expansion;
 - process-aware manufacturability;
 - downstream export profiles;
 - optional AI onboarding;
 - licensing/trial;
 - community beta;
-- real-user usability validation;
+- real-user usability validation and final app-wide interface polish;
 - Version 1.0 release and broader-market launch.
 
 M24 and M25 preserve the post-Version-1 machine-platform path behind explicit safety gates.
