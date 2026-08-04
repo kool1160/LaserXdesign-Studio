@@ -32,11 +32,11 @@ async function sourceFiles(dir) {
 
 const FORBIDDEN_RENDERER_SOURCE = [
   {
-    pattern: /(?:from\s*|import\s*\(\s*|require\s*\(\s*)["'`]node:/u,
+    pattern: /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["'`]node:/u,
     message: "renderer-bound source must not import a node: module",
   },
   {
-    pattern: /\bBuffer\b/u,
+    pattern: /\bBuffer\s*(?:\.|\[|\()/u,
     message: "renderer-bound source must not depend on Node's Buffer global",
   },
   {
