@@ -53,6 +53,9 @@ function hashChunk(value: string, seed: number): number {
 
 function hashCanonical(value: unknown): string {
   const canonical = JSON.stringify(canonicalize(value));
+  if (canonical === undefined) {
+    throw new TypeError("Physical preview fingerprint input must be serializable.");
+  }
   return [
     hashChunk(canonical, 2_166_136_261),
     hashChunk(canonical, 2_166_136_261 ^ 0x9e3779b9),
