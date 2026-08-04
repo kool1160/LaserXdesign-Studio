@@ -2,69 +2,122 @@
 
 ## Purpose
 
-This protocol keeps the owner out of the copy-and-paste loop while preserving bounded implementation, exact evidence, review discipline, and explicit advancement.
+This protocol keeps the owner out of the copy-and-paste loop while preserving bounded implementation, exact evidence, review discipline, and explicit milestone advancement.
 
 The durable workflow is:
 
 1. discuss product intent with the owner;
 2. record accepted decisions in GitHub;
-3. let ChatGPT inspect and implement one bounded active-gate slice;
-4. run a fresh exact-head review before merge;
-5. keep detailed evidence and findings on GitHub;
-6. return only a compact status and next valid command to the owner.
+3. let Claude inspect, implement, and verify bounded work inside the active gate;
+4. let ChatGPT orchestrate, perform exact-head audits, and hold acceptance authority;
+5. use focused exact-head verification for routine PRs;
+6. perform deep senior audits at important risk-bearing turning points;
+7. use an independent verifier for critical trust, manufacturing, security, release, or safety boundaries;
+8. return compact status to the owner when a decision or milestone checkpoint is actually needed.
 
-Issue #44, Issue #37, ADR 0025, and `docs/status/CURRENT.md` are mandatory context for post-M13 work.
+Issue #44, Issue #37, ADR 0026, and `docs/status/CURRENT.md` are mandatory context for post-M13 work.
 
 ## Roles
 
 | Role | Responsibility |
 | --- | --- |
-| Owner | Defines product direction, pricing philosophy, milestone order, and advancement. |
-| ChatGPT | Senior software engineer, active implementation lead, orchestrator, exact-head reviewer, and merger after owner command. |
-| Claude | Held by default; available for an explicitly assigned independent review, repair, comparison, or specialist task. |
-| Codex | Held by default under the same explicit-assignment boundary. |
+| Owner | Defines product direction, pricing philosophy, milestone order, major scope changes, and advancement. |
+| Claude | Active implementation agent while `CURRENT.md` records that assignment under ADR 0026. Implements, repairs, and pushes exact-head evidence; never merges or advances. |
+| ChatGPT | Senior software engineer, project orchestrator, exact-head auditor, and acceptance authority. Performs focused and deep audits, merges routine and checkpoint PRs after `READY`, and activates only the owner-approved next gate. |
+| Independent verifier | Reviews critical work not authored by that verifier. May be Claude, Codex, another capable model, a human, or a combination. |
+| Codex | Held by default; available for explicitly assigned independent review, repair, comparison, or specialist work. |
 | GitHub | Stores the durable plan, code, evidence, findings, CI, and milestone state. |
 
-ChatGPT must distinguish implementation evidence from acceptance review and must not treat its own earlier summary, or another agent's report, as proof without re-reading the exact GitHub head.
+ChatGPT must distinguish implementation evidence from acceptance judgment and must not treat Claude's report, its own earlier summary, or another agent's report as proof without re-reading the exact GitHub head.
 
 ## Authoritative reading order
 
 1. explicit owner instruction;
 2. `AGENTS.md`;
-3. ADR 0025 and `docs/status/CURRENT.md` for the active implementation assignment;
+3. ADR 0026 and `docs/status/CURRENT.md` for the active implementation assignment;
 4. Issues #44 and #37;
 5. `docs/OPERATOR_PROTOCOL.md`;
 6. `docs/WORKSTREAM_OWNERSHIP.md`;
 7. active milestone document;
 8. active issue;
-9. active PR, review findings, and exact-head CI.
+9. active PR, findings, and exact-head CI.
 
 Old chats, stale PR bodies, old branches, experiment branches, local handoffs, and temporary worktrees are not current truth.
+
+# Review depth
+
+## Routine implementation verification
+
+Routine changes inside the owner-approved active gate do not require a heavyweight senior audit or a separate owner command for every PR.
+
+Before merging routine work, ChatGPT must:
+
+1. inspect the complete focused diff;
+2. verify the exact current head;
+3. run or inspect the required tests and CI;
+4. confirm the change remains inside the active gate;
+5. confirm no unresolved blocking finding remains;
+6. record exact-head evidence in GitHub;
+7. merge with an expected-head guard.
+
+Routine work includes narrow documentation, test-only strengthening, localized refactors with unchanged contracts, accepted-architecture UI implementation, and bounded bug repairs with regression tests.
+
+## Senior turning-point audit
+
+A deep senior audit from ChatGPT is required for:
+
+- ADR or architecture acceptance;
+- cross-package public contracts;
+- major integration slices;
+- worker, cache, cancellation, concurrency, or performance strategy;
+- milestone-defining user workflows;
+- major runtime dependencies or bundling boundaries;
+- repairs for false success, data loss, silent incorrect output, or resource leakage;
+- evidence that materially changes the roadmap;
+- completion of a risk-bearing gate;
+- milestone exit;
+- private or public release candidates.
+
+A senior audit inspects the exact head, full relevant diff, neighboring architecture, tests, CI, issue and milestone acceptance, scope drift, product direction, limitations, and whether claims match the code.
+
+## Critical independent checkpoint
+
+A separate verifier — who did not author the load-bearing implementation being approved — is required for:
+
+- schema or migration changes;
+- canonical units, geometry, cutability, physical-layer truth, or manufacturing exports;
+- filesystem, IPC, credentials, signing, updating, installation, or privileged boundaries;
+- capture evidence claimed as proof;
+- AI credential/provider security;
+- licensing, payment, or public distribution enforcement;
+- machine control, hardware, simulator, operator review, or safety;
+- disputed evidence or explicit owner request.
+
+Because Claude is the default implementation agent, this checkpoint typically assigns Codex, another capable model, or a human reviewer for changes Claude authored.
 
 # Command reference
 
 ## `Plan LaserX: <idea>`
 
-Discuss product behavior, workflow, scope, priority, business model, manufacturing rules, or sequencing without writing code.
+Discuss product behavior, workflow, scope, priority, business model, manufacturing rules, architecture, or sequencing without starting implementation.
 
 ## `Lock that into LaserX`
 
-Write an accepted decision to the smallest authoritative GitHub location: issue, milestone, requirements, ADR, ownership document, current status, or PR finding.
+Write an accepted decision to the smallest authoritative GitHub location: issue, milestone, requirements, ADR, ownership document, status, or PR finding.
 
 ## `Continue LaserX`
 
-**Use with ChatGPT while `CURRENT.md` assigns ChatGPT as implementation lead.**
+Use with Claude while `CURRENT.md` assigns Claude as implementation lead.
 
-ChatGPT must:
+Claude must:
 
-1. read all authoritative sources and live GitHub state;
-2. identify the one active milestone, issue, bounded slice, and any open PR;
-3. resolve blocking review findings first;
-4. otherwise repair required CI failures;
-5. otherwise implement only the next approved bounded slice;
-6. add tests and documentation tied to behavior;
-7. push exact-head evidence to a draft PR;
-8. stop at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED` unless the owner has also issued a valid advancement command.
+1. inspect all authoritative sources and live GitHub state;
+2. identify the active milestone, issue, bounded sub-slice, and open work;
+3. resolve blocking findings or CI failures first;
+4. otherwise implement the next technically correct bounded work;
+5. add tests and behavior-linked documentation;
+6. keep branches, PRs, issues, and status synchronized;
+7. push exact-head evidence and stop at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`.
 
 `Continue LaserX` never authorizes:
 
@@ -72,127 +125,119 @@ ChatGPT must:
 - speculative future infrastructure;
 - wholesale experiment merge;
 - silent issue closure;
+- product-direction changes without the owner;
 - milestone advancement without owner authorization;
-- accepting a stale handoff as proof.
-
-### Implementation handoff
-
-```text
-LaserX M## — AWAITING_REVIEW | REPAIRING | BLOCKED
-PR: #__
-Head: <full SHA>
-CI: green | failing | running
-Work: <one-sentence result>
-Blocker: none | <one-sentence blocker>
-Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
-```
-
-Detailed evidence belongs in GitHub.
+- merging its own work or accepting a stale handoff as proof.
 
 ## `Repair LaserX`
 
-Inspect the active PR, findings, CI, and source, then repair only the unresolved bounded defects. Do not use repair as permission to broaden the slice.
+Inspect the active code, PR, findings, and CI, then repair only the unresolved bounded defects. Repair does not authorize broader scope.
 
 ## `Check LaserX`
 
-Perform a fresh review against the exact current head, even when ChatGPT performed the implementation.
+Perform a deep senior audit against the exact current head. This command is used with ChatGPT, may be issued by the owner at any time, and is mandatory at the senior turning points defined above.
 
-The review must inspect:
+The audit inspects:
 
-- active milestone and issue acceptance criteria;
-- exact PR head and complete diff;
-- relevant source, tests, fixtures, migrations, ADRs, and documentation;
-- review findings and whether repairs truly close them;
-- required workflow results on the final pushed head or reviewed merge ref;
-- scope control and later-gate restraint;
-- whether claims and PR evidence match the live code.
+- active milestone and issue acceptance;
+- exact head and complete relevant diff;
+- source, tests, fixtures, migrations, ADRs, and documentation;
+- findings and whether repairs truly close them;
+- required CI on the final head or reviewed merge ref;
+- scope and product-direction drift;
+- whether claims and evidence match live code.
 
-The chat verdict is normally:
+The verdict is normally:
 
 ```text
 LaserX M## PR #__ — READY | REPAIR | BLOCKED
 Head: <full SHA>
 CI: green | failing | running
 Finding: none | <brief blocking reason>
-Next command: Advance LaserX | Continue LaserX | Plan LaserX: <decision>
+Next: continue implementation | independent verification | owner decision | milestone advancement
 ```
 
-A second-model review may be assigned to Claude or Codex when risk, uncertainty, or owner direction warrants it.
+## `Verify LaserX Independently`
+
+Assign a verifier who did not author the load-bearing implementation. The assignment and exact target head must be recorded in GitHub.
 
 ## `Advance LaserX`
 
-Valid only after `READY` and explicit owner authorization.
+Valid only after a senior `READY` verdict from ChatGPT, required independent verification where applicable, and explicit owner authorization.
 
 Before advancing, ChatGPT verifies:
 
 1. reviewed head is unchanged;
-2. required checks are green on that head or the reviewed merge ref;
+2. required checks are green;
 3. no blocking finding remains;
-4. active slice or milestone acceptance criteria are satisfied;
-5. the owner authorized the advancement.
+4. active gate or milestone acceptance is satisfied;
+5. the owner authorized advancement.
 
-Then ChatGPT may:
-
-1. mark the PR ready if needed;
-2. merge using the established method with an expected-head guard;
-3. close the active slice or issue when appropriate;
-4. update `CURRENT.md` with exact merge and verification evidence;
-5. activate only the next owner-approved slice or milestone;
-6. continue implementation only when the owner's command explicitly includes it.
+Then ChatGPT may merge any remaining checkpoint PR, close the active gate or issue when appropriate, record exact merge evidence, and activate only the next owner-approved gate or milestone.
 
 ## `Status LaserX`
 
-Read-only live status: active milestone, issue, sub-slice, open PR/head, CI, blockers, implementation owner, and next valid command.
+Read-only live status: active milestone, issue, sub-slice, open PR/head, CI, blockers, ownership, audit class, and next valid action.
 
 ## `Hold LaserX`
 
-Pause new implementation. Do not merge, advance, create new production branches, or start parallel scope until explicit resume.
+Pause new implementation. Do not merge, advance, create new production branches, or start parallel scope until explicitly resumed.
 
 # Normal operating loop
 
 ```text
 Owner: Plan LaserX: <idea>
-ChatGPT: discuss and settle decision
+ChatGPT: discuss and settle direction
+
 Owner: Lock that into LaserX
-ChatGPT: update GitHub
+ChatGPT: record the decision
 
 Owner: Continue LaserX
-ChatGPT: implement or repair one bounded slice, update draft PR, stop
+Claude: implement bounded work inside the active gate and push exact-head evidence
 
+ChatGPT: perform focused exact-head verification and merge routine work inside the active gate
+
+At a senior turning point:
 Owner: Check LaserX
-ChatGPT: re-read and review exact head
+ChatGPT: perform the deep exact-head audit
 
-If REPAIR:
-Owner: Continue LaserX or Repair LaserX
+At a critical boundary:
+ChatGPT: assign independent verification
 
-If READY:
+At milestone advancement:
 Owner: Advance LaserX
+ChatGPT: verify, record, and activate only the approved next milestone
 ```
 
 ## Slice policy
 
-A milestone may contain multiple capabilities, but each implementation PR must be a reviewable vertical result. Split work when one PR would combine unrelated architectures, risky migrations, or independently testable workflows.
+A milestone may contain multiple capabilities, and a sub-slice may contain multiple routine PRs. Split work when one PR would combine unrelated architectures, risky migrations, or independently testable workflows. Do not split work into empty infrastructure with no testable value.
 
-Do not split into empty infrastructure with no testable value. M14's G4 sub-slices are recorded in `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0025.
+M14's active G4 sub-slices are recorded in ADR 0026, `docs/CLAUDE_EXECUTION_PLAN.md`, and `docs/status/CURRENT.md`.
 
 ## State names
 
-| State | Meaning | Next normal command |
+| State | Meaning | Normal action |
 | --- | --- | --- |
-| `PLANNING` | Product behavior or gate is still being decided. | `Lock that into LaserX` |
-| `IMPLEMENTING` | ChatGPT is building the approved slice. | `Check LaserX` after the PR handoff |
-| `REPAIRING` | ChatGPT is resolving review or CI findings. | `Check LaserX` |
-| `AWAITING_REVIEW` | Draft PR is ready for a fresh exact-head review. | `Check LaserX` |
-| `READY` | Exact head accepted and required CI green. | `Advance LaserX` |
-| `BLOCKED` | Human decision, external dependency, or failure prevents progress. | `Plan LaserX` or repair after correction |
-| `HELD` | Owner intentionally paused work or an agent is not assigned. | Explicit assignment or resume |
+| `PLANNING` | Product behavior or architecture is being decided. | Record owner decision. |
+| `IMPLEMENTING` | Claude is building approved work. | Continue routine delivery. |
+| `REPAIRING` | Blocking findings or CI are being corrected. | Repair and verify. |
+| `CHECKPOINT_REVIEW` | A senior turning-point audit is required. | `Check LaserX`. |
+| `INDEPENDENT_REVIEW` | Separation of duties is required. | Assign independent verifier. |
+| `READY` | Checkpoint accepted and required evidence is green. | Continue active gate or request advancement. |
+| `BLOCKED` | Human decision, external dependency, or failure prevents progress. | Owner decision or bounded repair. |
+| `HELD` | Work or an agent is intentionally paused. | Explicit resume or assignment. |
 
 ## Final rules
 
 - GitHub is the project record; chat is not.
-- ChatGPT implements and orchestrates while `CURRENT.md` says so.
-- Claude and Codex enter only through explicit recorded assignment.
-- The owner never needs to courier completion reports between agents.
+- Claude implements and repairs while `CURRENT.md` says so; it never merges or advances its own work.
+- ChatGPT orchestrates, audits, and holds acceptance authority.
+- Routine changes receive focused exact-head verification, not full project audits.
+- Deep audits happen at architecture, integration, truth, security, milestone, and release turning points.
+- Codex enters only through explicit recorded assignment; an independent checkpoint typically assigns a verifier other than Claude for work Claude authored.
+- The owner does not courier routine implementation reports or approve every small PR.
+- The owner retains product direction and milestone advancement.
 - No agent invents the roadmap.
 - No milestone advances merely because code exists.
 - No experiment branch is merged wholesale.

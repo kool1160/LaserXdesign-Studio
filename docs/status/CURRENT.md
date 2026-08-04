@@ -6,16 +6,16 @@
 
 - Active issue: #30
 - Active milestone specification: `docs/milestones/M14-production-physical-3d-preview.md`
-- Implementation and orchestration lead: ChatGPT
+- Implementation lead: Claude
+- Independent planning, orchestration, exact-head audit, and acceptance authority: ChatGPT
 - Owner authority: product direction and milestone advancement
-- Claude: held unless explicitly assigned independent review, repair, comparison, or specialist work
 - Codex: held unless explicitly assigned independent review, repair, comparison, or specialist work
 - Current slice: **G4 — lazy desktop integration**
 - Current implementation sub-slice: **G4A — renderer-safe integration foundation**
 
-The owner explicitly reassigned implementation responsibility to ChatGPT on 2026-08-04. ADR 0025 records the durable ownership change and supersedes the former Claude-first assignment while this status remains active.
+On 2026-08-04 the owner briefly reassigned implementation responsibility to ChatGPT under ADR 0025, then clarified the same day that the intended durable model is Claude implementation with ChatGPT orchestration and audit authority. ADR 0026 records this correction and supersedes ADR 0025, which is retained, marked superseded, for history.
 
-`Continue LaserX` authorizes ChatGPT to inspect and implement only the next bounded active sub-slice. It does not authorize Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope. `Advance LaserX` still requires an exact-head `READY` verdict and explicit owner authorization.
+`Continue LaserX` authorizes Claude to inspect and implement only the next bounded active sub-slice. It does not authorize Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope. `Advance LaserX` still requires an exact-head `READY` verdict from ChatGPT and explicit owner authorization.
 
 ## Mandatory product interpretation
 
@@ -152,7 +152,7 @@ Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production
 6. **G5 — privileged PNG capture** — held
 7. **G6 — exact-head Windows evidence and owner retest** — held
 
-Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0025.
+Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0026.
 
 ## M14 exit rule
 
