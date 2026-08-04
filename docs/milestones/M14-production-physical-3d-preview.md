@@ -10,7 +10,7 @@ The feature must create the emotional payoff described in Issue #44 without beco
 
 M14 is active only when `docs/status/CURRENT.md` names it and Issue #30 is open as the active delivery issue.
 
-ChatGPT is the active senior software engineer, implementation lead, and project orchestrator under ADR 0025. Claude and Codex remain held unless the owner records an explicit assignment.
+Claude is the implementation agent. ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority under ADR 0026. Codex remains held unless the owner records an explicit assignment.
 
 ## Governing evidence
 
@@ -20,7 +20,7 @@ ChatGPT is the active senior software engineer, implementation lead, and project
 - Issue #42 — accepted material-aware rendering research;
 - accepted integration recommendation at experiment head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`;
 - ADR 0024 — production physical-preview architecture boundary;
-- ADR 0025 — active implementation ownership;
+- ADR 0026 — implementation and orchestration ownership (supersedes ADR 0025);
 - `docs/CLAUDE_EXECUTION_PLAN.md` — legacy path containing the active implementation plan.
 
 The experiment branch is never merged wholesale.
