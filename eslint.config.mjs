@@ -42,6 +42,16 @@ export default tseslint.config(
     },
   },
   {
+    files: ["packages/physical-preview-three/tests/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./packages/physical-preview-three/tsconfig.test.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     files: ["**/*.config.ts", "**/*.config.mts", "**/build.mjs"],
     extends: [tseslint.configs.disableTypeChecked],
   },
