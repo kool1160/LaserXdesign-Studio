@@ -79,6 +79,11 @@ export class PhysicalPreviewCoordinator {
 
     const operationId = `physical-preview-${String(++this.#operationSequence)}`;
     const request = createPhysicalPreviewTaskRequest(operationId, project, assemblyOptions);
+
+    // Every newer request owns the preview result, including a cache hit. An old
+    // worker must not be allowed to complete after a newer cached scene is shown.
+    this.#supersedeActive();
+
     const cached = this.#cache.get(request.inputFingerprint);
     if (cached !== null) {
       options.onProgress?.({
@@ -94,15 +99,6 @@ export class PhysicalPreviewCoordinator {
         assembly: cached,
         cacheHit: true,
       };
-    }
-
-    // A newer immutable snapshot owns the worker. Terminating the earlier worker
-    // is the only honest cancellation boundary while topology analysis remains
-    // synchronous inside the pure package.
-    const previous = this.#active;
-    if (previous !== null) {
-      previous.cancellationReason = "superseded";
-      previous.controller.abort();
     }
 
     const generation = ++this.#generation;
@@ -125,16 +121,7 @@ export class PhysicalPreviewCoordinator {
         }
       });
 
-      if (active.cancellationReason === "manual") {
-        throw new PhysicalPreviewCancelledError();
-      }
-      if (
-        active.cancellationReason === "superseded" ||
-        this.#active !== active ||
-        generation !== this.#generation
-      ) {
-        throw new PhysicalPreviewSupersededError();
-      }
+      this.#throwIfCancelledOrSuperseded(active);
 
       this.#cache.set(result);
       return {
@@ -144,16 +131,7 @@ export class PhysicalPreviewCoordinator {
         cacheHit: false,
       };
     } catch (error) {
-      if (active.cancellationReason === "manual") {
-        throw new PhysicalPreviewCancelledError();
-      }
-      if (
-        active.cancellationReason === "superseded" ||
-        generation !== this.#generation ||
-        this.#active !== active
-      ) {
-        throw new PhysicalPreviewSupersededError();
-      }
+      this.#throwIfCancelledOrSuperseded(active);
       throw error;
     } finally {
       options.signal?.removeEventListener("abort", externalAbort);
@@ -172,5 +150,30 @@ export class PhysicalPreviewCoordinator {
 
   public clearCache(): void {
     this.#cache.clear();
+  }
+
+  #supersedeActive(): void {
+    const active = this.#active;
+    if (active === null) return;
+    active.cancellationReason = "superseded";
+    this.#generation += 1;
+    active.controller.abort();
+    this.#active = null;
+  }
+
+  #throwIfCancelledOrSuperseded(active: ActiveRequest): void {
+    if (active.cancellationReason === "manual") {
+      throw new PhysicalPreviewCancelledError();
+    }
+    if (
+      active.cancellationReason === "superseded" ||
+      active.generation !== this.#generation ||
+      this.#active !== active
+    ) {
+      throw new PhysicalPreviewSupersededError();
+    }
+    if (active.controller.signal.aborted) {
+      throw new PhysicalPreviewCancelledError();
+    }
   }
 }
