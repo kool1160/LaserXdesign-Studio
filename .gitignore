@@ -48,3 +48,7 @@ native/target/
 *.tmp.dxf
 *.tmp.svg
 *.trace-cache
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

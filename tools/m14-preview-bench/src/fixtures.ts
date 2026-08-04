@@ -218,6 +218,95 @@ function highPointCountSign(
   };
 }
 
+/**
+ * Fixtures that must drive `analyzeDocumentCutability` into its `"ambiguous"`
+ * status, one per condition that sets the flag during the topology phase.
+ *
+ * These exist to prove the harness fails closed. If any of them produced shapes,
+ * the measured Three timings would be coming from invented solids built on
+ * geometry the analysis could not resolve.
+ */
+export function invalidFixtures(): BenchFixture[] {
+  const build = (
+    key: string,
+    description: string,
+    objects: DocumentObject[],
+  ): BenchFixture => {
+    const layerId = id("ca", 1);
+    return {
+      key,
+      description,
+      project: createBlankProject({
+        id: id("c1", 1),
+        now: NOW,
+        documentId: id("c2", 1),
+        width: 200,
+        height: 160,
+        layers: [physicalLayer(layerId, "Face", 6)],
+        activeLayerId: layerId,
+        objects: objects.map((object) => ({ ...object, layerId })),
+      }),
+    };
+  };
+
+  const square = (index: number, x: number, y: number, size: number): PathObject => ({
+    id: id("cb", index),
+    type: "path",
+    layerId: "",
+    transform: identityTransform(),
+    closed: true,
+    points: [
+      { xMm: x, yMm: y },
+      { xMm: x + size, yMm: y },
+      { xMm: x + size, yMm: y + size },
+      { xMm: x, yMm: y + size },
+    ],
+  });
+
+  return [
+    build("invalid-duplicate-segment", "Two identical stacked squares — duplicate segments", [
+      square(1, 20, 20, 60),
+      square(2, 20, 20, 60),
+    ]),
+    build(
+      "invalid-overlapping-segment",
+      "Two squares sharing a collinear overlapping edge run",
+      [
+        square(3, 20, 20, 60),
+        {
+          ...square(4, 20, 40, 60),
+          points: [
+            { xMm: 20, yMm: 40 },
+            { xMm: 80, yMm: 40 },
+            { xMm: 80, yMm: 100 },
+            { xMm: 20, yMm: 100 },
+          ],
+        },
+      ],
+    ),
+    build("invalid-self-intersecting", "A bowtie contour that crosses itself", [
+      {
+        id: id("cb", 5),
+        type: "path",
+        layerId: "",
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 20, yMm: 20 },
+          { xMm: 80, yMm: 80 },
+          { xMm: 80, yMm: 20 },
+          { xMm: 20, yMm: 80 },
+        ],
+      },
+    ]),
+    build(
+      "invalid-cross-intersecting",
+      "Two separate contours that intersect each other",
+      [square(6, 20, 20, 60), square(7, 50, 50, 60)],
+    ),
+  ];
+}
+
 export async function benchFixtures(): Promise<BenchFixture[]> {
   return [
     await textSign(

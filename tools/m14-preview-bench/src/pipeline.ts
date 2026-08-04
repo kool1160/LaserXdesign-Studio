@@ -99,11 +99,26 @@ export interface PreviewLayerScene {
  * mirrors the accepted contract, including the deliberate inversion: cutability's
  * `disposition` describes what survives cutting, which is not the same question
  * as what is solid in a 3D stack, so only depth/parent/points are reused.
+ *
+ * **Fails closed on an ambiguous analysis.** `analyzeDocumentCutability` sets its
+ * ambiguity flag for open contours, duplicate segments, overlapping segments,
+ * self-intersections, and intersections between separate contours. When that
+ * flag is set, `classifyRegions` marks every region `"ambiguous"` and no region
+ * can be trusted as solid or hole — so producing shapes anyway would invent
+ * solids from broken geometry, which Issue #30 and ADR 0024 §7 forbid.
  */
 export function buildScene(
   document: LaserxDocument,
   summary: CutabilityAnalysisSummary,
 ): PreviewLayerScene[] {
+  if (summary.status === "ambiguous") {
+    return physicalLayers(document).map((layer) => ({
+      layerId: layer.id,
+      thicknessMm: layer.manufacturing?.thicknessMm ?? 0,
+      shapes: [],
+    }));
+  }
+
   const scenes: PreviewLayerScene[] = [];
 
   for (const layer of physicalLayers(document)) {
@@ -173,10 +188,15 @@ export interface FixtureShape {
   layers: number;
   closedPaths: number;
   contourPoints: number;
+  /** Exact segment count as reported by the production analysis, not re-derived. */
+  segments: number;
 }
 
 /** Counts the inputs that the research showed cost actually scales with. */
-export function describeProject(project: LaserxProject): FixtureShape {
+export function describeProject(
+  project: LaserxProject,
+  summary: CutabilityAnalysisSummary,
+): FixtureShape {
   const document = project.document;
   let closedPaths = 0;
   let contourPoints = 0;
@@ -191,5 +211,6 @@ export function describeProject(project: LaserxProject): FixtureShape {
     layers: document.layers.length,
     closedPaths,
     contourPoints,
+    segments: summary.segmentCount,
   };
 }
