@@ -5,9 +5,26 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The active M14 slice legitimately advances G0 -> G6, so pinning one literal
+# makes the guard fail on main every time the milestone moves forward. Pinning
+# only the "G" prefix would accept G7, GARBAGE, or a truncated line, so the
+# accepted values are matched explicitly instead.
+CURRENT_SLICE_PATTERN = re.compile(r"^- Current slice: \*\*G[0-6] ", re.MULTILINE)
+
+
+def current_slice_error(text: str) -> str | None:
+    """Returns an error message when CURRENT.md does not name a valid M14 slice."""
+    if CURRENT_SLICE_PATTERN.search(text) is None:
+        return (
+            "docs/status/CURRENT.md must name the active M14 slice as "
+            '"- Current slice: **G<0-6> ..."'
+        )
+    return None
 
 MILESTONE_FILENAMES = (
     "M00-foundation.md",
@@ -212,11 +229,16 @@ def check_instruction_links(errors: list[str]) -> None:
             "M14 — Production Physical 3D Preview Integration",
             "Implementation lead: Claude",
             "Independent planning/review/advancement: ChatGPT",
-            "Current slice: **G0",
             "Issues #44 and #37",
         ),
         "docs/status/CURRENT.md",
     )
+
+    slice_error = current_slice_error(
+        (ROOT / "docs" / "status" / "CURRENT.md").read_text(encoding="utf-8")
+    )
+    if slice_error is not None:
+        errors.append(slice_error)
 
     require_terms(
         errors,
