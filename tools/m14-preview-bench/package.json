@@ -1,0 +1,25 @@
+{
+  "name": "@laserx/tool-m14-preview-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "vitest run --dir bench --testTimeout=600000",
+    "test": "vitest run --dir tests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@laserx/cutability": "workspace:*",
+    "@laserx/domain": "workspace:*",
+    "@laserx/fonts": "workspace:*",
+    "@laserx/geometry": "workspace:*",
+    "@laserx/project-format": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "@types/three": "0.185.3",
+    "three": "0.185.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

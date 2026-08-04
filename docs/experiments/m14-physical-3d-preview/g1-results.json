@@ -1,0 +1,264 @@
+{
+  "generatedBy": "tools/m14-preview-bench",
+  "gate": "M14 G1",
+  "warmupRuns": 3,
+  "samplesPerFixture": 12,
+  "environment": {
+    "node": "v24.18.0",
+    "platform": "win32-x64",
+    "cpus": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel"
+  },
+  "notes": "Scene assembly and Three conversion are measured through a tool-local harness matching the accepted Issue #34 contract; region topology comes from the production @laserx/cutability analysis.",
+  "fixtures": [
+    {
+      "key": "text-short",
+      "description": "One short outlined word — the smallest realistic text sign",
+      "shape": {
+        "objects": 6,
+        "layers": 1,
+        "closedPaths": 6,
+        "contourPoints": 455
+      },
+      "geometries": 4,
+      "vertices": 5400,
+      "issues": 9,
+      "regions": 6,
+      "parse": {
+        "samples": 12,
+        "minMs": 0.584,
+        "medianMs": 0.7111,
+        "p95Ms": 0.893,
+        "maxMs": 0.893
+      },
+      "analysis": {
+        "samples": 12,
+        "minMs": 54.1076,
+        "medianMs": 55.7227,
+        "p95Ms": 67.4439,
+        "maxMs": 67.4439
+      },
+      "scene": {
+        "samples": 12,
+        "minMs": 0.0113,
+        "medianMs": 0.0134,
+        "p95Ms": 0.0356,
+        "maxMs": 0.0356
+      },
+      "three": {
+        "samples": 12,
+        "minMs": 1.0778,
+        "medianMs": 1.2502,
+        "p95Ms": 1.563,
+        "maxMs": 1.563
+      },
+      "analysisPhasesMedianMs": {
+        "normalizing": 9.5726,
+        "topology": 15.7656,
+        "spacing": 25.4673,
+        "classifying": 5.0055
+      },
+      "previewRequiredShareOfAnalysis": 0.2616,
+      "heapDeltaBytes": 5541752
+    },
+    {
+      "key": "text-sign",
+      "description": "A typical two-line outlined shop sign",
+      "shape": {
+        "objects": 23,
+        "layers": 1,
+        "closedPaths": 23,
+        "contourPoints": 1964
+      },
+      "geometries": 18,
+      "vertices": 23292,
+      "issues": 27,
+      "regions": 23,
+      "parse": {
+        "samples": 12,
+        "minMs": 1.1758,
+        "medianMs": 1.6352,
+        "p95Ms": 2.4794,
+        "maxMs": 2.4794
+      },
+      "analysis": {
+        "samples": 12,
+        "minMs": 403.4997,
+        "medianMs": 444.5158,
+        "p95Ms": 509.8364,
+        "maxMs": 509.8364
+      },
+      "scene": {
+        "samples": 12,
+        "minMs": 0.0304,
+        "medianMs": 0.0334,
+        "p95Ms": 0.0537,
+        "maxMs": 0.0537
+      },
+      "three": {
+        "samples": 12,
+        "minMs": 4.5001,
+        "medianMs": 5.638,
+        "p95Ms": 9.0187,
+        "maxMs": 9.0187
+      },
+      "analysisPhasesMedianMs": {
+        "normalizing": 100.6132,
+        "topology": 165.5015,
+        "spacing": 167.3311,
+        "classifying": 11.4181
+      },
+      "previewRequiredShareOfAnalysis": 0.252,
+      "heapDeltaBytes": 44299328
+    },
+    {
+      "key": "text-heavy",
+      "description": "A dense multi-line outlined sign — the realistic worst case for glyph contours",
+      "shape": {
+        "objects": 110,
+        "layers": 1,
+        "closedPaths": 110,
+        "contourPoints": 9433
+      },
+      "geometries": 75,
+      "vertices": 112176,
+      "issues": 143,
+      "regions": 110,
+      "parse": {
+        "samples": 12,
+        "minMs": 4.7733,
+        "medianMs": 5.3486,
+        "p95Ms": 7.408,
+        "maxMs": 7.408
+      },
+      "analysis": {
+        "samples": 12,
+        "minMs": 1775.0185,
+        "medianMs": 2018.5252,
+        "p95Ms": 2122.3454,
+        "maxMs": 2122.3454
+      },
+      "scene": {
+        "samples": 12,
+        "minMs": 0.2046,
+        "medianMs": 0.2692,
+        "p95Ms": 1.5683,
+        "maxMs": 1.5683
+      },
+      "three": {
+        "samples": 12,
+        "minMs": 19.8857,
+        "medianMs": 23.5926,
+        "p95Ms": 31.0274,
+        "maxMs": 31.0274
+      },
+      "analysisPhasesMedianMs": {
+        "normalizing": 417.2599,
+        "topology": 682.5915,
+        "spacing": 839.4223,
+        "classifying": 72.778
+      },
+      "previewRequiredShareOfAnalysis": 0.2428,
+      "heapDeltaBytes": 8982984
+    },
+    {
+      "key": "high-point-count",
+      "description": "24 lobed contours × 240 points — point-count scaling without text",
+      "shape": {
+        "objects": 24,
+        "layers": 1,
+        "closedPaths": 24,
+        "contourPoints": 5760
+      },
+      "geometries": 24,
+      "vertices": 68832,
+      "issues": 0,
+      "regions": 24,
+      "parse": {
+        "samples": 12,
+        "minMs": 2.5162,
+        "medianMs": 2.7095,
+        "p95Ms": 3.2886,
+        "maxMs": 3.2886
+      },
+      "analysis": {
+        "samples": 12,
+        "minMs": 1251.8341,
+        "medianMs": 1288.5881,
+        "p95Ms": 1313.2855,
+        "maxMs": 1313.2855
+      },
+      "scene": {
+        "samples": 12,
+        "minMs": 0.0182,
+        "medianMs": 0.0196,
+        "p95Ms": 1.0472,
+        "maxMs": 1.0472
+      },
+      "three": {
+        "samples": 12,
+        "minMs": 9.182,
+        "medianMs": 11.2651,
+        "p95Ms": 25.2586,
+        "maxMs": 25.2586
+      },
+      "analysisPhasesMedianMs": {
+        "normalizing": 307.0802,
+        "topology": 499.5862,
+        "spacing": 470.4796,
+        "classifying": 3.0958
+      },
+      "previewRequiredShareOfAnalysis": 0.2407,
+      "heapDeltaBytes": -50593264
+    },
+    {
+      "key": "very-high-point-count",
+      "description": "48 lobed contours × 480 points — deliberately beyond any realistic sign",
+      "shape": {
+        "objects": 48,
+        "layers": 1,
+        "closedPaths": 48,
+        "contourPoints": 23040
+      },
+      "geometries": 48,
+      "vertices": 275904,
+      "issues": 0,
+      "regions": 48,
+      "parse": {
+        "samples": 12,
+        "minMs": 8.6335,
+        "medianMs": 9.2661,
+        "p95Ms": 10.7154,
+        "maxMs": 10.7154
+      },
+      "analysis": {
+        "samples": 12,
+        "minMs": 9719.8388,
+        "medianMs": 9889.2811,
+        "p95Ms": 10329.1975,
+        "maxMs": 10329.1975
+      },
+      "scene": {
+        "samples": 12,
+        "minMs": 0.0514,
+        "medianMs": 0.0595,
+        "p95Ms": 1.0947,
+        "maxMs": 1.0947
+      },
+      "three": {
+        "samples": 12,
+        "minMs": 47.339,
+        "medianMs": 50.3949,
+        "p95Ms": 74.7026,
+        "maxMs": 74.7026
+      },
+      "analysisPhasesMedianMs": {
+        "normalizing": 2343.5765,
+        "topology": 3804.724,
+        "spacing": 3711.4493,
+        "classifying": 11.8734
+      },
+      "previewRequiredShareOfAnalysis": 0.2382,
+      "heapDeltaBytes": 197161888
+    }
+  ]
+}

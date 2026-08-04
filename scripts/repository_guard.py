@@ -212,7 +212,10 @@ def check_instruction_links(errors: list[str]) -> None:
             "M14 — Production Physical 3D Preview Integration",
             "Implementation lead: Claude",
             "Independent planning/review/advancement: ChatGPT",
-            "Current slice: **G0",
+            # Pin the format, not the letter: the active slice legitimately
+            # advances G0 -> G6 during M14, so hard-coding one of them makes the
+            # guard fail on main every time the milestone moves forward.
+            "Current slice: **G",
             "Issues #44 and #37",
         ),
         "docs/status/CURRENT.md",
