@@ -203,7 +203,7 @@ def check_instruction_links(errors: list[str]) -> None:
             "Independent verifier",
             "canonical stored length: millimeters",
             "Native DWG editing is out of scope",
-            "The owner is not an agent-report courier.",
+            "owner out of the courier role.",
         ),
         "AGENTS.md",
     )
