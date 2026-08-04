@@ -6,8 +6,8 @@
  *
  * Boundary (ADR 0024 §2): depends only on `three` and the pure scene package.
  * No React, no React Three Fiber, no Electron, no DOM orchestration, no
- * filesystem access, and no material catalog. Every module here is unit-testable
- * in Node without a WebGL context.
+ * filesystem access, and no material catalog. Production source compiles against
+ * browser APIs only; its GPU-free tests use a separate Node-enabled test config.
  */
 
 export {
@@ -72,4 +72,8 @@ export {
   type PngHeader,
 } from "./capture.js";
 
-export { buildPreviewResources, type PreviewResources } from "./resources.js";
+export {
+  buildPreviewResources,
+  type PreviewResourceLayer,
+  type PreviewResources,
+} from "./resources.js";
