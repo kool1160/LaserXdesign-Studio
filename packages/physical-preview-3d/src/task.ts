@@ -30,12 +30,18 @@ export interface PhysicalPreviewTaskResult {
   assembly: PhysicalPreviewAssembly;
 }
 
+function compareKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => compareKeys(left, right))
         .map(([key, entry]) => [key, canonicalize(entry)]),
     );
   }
