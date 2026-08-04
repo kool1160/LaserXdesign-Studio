@@ -64,6 +64,74 @@ The measurable goal is:
 
 > A first-time user can create or import a design, understand major manufacturing warnings, view it in 3D, and export a usable file within ten minutes.
 
+## Interaction philosophy — simple, contextual, and task-first
+
+LaserX uses an Apple-like product philosophy without copying Apple artwork, macOS controls, or branding: strong defaults, calm presentation, clear hierarchy, restrained visual noise, and advanced capability that is discoverable without dominating the screen.
+
+Locked interaction rules:
+
+> LaserX presents the next useful decision, not every possible decision.
+
+> A tool appears because it is relevant to the current workflow, not merely because LaserX supports it.
+
+The interface must:
+
+- show one clear primary action for the current step whenever practical;
+- keep the most important information and controls directly in front of the user;
+- use contextual tool surfaces instead of permanent walls of unrelated buttons;
+- use progressive disclosure for advanced settings, diagnostics, and uncommon controls;
+- keep advanced tools discoverable through contextual inspectors, clear More/Advanced surfaces, menus, or command search;
+- preserve orientation when moving between create, import, repair, 3D, and export workflows;
+- avoid exposing geometry-engine terminology when plain shop language is sufficient;
+- avoid making the user choose operations that do not apply to the selected source or task.
+
+Required examples:
+
+- SVG/DXF import shows scale, units, layers, conversion findings, repair choices, preview, and accept/cancel; it does not present raster trace controls.
+- PNG/JPEG import shows preprocessing and trace controls because tracing is relevant.
+- Text creation shows font, layout, dimensions, and cutability controls rather than unrelated import or node-repair tools.
+- Manufacturing review shows grouped problems, affected geometry, and repair decisions rather than every editor tool.
+- Physical 3D shows views, layers, materials, dimensions, and capture rather than node editing or import controls.
+- Export shows the selected downstream target, exact units/scale, warnings, and one clear export action.
+
+A blank professional workspace with every capability exposed at once is not an acceptable first-run or default workflow.
+
+## Repair experience — fix the file, do not dump diagnostics on the user
+
+LaserX must not present hundreds or thousands of raw geometry findings as the primary user experience when those findings can be grouped and repaired through a smaller number of meaningful decisions.
+
+The primary repair summary groups findings by problem type, affected scope, repair confidence, and required user decision. Detailed per-entity findings remain available for inspection and support, but they are not the main workflow.
+
+Repair confidence has three explicit classes:
+
+1. **Safe to fix** — deterministic repairs that preserve intended geometry under a documented rule and tolerance.
+2. **Suggested fix** — a previewable repair that may change design intent and therefore requires explicit user acceptance.
+3. **Needs your decision** — ambiguous geometry that LaserX cannot responsibly resolve automatically.
+
+The repair workflow must provide a prominent primary action such as:
+
+> **Fix safe problems**
+
+That action must:
+
+- show what problem classes and counts will be repaired;
+- create a before/after repair preview;
+- never alter the authoritative project until accepted;
+- apply accepted batch repairs as one undoable transaction whenever technically practical;
+- report exactly how many findings were fixed, skipped, or remain;
+- preserve the original imported candidate or provide an equivalent reject/undo path;
+- never claim that automated repair proves the design is physically safe or cut-ready.
+
+Safe repair eligibility must be proven by deterministic rules and tests. Expected safe classes include exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures only within an explicit approved tolerance. Other classes require separate evidence before being labeled safe.
+
+After safe repair, LaserX should convert a result such as `1,905 findings` into a useful statement such as:
+
+> **1,899 safe problems fixed. Six decisions remain.**
+
+The remaining decisions are presented by grouped category and visually navigable affected area. Users can step through them without scanning an unstructured list of thousands of entity-level messages.
+
+Detection without a practical repair path is incomplete product behavior. When LaserX cannot repair a class, it must explain why, identify the affected geometry, and provide the smallest understandable next decision.
+
 ## Required workflows
 
 ### Deterministic sign creation
@@ -76,7 +144,7 @@ Import PNG/JPEG, adjust preprocessing, trace to editable vectors, simplify, edit
 
 ### Existing vector
 
-Import SVG/DXF, preserve known scale, surface unsupported or repaired entities visibly, edit paths, validate, assign layers/materials, preview, and export.
+Import SVG/DXF, preserve known scale, group conversion and repair findings, fix safe problems through a previewable undoable action, walk the user through remaining ambiguous decisions, edit paths, validate, assign layers/materials, preview, and export.
 
 ### Optional AI concept
 
@@ -105,12 +173,15 @@ Prepare exact reviewed SVG/DXF/packages for LightBurn, plasma CAM, router CAM, w
 - node editing and deterministic geometry operations;
 - SVG/DXF interoperability;
 - raster tracing;
-- cutability warnings and repair proposals;
+- grouped manufacturing findings and repair proposals;
+- batch **Fix safe problems** preview/accept/undo workflow;
+- guided navigation of ambiguous repair decisions;
 - deterministic sign tools and templates;
 - physical manufacturing layers and production packages;
 - truthful material and exact thickness;
 - interactive non-mutating physical 3D preview;
 - guided onboarding and Learn Mode;
+- workflow-aware contextual controls and progressive disclosure;
 - optional user-supplied AI assistance;
 - downstream export profiles;
 - Windows installation, trial, purchase, upgrade, recovery, and uninstall;
@@ -151,6 +222,9 @@ The preview is not a 3D CAD kernel. It cannot mutate geometry, dirty state, Undo
 - ordinary editing, preview, analysis, and export do not depend on AI access;
 - 3D/WebGL failure does not block normal editing or saving;
 - first-time workflow is measured with real users rather than assumed;
+- the primary interface avoids unrelated permanent controls and preserves one obvious next action;
+- large finding sets are grouped into understandable repair decisions rather than dumped as raw counts;
+- safe repairs are previewable, deterministic, acceptance-gated, and undoable;
 - the product feels polished and understandable despite advanced internals.
 
 ## Pricing and trial direction
@@ -191,6 +265,6 @@ Core projects, geometry, text, tracing, AI, cutability, sign tools, materials, p
 
 ## Success criteria
 
-A user can open LaserX, understand the next action, create or import a representative sign, edit it, receive useful manufacturing guidance, inspect the physical assembly in 3D, export exact files, and open them in downstream software at intended scale.
+A user can open LaserX, understand the next action, create or import a representative sign, fix the problems LaserX can safely repair, make the small number of remaining design decisions, edit the result, receive useful manufacturing guidance, inspect the physical assembly in 3D, export exact files, and open them in downstream software at intended scale.
 
 A real first-time user can complete that primary workflow within ten minutes on the documented validation fixture set.
