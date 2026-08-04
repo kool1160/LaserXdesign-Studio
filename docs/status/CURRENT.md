@@ -1,23 +1,55 @@
 # Current Project Status
 
-## Active gate
+Updated: 2026-08-04
+
+## Active milestone
 
 **M14 — Production Physical 3D Preview Integration**
 
 - Active issue: #30
-- Active milestone specification: `docs/milestones/M14-production-physical-3d-preview.md`
-- Implementation lead: Claude
-- Independent planning/review/advancement: ChatGPT
-- Codex: held unless explicitly reassigned
-- Current slice: **G3 — Three renderer adapter package**
+- Milestone specification: `docs/milestones/M14-production-physical-3d-preview.md`
+- Senior engineering lead and orchestrator: ChatGPT
+- Current implementation agent: Claude
+- Independent verifier: assigned by risk; Codex is available but not automatically active
+- Owner: product direction and milestone advancement
+- Current gate: **G3 — Three renderer adapter package**
+- Current state: **READY — awaiting checkpoint merge/advancement**
 
-The owner explicitly activated M14 on 2026-08-03 after M13 completion and the Issue #44 planning reset.
+## Live G3 work
 
-`Continue LaserX` authorizes Claude to implement or repair only the next approved M14 slice. It does not authorize merge, Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope.
+- PR: #57 — `M14 G3 — Three renderer-adapter package`
+- Branch: `feat/m14-g3-three-adapter`
+- Exact reviewed head: `9785216183535917d8ab0c7f51f37e75ed8e7503`
+- Review verdict: `READY`
+- Exact-head workflows: 12/12 successful
+- Focused package verification: 162/162 tests passed on the Windows package gate
+- Scope status: correctly bounded to G3
+- Blocking implementation findings: none
+- Merge status: not merged
+- G4 status: not started
+
+G3 remains a senior checkpoint because it defines the production Three.js adapter contract consumed by G4.
+
+## Active governance update
+
+The owner directed a senior-led delivery model on 2026-08-04:
+
+- ChatGPT owns engineering direction, architecture, execution briefs, integration, and review cadence;
+- Claude, Codex, or another approved agent may execute bounded implementation work;
+- routine work moves through focused review and CI without requiring the owner to courier reports;
+- senior audits occur at architecture, performance, major integration, trust-boundary, milestone, and release turning points;
+- independent verification is required where the senior lead directly authored critical work or where separation of duties is otherwise required.
+
+The durable rules are in:
+
+- `AGENTS.md`;
+- `docs/OPERATOR_PROTOCOL.md`;
+- `docs/WORKSTREAM_OWNERSHIP.md`;
+- `docs/CLAUDE_EXECUTION_PLAN.md`.
 
 ## Mandatory product interpretation
 
-Every agent must read GitHub Issues #44 and #37 before planning or implementing post-M13 work.
+Every agent reads Issues #44 and #37 before planning or implementing post-M13 work.
 
 LaserX is an affordable, premium-feeling, machine-independent idea-to-manufacturable-product platform.
 
@@ -25,183 +57,121 @@ Locked interpretation:
 
 - first-time usability is central;
 - deterministic sign creation works without AI;
-- AI is optional and user-supplied;
+- AI is a prominent optional creation path, not a core dependency;
 - physical 3D is a major feature but remains derived and non-mutating;
 - Inkscape and downstream machine software are companions;
-- premium experience and generous pricing are product requirements;
-- the interface is workflow-first and uses contextual controls with progressive disclosure;
-- large finding sets are grouped into repair decisions, with **Fix safe problems** as the primary repair action when deterministic eligible repairs exist;
-- research reduces uncertainty but does not authorize wholesale merges or set priority by itself.
+- the interface is workflow-first with contextual controls and progressive disclosure;
+- repair findings are grouped into understandable decisions;
+- research reduces uncertainty but does not authorize wholesale merges or determine priority by itself;
+- Version 1 should prove an excellent flat-cut sign workflow before broadening into general CAD or machine control.
 
-## M13 completion record
+## M14 completed gates
 
-M13 — Windows Installer, Packaging, and Private Beta Hardening — is complete.
-
-### Installer implementation
-
-- PR #33
-- Final reviewed head: `6cdfaf4fbf68e8c078b4b0b0cda095ea1fcad30f`
-- Merge commit: `1231a0127a59fe87b38824d3fa11039c3a028422`
-- Verification: 290 unit/integration tests and 31/31 applicable packaged Windows Electron E2E scenarios
-
-### Persistence repair
-
-- PR #35
-- Final reviewed head: `e642aa56cb70d6876a9af43024920349f0c8ab7a`
-- Merge commit: `5cf799273d55a2bc6df544d47b0fcc75d32c5d56`
-- Root cause: visible unaccepted preview geometry could be saved as a blank underlying document
-- Repair: save is blocked while vector, raster, sign-tool, or AI preview geometry remains unaccepted
-
-### Repository maintenance
-
-- PR #38
-- Merge commit: `a95a90e702ebc96ea4db46b918324327b118f5ef`
-- Windows case-colliding tracked paths resolved and guarded
-
-### Owner private-installer validation
-
-The owner installed the repaired build, accepted the expected trust warning, launched from Start Menu, imported and accepted a DXF preview, analyzed it, saved and reopened a non-empty `.laserx` project, confirmed identity/path/geometry, exported DXF, and completed assisted uninstall.
-
-M13 closed through commit `04404690c1c089a46986915ea16628bb39a8fe94`.
-
-## M14 completed slice record
-
-### G0 — governance and architecture lock — complete
+### G0 — governance and architecture lock
 
 - PR #54
-- Final reviewed head: `350214a70b3c9e5c1fe0a9855d703135f57c9959`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 pull-request workflows green; one additional push-triggered case-collision run green
+- Reviewed head: `350214a70b3c9e5c1fe0a9855d703135f57c9959`
 - Squash merge: `a3481541a7dd246a7c3d8074f6516de09bd5af75`
-- ADR: `docs/decisions/0024-production-physical-3d-preview-boundary.md`
-- Added mechanical audits:
-  - `pnpm audit:physical-preview`
-  - `pnpm audit:physical-preview-guard`
+- Result: ADR 0024, production boundaries, no CAD kernel, no drei, lazy preview, privileged capture, and research-exclusion guards.
 
-G0 locked the authoritative 2D boundary, pure scene package, Three adapter package, no-CAD-kernel decision, no-drei decision, lazy-loading boundary, privileged PNG capture boundary, component-by-component promotion rule, and production exclusion of research fixtures, selectors, registries, benchmark hooks, and forbidden package couplings.
-
-### G1 — text-heavy scaling and topology-cost evidence — complete
+### G1 — text-heavy scaling evidence
 
 - PR #55
-- Final reviewed head: `1adbfbacd872f4a24e3947b5b4d18eba40d9123a`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 pull-request workflows green
+- Reviewed head: `1adbfbacd872f4a24e3947b5b4d18eba40d9123a`
 - Squash merge: `0a9dd63e31fdc7e15918c8c4651492d9d1ee44ec`
-- Evidence:
-  - `docs/experiments/m14-physical-3d-preview/G1_SCALING_EVIDENCE.md`
-  - `docs/experiments/m14-physical-3d-preview/g1-results.json`
+- Result: realistic text-heavy cost is dominated by cutability analysis, requiring worker offload, fingerprint caching, cancellation, stale-result rejection, and progress before arbitrary-document desktop wiring.
 
-G1 established that realistic outlined-text preview cost is dominated by existing cutability analysis rather than Three conversion. The only measured safely skippable work is the spacing/manufacturing-advisory phase, approximately 36.2%–45.1%. A future preview/region-classification entry point must preserve every validity and ambiguity check, fail closed, reuse the accepted classifier, remain deterministic, and receive a separate ADR. Worker offload, fingerprint-keyed caching, progress, and cancellation remain required before arbitrary-document desktop wiring.
-
-### G2 — pure physical scene package promotion — complete
+### G2 — pure physical scene package
 
 - PR #56
-- Final reviewed head: `8ecf0fb002d712bd1110cade5b1d67e3ad34122e`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 pull-request workflows green
+- Reviewed head: `8ecf0fb002d712bd1110cade5b1d67e3ad34122e`
 - Squash merge: `e8b10c67d61decd310ccf1d5a7ad76100047babb`
-- Production package: `packages/physical-preview-3d/`
-- Focused package verification: 43 tests across four files
+- Result: deterministic renderer-independent scene/assembly contract with exact thickness, authoritative layer order, fail-closed geometry, findings, fingerprints, and source immutability.
 
-G2 promoted the renderer-independent physical scene and assembly contract component by component. It preserves exact canonical thickness, authoritative physical-layer order, nested holes/cutouts, deterministic fingerprints, verified versus declared-incomplete depth, and source immutability. Open, duplicate, overlapping, self-intersecting, cross-intersecting, empty, unsupported, ambiguous, and analysis-over-limit layers fail visibly with zero invented solids. A layer above the 50,000-segment cutability ceiling no longer aborts otherwise valid assembly layers. Parse/build determinism is proven through the real project-format path. The package remains renderer-safe and mechanically rejects Three, React, Electron, the material catalog, and Node-only production-export coupling. The G1 optimized cutability API remains deferred; G2 uses the full accepted analysis path.
+Detailed history remains available in the merged PRs, Issue #30, milestone documentation, ADRs, experiment evidence, and Git history. `CURRENT.md` is intentionally a live control panel rather than a duplicate historical archive.
 
-## M14 research basis
+## Next gate — G4 locked direction
 
-### Physical 3D research
+G4 is the lazy production desktop integration against the currently open document.
 
-Issue #34 is complete and accepted at exact head:
+It must provide:
 
-`9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`
+- front, back, edge, and perspective views;
+- assembled and exploded modes;
+- orbit, pan, zoom, reset, and layer visibility;
+- exact dimension readouts and truthful partial/unavailable states;
+- no project mutation, dirty-state change, history change, save change, analysis change, or export change from preview interaction;
+- lazy loading and bounded chunk-load failure;
+- WebGL unavailable and context-loss behavior that leaves editing usable.
 
-Accepted production direction:
+Measured-performance requirements:
 
-- promote `@laserx/physical-preview-3d` component by component;
-- create `@laserx/physical-preview-three`;
-- use Three.js plus React Three Fiber;
-- do not add a CAD kernel;
-- rewrite the production UI against the open document;
-- use typed Electron preload/main IPC for PNG capture;
-- lazy-load the feature;
-- keep lab shell, benchmark hooks, fixture registry, and bundled research fixtures out of production;
-- never merge the experiment branch wholesale.
+- expensive preview/cutability work off the renderer/UI thread;
+- fingerprint-keyed caching;
+- cancellation and stale-result rejection;
+- visible progress;
+- coalescing/debouncing rapid document changes;
+- no topology recomputation for camera, view, mode, visibility, or orbit changes;
+- cleanup on project change, preview close, retry, and context loss;
+- representative text-heavy real-render/GPU and draw-call evidence.
 
-### Material-aware rendering research
+Renderer-safety hardening before wiring:
 
-Issue #42 is accepted at exact head:
+- no Node-only globals or `node:` imports in production renderer-bound source;
+- production and test TypeScript environments must not hide renderer coupling;
+- UI-facing resource collections should be readonly while disposal ownership remains internal.
 
-`76fa77a8edeb976b46e8e345a4a232b938768b3f`
+G4 is a senior architecture and workflow checkpoint.
 
-It remains isolated. M14 may use approved current-material presentation behavior, but broad catalog/schema promotion belongs to M16.
+## G5 locked capture boundary
 
-### Material catalog research
+G4 owns the renderer and stable frame access. G5 owns the one-transaction capture and privileged save path:
 
-Issue #39 and draft PR #40 remain isolated inputs for M16. They are not production-merge-authorized during M14.
+- PNG bytes and RGBA evidence from the same frame/readback transaction;
+- structure, dimension, and non-background validation;
+- deterministic filename;
+- typed, sender-checked preload/main IPC;
+- path and overwrite validation;
+- explicit failure reporting;
+- no arbitrary renderer filesystem access;
+- no project mutation or blocked editing.
 
-## Current G3 scope
+G5 is a critical independent checkpoint.
 
-G3 creates `packages/physical-preview-three/` as the production renderer adapter for the accepted pure `@laserx/physical-preview-3d` contract.
+## M14 execution order
 
-Required behavior:
-
-- depend on `three` and `@laserx/physical-preview-3d` only unless an additional pure dependency is explicitly justified in the PR;
-- remain independent from React, React Three Fiber, Electron, filesystem access, the DOM-oriented desktop feature, and the future M16 material catalog;
-- convert each authoritative outer contour and its hole contours into deterministic Three `Shape`/hole geometry and exact-thickness `ExtrudeGeometry` without changing the supplied scene or assembly;
-- preserve assembled and exploded Z ranges exactly, including partial assemblies where failed layers produce no geometry;
-- provide deterministic front, back, edge, and perspective camera-pose descriptors and fit calculations for empty, single-layer, and multi-layer assemblies;
-- provide truthful current-material appearance descriptors and neutral fallback behavior without inventing unsupported material identity or promoting the M16 catalog;
-- promote pure PNG validation and deterministic filename helpers only; privileged filesystem save remains G5;
-- provide explicit disposal/cleanup helpers for every generated geometry and material resource and prove repeated conversion/disposal remains bounded;
-- preserve deterministic conversion output and source immutability across repeated builds and project parse/build cycles;
-- fail visibly and safely when geometry conversion cannot proceed; never repair, close, simplify, union, or invent solids;
-- use Three.js directly and do not adopt `@react-three/drei`;
-- promote only reviewed components from accepted research; never merge or cherry-pick the experiment branch wholesale.
-
-Required evidence includes focused and root tests for exact extrusion depth, genuine through-holes, nested islands, assembled/exploded placement, camera poses, material mapping, deterministic output, disposal, malformed/empty/partial inputs, capture validation, package boundaries, license/version review, production audit, and exact-head CI.
-
-No React/R3F Canvas, desktop screen, OrbitControls UI wiring, lazy open-document integration, worker wiring, WebGL fallback UI, context-loss recovery UI, privileged PNG save, G4, or M15 work belongs in G3.
-
-## M14 approved execution order
-
-1. **G0 — governance and architecture lock** — complete
-2. **G1 — text-heavy scaling evidence** — complete
-3. **G2 — pure physical scene package promotion** — complete
-4. **G3 — Three renderer adapter package** — active
-5. **G4 — lazy desktop integration**
-6. **G5 — privileged PNG capture**
-7. **G6 — exact-head Windows evidence and owner retest**
-
-Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md`.
-
-Claude must stop after each bounded slice for ChatGPT audit.
+1. G0 — complete
+2. G1 — complete
+3. G2 — complete
+4. G3 — READY, not merged
+5. G4 — not started
+6. G5 — not started
+7. G6 — not started
 
 ## M14 exit rule
 
 Do not advance to M15 until:
 
-- every M14 acceptance test passes;
-- required exact-head workflows are green;
-- no blocking review thread remains;
-- the final private installer passes owner hands-on validation;
+- every M14 acceptance criterion passes;
+- required exact-head and packaged workflows are green;
+- no critical defect or unresolved blocking review remains;
+- G5 has independent verification;
+- G6 Windows and representative-project evidence is complete;
+- the private installer passes owner hands-on validation;
 - Issue #30 is closed;
-- the exact merge and evidence are recorded;
+- exact merge and evidence are recorded;
 - the owner explicitly authorizes M15.
 
-## Later roadmap
+## Later roadmap correction
 
-M15 through M23 implement the product direction from Issues #44 and #37:
+After M15 builds the structural workflow and onboarding system, establish an early private-user validation checkpoint before committing months to M16–M19 assumptions.
 
-- guided onboarding, workflow-first UI, grouped repair, and Learn Mode;
-- material truth and wood/acrylic expansion;
-- process-aware manufacturability;
-- downstream export profiles;
-- optional AI onboarding;
-- licensing/trial;
-- community beta;
-- real-user usability validation and final app-wide interface polish;
-- Version 1.0 release and broader-market launch.
-
-M24 and M25 preserve the post-Version-1 machine-platform path behind explicit safety gates.
+M22 remains final release-wide usability validation and bounded correction, not the first serious discovery of whether the core workflow works.
 
 ## Private-testing boundary
 
-LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted signing, public publication, pricing activation, and public support do not belong in M14.
+LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, active licensing, pricing activation, and public support do not belong in M14.
+
+## Next engineering action
+
+Merge G3 only at the reviewed head after owner-authorized checkpoint advancement, record the merge, then activate the strengthened G4 brief. Do not begin G4 from the older loose wording.
