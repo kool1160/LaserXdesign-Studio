@@ -10,21 +10,20 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The active M14 slice legitimately advances G0 -> G6, so pinning one literal
-# makes the guard fail on main every time the milestone moves forward. Pinning
-# only the "G" prefix would accept G7, GARBAGE, or a truncated line, so the
-# accepted values are matched explicitly instead.
-CURRENT_SLICE_PATTERN = re.compile(r"^- Current slice: \*\*G[0-6] ", re.MULTILINE)
+# M14 legitimately advances G0 -> G6. Match the bounded gate identifier while
+# allowing the descriptive wording and assigned agents to evolve independently.
+CURRENT_GATE_PATTERN = re.compile(r"^- Current gate: \*\*G[0-6] ", re.MULTILINE)
 
 
-def current_slice_error(text: str) -> str | None:
-    """Returns an error message when CURRENT.md does not name a valid M14 slice."""
-    if CURRENT_SLICE_PATTERN.search(text) is None:
+def current_gate_error(text: str) -> str | None:
+    """Return an error when CURRENT.md does not name a valid active M14 gate."""
+    if CURRENT_GATE_PATTERN.search(text) is None:
         return (
-            "docs/status/CURRENT.md must name the active M14 slice as "
-            '"- Current slice: **G<0-6> ..."'
+            "docs/status/CURRENT.md must name the active M14 gate as "
+            '"- Current gate: **G<0-6> ..."'
         )
     return None
+
 
 MILESTONE_FILENAMES = (
     "M00-foundation.md",
@@ -199,15 +198,12 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "AGENTS.md",
         (
             "GitHub Issue #44",
-            "Claude — implementation lead",
-            "ChatGPT — planning, audit, and advancement authority",
-            "canonical stored length unit: millimeters",
-            "Native DWG editing is explicitly out of scope",
-            "M14 — Production physical 3D preview integration.",
-            "M15 — Guided onboarding and Learn Mode.",
-            "M23 — Version 1.0 release and broader-market launch.",
-            "M24 — Simulator-first machine platform foundation.",
-            "M25 — First explicitly approved LaserX controller vertical slice.",
+            "Senior engineering lead and orchestrator",
+            "Implementation agent",
+            "Independent verifier",
+            "canonical stored length: millimeters",
+            "Native DWG editing is out of scope",
+            "The owner is not an agent-report courier.",
         ),
         "AGENTS.md",
     )
@@ -217,9 +213,7 @@ def check_instruction_links(errors: list[str]) -> None:
         errors.append("agent.md must remain a compatibility pointer to authoritative AGENTS.md")
 
     milestone_index = ROOT / "docs" / "MILESTONES.md"
-    required_rows = tuple(
-        f"| M{number:02d} |" for number in range(14, 26)
-    )
+    required_rows = tuple(f"| M{number:02d} |" for number in range(14, 26))
     require_terms(errors, milestone_index, required_rows, "docs/MILESTONES.md")
 
     require_terms(
@@ -227,18 +221,19 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "docs" / "status" / "CURRENT.md",
         (
             "M14 — Production Physical 3D Preview Integration",
-            "Implementation lead: Claude",
-            "Independent planning/review/advancement: ChatGPT",
+            "Senior engineering lead and orchestrator: ChatGPT",
+            "Current implementation agent: Claude",
+            "Independent verifier:",
             "Issues #44 and #37",
         ),
         "docs/status/CURRENT.md",
     )
 
-    slice_error = current_slice_error(
+    gate_error = current_gate_error(
         (ROOT / "docs" / "status" / "CURRENT.md").read_text(encoding="utf-8")
     )
-    if slice_error is not None:
-        errors.append(slice_error)
+    if gate_error is not None:
+        errors.append(gate_error)
 
     require_terms(
         errors,
@@ -256,12 +251,13 @@ def check_instruction_links(errors: list[str]) -> None:
         errors,
         ROOT / "docs" / "CLAUDE_EXECUTION_PLAN.md",
         (
-            "Slice G0",
-            "Slice G6",
-            "Claude is the implementation lead",
-            "ChatGPT is the independent planning and audit authority",
+            "G0 — governance and architecture lock",
+            "G6 — Windows integration and milestone closure evidence",
+            "Senior engineering lead",
+            "Implementation agent",
+            "critical independent checkpoint",
         ),
-        "Claude execution plan",
+        "M14 implementation-agent execution plan",
     )
 
 
