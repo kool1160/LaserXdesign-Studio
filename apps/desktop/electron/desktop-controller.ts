@@ -89,6 +89,7 @@ import type {
   ProductionExportRequest,
 } from "./ipc-contract.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
+import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
 import {
   CredentialAcquisitionCancelledError,
   CredentialAcquisitionTimeoutError,
@@ -383,6 +384,13 @@ export class DesktopController {
     stage: "preparing" | "building";
   } | null = null;
   #physicalPreviewAssembly: PhysicalPreviewAssembly | null = null;
+  /**
+   * The physical-content fingerprint `#physicalPreviewAssembly` was built
+   * from. Read alongside it (never independently) so a last-valid assembly
+   * is only ever exposed while it still matches the *current* document's
+   * physical content -- see the staleness check in the `state` getter.
+   */
+  #physicalPreviewAssemblyFingerprint: string | null = null;
   #aiConnection: AiConnectionState;
   #aiReference: AiGenerationRequest["referenceImage"] = null;
   #aiJob: {
@@ -557,8 +565,15 @@ export class DesktopController {
       },
       physicalPreview: {
         job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
+        // A last-valid assembly is only ever exposed while it still matches
+        // the current document's physical content. A physical edit, or a
+        // build that failed/canceled after one, must not leave a now-stale
+        // assembly on display -- this check runs on every read rather than
+        // depending on every mutation site remembering to invalidate it.
         assembly:
-          this.#physicalPreviewAssembly === null
+          this.#physicalPreviewAssembly === null ||
+          this.#physicalPreviewAssemblyFingerprint !==
+            fingerprintPhysicalPreviewInput(session.project)
             ? null
             : structuredClone(this.#physicalPreviewAssembly),
       },
@@ -2244,6 +2259,7 @@ export class DesktopController {
     this.#bridgeProposal = null;
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
+    this.#physicalPreviewAssemblyFingerprint = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;
@@ -2378,6 +2394,7 @@ export class DesktopController {
         },
       );
       this.#physicalPreviewAssembly = result.assembly;
+      this.#physicalPreviewAssemblyFingerprint = result.inputFingerprint;
     } catch (error) {
       if (
         error instanceof PhysicalPreviewCancelledError ||

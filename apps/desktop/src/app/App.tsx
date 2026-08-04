@@ -36,6 +36,7 @@ import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
 import { SignToolsPanel } from "../components/SignToolsPanel.js";
 import { AiGenerationPanel } from "../components/AiGenerationPanel.js";
+import { PhysicalPreviewErrorBoundary } from "../features/physical-preview/PhysicalPreviewErrorBoundary.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -1943,19 +1944,21 @@ export function App() {
                   </button>
                 </div>
               ) : state.physicalPreview.assembly !== null ? (
-                <Suspense
-                  fallback={
-                    <div className="analysis-progress" data-testid="physical-preview-chunk-loading">
-                      <span className="loading-spinner" aria-hidden="true" />
-                      <strong>Loading the 3D preview…</strong>
-                    </div>
-                  }
-                >
-                  <PhysicalPreviewScreenLazy
-                    assembly={state.physicalPreview.assembly}
-                    onClose={closePhysicalPreview}
-                  />
-                </Suspense>
+                <PhysicalPreviewErrorBoundary onClose={closePhysicalPreview}>
+                  <Suspense
+                    fallback={
+                      <div className="analysis-progress" data-testid="physical-preview-chunk-loading">
+                        <span className="loading-spinner" aria-hidden="true" />
+                        <strong>Loading the 3D preview…</strong>
+                      </div>
+                    }
+                  >
+                    <PhysicalPreviewScreenLazy
+                      assembly={state.physicalPreview.assembly}
+                      onClose={closePhysicalPreview}
+                    />
+                  </Suspense>
+                </PhysicalPreviewErrorBoundary>
               ) : (
                 <div className="physical-preview-fallback" role="status" data-testid="physical-preview-empty">
                   <h2>3D preview unavailable</h2>

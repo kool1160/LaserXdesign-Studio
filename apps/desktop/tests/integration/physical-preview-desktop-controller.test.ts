@@ -121,6 +121,14 @@ class DeferredWorker implements PhysicalPreviewWorkerPort {
     call.settled = true;
     call.resolve(runPhysicalPreviewTask(call.request));
   }
+
+  public fail(index: number, message: string): void {
+    const call = this.calls[index];
+    if (call === undefined) throw new Error(`Expected worker call ${String(index)}.`);
+    if (call.settled) return;
+    call.settled = true;
+    call.reject(new Error(message));
+  }
 }
 
 async function desktop(
@@ -219,6 +227,51 @@ describe("physical preview desktop controller wiring", () => {
     // Original rectangle: origin xMm=10, widthMm=80 -> moved +20 -> origin
     // xMm=30, so the new bound is 30 + 80 = 110, not the original 10 + 80 = 90.
     expect(assembly?.layers[0]?.boundsMm?.maxXmm).toBe(110);
+  });
+
+  it("stops exposing the last-valid assembly once physical content changes without a new build request", async () => {
+    const controller = await desktop(immediateWorker(), physicalProject(80));
+    await controller.runPhysicalPreview(OPERATION_ID);
+    expect(controller.state.physicalPreview.assembly).not.toBeNull();
+
+    // No second runPhysicalPreview call: the document changes, but nobody
+    // asks for a fresh preview. The previously built assembly no longer
+    // matches the current physical content and must not stay on display.
+    await controller.editorAction({
+      type: "objects.move",
+      objectIds: [RECTANGLE_ID],
+      deltaXmm: 20,
+      deltaYmm: 0,
+    });
+
+    expect(controller.state.physicalPreview.assembly).toBeNull();
+  });
+
+  it("does not resurrect a stale assembly when a rebuild fails after a physical edit", async () => {
+    const worker = new DeferredWorker();
+    const controller = await desktop(worker, physicalProject(80));
+
+    const firstPromise = controller.runPhysicalPreview(OPERATION_ID);
+    worker.complete(0);
+    await firstPromise;
+    expect(controller.state.physicalPreview.assembly).not.toBeNull();
+
+    await controller.editorAction({
+      type: "objects.move",
+      objectIds: [RECTANGLE_ID],
+      deltaXmm: 20,
+      deltaYmm: 0,
+    });
+    expect(controller.state.physicalPreview.assembly).toBeNull();
+
+    const secondPromise = controller.runPhysicalPreview(SECOND_OPERATION_ID);
+    worker.fail(1, "Injected physical preview failure.");
+    expect(await secondPromise).toMatchObject({ ok: false });
+
+    // The internal field still holds the earlier, now content-mismatched
+    // assembly (the failure path never touches it) -- the state getter must
+    // still refuse to expose it.
+    expect(controller.state.physicalPreview.assembly).toBeNull();
   });
 
   it("cancels an in-flight build without mutating the document, dirty flag, history, or selection", async () => {
