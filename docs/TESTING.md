@@ -449,6 +449,58 @@ secret or prompt content.
   DPI, reduced motion, and keyboard navigation before signed provenance is
   written.
 
+## M14 physical-preview executable layers
+
+M14 is delivered as bounded reviewed gates G0–G6 (ADR 0024,
+`docs/CLAUDE_EXECUTION_PLAN.md`). Each gate carries its own evidence; a later
+gate may not borrow an earlier gate's claim.
+
+- **G0 — governance.** `pnpm audit:physical-preview` proves that production source
+  and desktop build/packaging surfaces contain no `__laserxPreviewLab` hook,
+  bundled fixture payload, fixture-registry module, URL-search-param
+  `fixture`/`material` selector, repository-`fixtures/` import or `new URL()`
+  reference, static-asset `.laserx` payload, or CAD-kernel dependency; that
+  forbidden couplings — including `@laserx/material-catalog` and
+  `@react-three/drei` — are rejected across `dependencies`, `devDependencies`,
+  `peerDependencies`, and `optionalDependencies` alike; and that ADR 0024 keeps
+  its load-bearing commitments. Package-dependency rules apply automatically once
+  the preview packages exist, so the audit does not assert unbuilt packages.
+  `pnpm audit:physical-preview-guard` is the guard's own regression suite: it
+  proves every rule fails against the **actual** accepted research patterns from
+  the lab rather than synthetic literals, and proves the guard does not fire on
+  ordinary production code, so it cannot be quietly weakened into a check that
+  always passes;
+- **G1 — scaling evidence.** Text-heavy and high-point-count fixtures measure
+  parse, scene, and Three-conversion cost with repeated samples reported as min,
+  median, p95, and max. Research measured cost dominated by reused cutability
+  analysis and scaling with flattened contour points rather than object count, so
+  this evidence is required **before** the preview is wired to arbitrary user
+  documents;
+- **G2 — pure scene package.** Unit tests pin exact gauge, fractional-inch, and
+  millimeter canonical thickness; physical-layer order; hole and cutout topology;
+  declared-incomplete versus verified depth; and visible failure for open,
+  self-intersecting, ambiguous, empty, and unsupported layers. Determinism is
+  proven by identical scene fingerprints and geometry output across repeated
+  re-parse-and-rebuild runs. Source immutability is verified on the exact object
+  passed through conversion and is promoted **with its negative tests**, because
+  the original research check passed while proving nothing;
+- **G3 — Three adapter package.** GPU-free Node tests cover shape/hole extrusion,
+  including a raycast proof that holes are genuinely open through both caps,
+  deterministic camera poses, material mapping, and pure capture validation;
+- **G4 — lazy desktop integration.** Desktop tests prove the four view presets,
+  assembled/exploded, orbit/pan/zoom/reset, and layer visibility work by mouse and
+  keyboard; that preview interaction leaves geometry, dirty state, history,
+  selection, analysis, save, SVG/DXF, and production packages unchanged; and that
+  WebGL-unavailable, runtime context-loss, and failed-chunk states preserve normal
+  editing and saving. A post-build check proves the main entry chunk excludes
+  Three.js;
+- **G5 — privileged capture.** Tests prove deterministic filenames, non-empty
+  validated PNG output, explicit error reporting, and that capture crosses only
+  the typed IPC boundary without mutating the project;
+- **G6 — Windows evidence.** Exact-head packaged Windows E2E, resource-cleanup
+  evidence bounded across repeated use, high-DPI and accessibility coverage, and a
+  fresh private installer for owner hands-on validation.
+
 Run all milestone checks from the repository root:
 
 ```bash
