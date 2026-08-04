@@ -67,7 +67,10 @@ describe("committed G1 results", () => {
         results.fixtures.includes(fixture)
           ? results.samplesPerFixture
           : results.invalidFixtureSamples;
-      for (const [stage, samples] of Object.entries(fixture.raw)) {
+      // Typed explicitly: `Object.entries` widens the value to `any`, which
+      // would silently disable the very assertion this loop exists for.
+      const stages = Object.entries(fixture.raw) as Array<[string, number[]]>;
+      for (const [stage, samples] of stages) {
         expect(samples.length, `${fixture.key}.${stage}`).toBe(expected);
       }
     }
@@ -108,11 +111,11 @@ describe("committed G1 results", () => {
     // If a scaling fixture were ambiguous, its Three timings would be measuring
     // invented solids and the whole comparison would be meaningless.
     for (const fixture of results.fixtures) {
-      expect(fixture.analysisStatus, `${fixture.key}`).toBe("complete");
+      expect(fixture.analysisStatus, fixture.key).toBe("complete");
       expect(fixture.geometries, `${fixture.key} geometries`).toBeGreaterThan(0);
     }
     for (const fixture of results.invalidFixtures) {
-      expect(fixture.analysisStatus, `${fixture.key}`).toBe("ambiguous");
+      expect(fixture.analysisStatus, fixture.key).toBe("ambiguous");
       expect(fixture.geometries, `${fixture.key} must invent nothing`).toBe(0);
     }
   });
