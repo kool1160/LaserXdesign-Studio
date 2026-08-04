@@ -455,11 +455,21 @@ M14 is delivered as bounded reviewed gates G0–G6 (ADR 0024,
 `docs/CLAUDE_EXECUTION_PLAN.md`). Each gate carries its own evidence; a later
 gate may not borrow an earlier gate's claim.
 
-- **G0 — governance.** `pnpm audit:physical-preview` proves no `__laserxPreviewLab`
-  hook, bundled fixture payload, `?fixture=` selection surface, or CAD-kernel
-  dependency exists in production source, and that ADR 0024 keeps its
-  load-bearing commitments. Package-dependency rules apply automatically once the
-  preview packages exist, so the audit does not assert unbuilt packages;
+- **G0 — governance.** `pnpm audit:physical-preview` proves that production source
+  and desktop build/packaging surfaces contain no `__laserxPreviewLab` hook,
+  bundled fixture payload, fixture-registry module, URL-search-param
+  `fixture`/`material` selector, repository-`fixtures/` import or `new URL()`
+  reference, static-asset `.laserx` payload, or CAD-kernel dependency; that
+  forbidden couplings — including `@laserx/material-catalog` and
+  `@react-three/drei` — are rejected across `dependencies`, `devDependencies`,
+  `peerDependencies`, and `optionalDependencies` alike; and that ADR 0024 keeps
+  its load-bearing commitments. Package-dependency rules apply automatically once
+  the preview packages exist, so the audit does not assert unbuilt packages.
+  `pnpm audit:physical-preview-guard` is the guard's own regression suite: it
+  proves every rule fails against the **actual** accepted research patterns from
+  the lab rather than synthetic literals, and proves the guard does not fire on
+  ordinary production code, so it cannot be quietly weakened into a check that
+  always passes;
 - **G1 — scaling evidence.** Text-heavy and high-point-count fixtures measure
   parse, scene, and Three-conversion cost with repeated samples reported as min,
   median, p95, and max. Research measured cost dominated by reused cutability

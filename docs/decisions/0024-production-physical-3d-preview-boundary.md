@@ -194,7 +194,25 @@ Production code reads the **currently open document** from existing application
 state — never a bundled fixture. Test fixtures load from disk at test time.
 
 These exclusions are enforced mechanically by `pnpm audit:physical-preview`
-(`scripts/physical-preview-boundary-audit.mjs`), not by review alone.
+(`scripts/physical-preview-boundary-audit.mjs`), not by review alone. The audit
+matches the **actual** accepted research patterns rather than convenient
+literals: the lab selects fixtures with `new URLSearchParams(search).get("fixture")`
+and materials with `.get("material")`, so URL-search-param selection is rejected
+directly. It also rejects imports, `new URL()` references, and build/packaging
+configuration that reach into repository `fixtures/`, fixture-registry modules,
+and `.laserx` payloads placed in the desktop static-asset folder.
+
+Forbidden dependency couplings are rejected across **every** dependency field —
+`dependencies`, `devDependencies`, `peerDependencies`, and
+`optionalDependencies` — because a forbidden runtime coupling installs just as
+really from an optional or dev field, and the pure scene contract must not need
+a renderer even to run its own tests.
+
+`pnpm audit:physical-preview-guard`
+(`scripts/test-physical-preview-boundary-audit.mjs`) proves each rule actually
+fails on the real research patterns, and proves the guard does **not** fire on
+ordinary production code such as a `Map` lookup keyed `"material"` or the
+renderer adapter's legitimate `three` dependency.
 
 ### 9. Component-by-component promotion, never a branch merge
 
