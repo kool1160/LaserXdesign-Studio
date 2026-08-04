@@ -60,7 +60,7 @@ function readonlyMapView<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
     [Symbol.iterator]() {
       return source[Symbol.iterator]();
     },
-  }) as ReadonlyMap<K, V>;
+  });
 }
 
 function exposedLayers(layers: readonly AssemblyLayerGeometry[]): readonly PreviewResourceLayer[] {
