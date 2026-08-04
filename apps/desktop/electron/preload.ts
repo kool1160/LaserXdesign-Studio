@@ -39,6 +39,8 @@ import {
   vectorImportPreviewRequestSchema,
   configureVectorImportRequestSchema,
   focusVectorImportFindingRequestSchema,
+  runPhysicalPreviewRequestSchema,
+  cancelPhysicalPreviewRequestSchema,
   type CreateDocumentRequest,
   type AiGenerateRequest,
   type AttachAiReferenceRequest,
@@ -72,6 +74,8 @@ import {
   type VectorImportPreviewRequest,
   type ConfigureVectorImportRequest,
   type FocusVectorImportFindingRequest,
+  type RunPhysicalPreviewRequest,
+  type CancelPhysicalPreviewRequest,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -316,6 +320,18 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = focusCutabilityIssueRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.focusCutabilityIssue, validated),
+    );
+  },
+  async runPhysicalPreview(request: RunPhysicalPreviewRequest) {
+    const validated = runPhysicalPreviewRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.runPhysicalPreview, validated),
+    );
+  },
+  async cancelPhysicalPreview(request: CancelPhysicalPreviewRequest) {
+    const validated = cancelPhysicalPreviewRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.cancelPhysicalPreview, validated),
     );
   },
   async previewBridge(request: BridgeProposalRequestDto) {

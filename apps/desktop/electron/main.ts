@@ -69,6 +69,8 @@ import {
   vectorImportPreviewRequestSchema,
   configureVectorImportRequestSchema,
   focusVectorImportFindingRequestSchema,
+  runPhysicalPreviewRequestSchema,
+  cancelPhysicalPreviewRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
@@ -480,6 +482,14 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.focusCutabilityIssue, (_event, request: unknown) => {
     const validated = focusCutabilityIssueRequestSchema.parse(request);
     return requireController().focusCutabilityIssue(validated.issueId);
+  });
+  ipcMain.handle(IPC_CHANNELS.runPhysicalPreview, (_event, request: unknown) => {
+    const validated = runPhysicalPreviewRequestSchema.parse(request);
+    return requireController().runPhysicalPreview(validated.operationId);
+  });
+  ipcMain.handle(IPC_CHANNELS.cancelPhysicalPreview, (_event, request: unknown) => {
+    const validated = cancelPhysicalPreviewRequestSchema.parse(request);
+    return requireController().cancelPhysicalPreview(validated.operationId);
   });
   ipcMain.handle(IPC_CHANNELS.previewBridge, (_event, request: unknown) => {
     const validated = bridgeProposalRequestSchema.parse(request);

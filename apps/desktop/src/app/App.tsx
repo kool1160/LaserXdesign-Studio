@@ -20,6 +20,8 @@ import {
 } from "@laserx/cutability";
 import { settingsForRasterTracePreset } from "@laserx/import-raster";
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useState,
@@ -34,6 +36,7 @@ import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
 import { SignToolsPanel } from "../components/SignToolsPanel.js";
 import { AiGenerationPanel } from "../components/AiGenerationPanel.js";
+import { PhysicalPreviewErrorBoundary } from "../features/physical-preview/PhysicalPreviewErrorBoundary.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -76,6 +79,16 @@ function scrollToWorkflow(id: string): void {
   });
 }
 
+/**
+ * Loaded only when the user opens the physical preview -- keeps Three.js and
+ * React Three Fiber out of the main editor bundle (ADR 0024 section 5).
+ * Declared at module scope, not inside `App`, so the dynamic import is
+ * requested once rather than on every render.
+ */
+const PhysicalPreviewScreenLazy = lazy(
+  () => import("../features/physical-preview/PhysicalPreviewScreen.js"),
+);
+
 export function App() {
   const [state, setState] = useState<DesktopState | null>(null);
   const [startupError, setStartupError] = useState<string | null>(null);
@@ -86,6 +99,9 @@ export function App() {
   const [activeRasterOperationId, setActiveRasterOperationId] =
     useState<string | null>(null);
   const [activeCutabilityOperationId, setActiveCutabilityOperationId] =
+    useState<string | null>(null);
+  const [physicalPreviewOpen, setPhysicalPreviewOpen] = useState(false);
+  const [activePhysicalPreviewOperationId, setActivePhysicalPreviewOperationId] =
     useState<string | null>(null);
   const [manufacturingSettings, setManufacturingSettings] =
     useState<ManufacturingSettings>(() =>
@@ -299,6 +315,33 @@ export function App() {
       setBusy(false);
     }
   }, []);
+
+  const openPhysicalPreview = useCallback(async () => {
+    setPhysicalPreviewOpen(true);
+    const operationId = window.crypto.randomUUID();
+    setActivePhysicalPreviewOperationId(operationId);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.laserx.runPhysicalPreview({ operationId });
+      setState(result.state);
+      if (!result.ok) setError(result.error);
+    } catch {
+      setError("The physical preview worker returned an invalid response.");
+    } finally {
+      setActivePhysicalPreviewOperationId(null);
+      setBusy(false);
+    }
+  }, []);
+
+  const closePhysicalPreview = useCallback(() => {
+    setPhysicalPreviewOpen(false);
+    const operationId =
+      state?.physicalPreview.job?.operationId ?? activePhysicalPreviewOperationId;
+    if (operationId !== null) {
+      void window.laserx.cancelPhysicalPreview({ operationId });
+    }
+  }, [state?.physicalPreview.job?.operationId, activePhysicalPreviewOperationId]);
 
   const chooseManufacturingPreset = useCallback((presetId: string) => {
     setManufacturingSettings(settingsForManufacturingPreset(presetId));
@@ -698,6 +741,9 @@ export function App() {
           <div className="command-group-actions">
             <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
             <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
+            <button type="button" data-testid="open-physical-preview" disabled={busy} title="Open a read-only 3D preview of the physical layers" onClick={() => void openPhysicalPreview()}>
+              <span className="command-icon" aria-hidden="true">▦</span><span>3D Preview</span>
+            </button>
           </div>
         </div>
         <span className="shell-badge">Precision workspace</span>
@@ -1881,6 +1927,48 @@ export function App() {
                 <button type="button" className="quiet" onClick={() => scrollToWorkflow("workflow-create")}>Create a shape</button>
               </div>
             </section>
+          )}
+          {physicalPreviewOpen && (
+            <div className="physical-preview-overlay" data-testid="physical-preview-overlay">
+              {state.physicalPreview.job !== null ? (
+                <div className="analysis-progress" data-testid="physical-preview-progress">
+                  <strong>{state.physicalPreview.job.stage}</strong>
+                  <progress max="100" value={state.physicalPreview.job.percent} />
+                  <button
+                    type="button"
+                    className="quiet"
+                    data-testid="cancel-physical-preview"
+                    onClick={closePhysicalPreview}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : state.physicalPreview.assembly !== null ? (
+                <PhysicalPreviewErrorBoundary onClose={closePhysicalPreview}>
+                  <Suspense
+                    fallback={
+                      <div className="analysis-progress" data-testid="physical-preview-chunk-loading">
+                        <span className="loading-spinner" aria-hidden="true" />
+                        <strong>Loading the 3D preview…</strong>
+                      </div>
+                    }
+                  >
+                    <PhysicalPreviewScreenLazy
+                      assembly={state.physicalPreview.assembly}
+                      onClose={closePhysicalPreview}
+                    />
+                  </Suspense>
+                </PhysicalPreviewErrorBoundary>
+              ) : (
+                <div className="physical-preview-fallback" role="status" data-testid="physical-preview-empty">
+                  <h2>3D preview unavailable</h2>
+                  <p>The physical preview could not be generated. Nothing in the project was changed.</p>
+                  <button type="button" onClick={closePhysicalPreview}>
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </main>
 

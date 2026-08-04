@@ -1,0 +1,273 @@
+import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
+import {
+  buildAssemblyGeometries,
+  computeCameraFit,
+  disposeAssemblyGeometries,
+  layerAppearance,
+  PREVIEW_VIEWS,
+  PreviewConversionError,
+  type AssemblyLayerGeometry,
+  type AssemblyMode,
+  type PreviewView,
+} from "@laserx/physical-preview-three";
+import { Canvas, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useState } from "react";
+
+import { CameraRig } from "./CameraRig.js";
+import { isWebglAvailable } from "./webgl.js";
+
+const VIEW_LABELS: Record<PreviewView, string> = {
+  front: "Front",
+  back: "Back",
+  edge: "Edge",
+  perspective: "Perspective",
+};
+
+/** Bounded to [1, 2]: crisp on standard/retina displays without paying full
+ * native resolution on very-high-DPR devices. */
+const DPR_RANGE: [number, number] = [1, 2];
+
+export interface PhysicalPreviewScreenProps {
+  assembly: PhysicalPreviewAssembly;
+  onClose: () => void;
+}
+
+function formatMm(valueMm: number): string {
+  return `${valueMm.toFixed(1)} mm`;
+}
+
+/**
+ * Never labels a `"declared-incomplete"` depth as exact, real, verified, or
+ * total -- that phrasing is reserved for `"verified"` (status `"complete"`).
+ */
+function depthLabel(depthStatus: PhysicalPreviewAssembly["depthStatus"]): string {
+  return depthStatus === "verified" ? "total assembled depth" : "declared stack depth — incomplete";
+}
+
+function WebglUnavailable() {
+  return (
+    <div className="physical-preview-fallback" role="status" data-testid="physical-preview-webgl-unavailable">
+      <h2>3D preview unavailable</h2>
+      <p>
+        This computer does not expose a WebGL rendering context, so the
+        physical 3D preview cannot render. Nothing in the project was
+        changed. Try updating your graphics driver, or continue editing in
+        2D — 3D preview is optional.
+      </p>
+    </div>
+  );
+}
+
+function ConversionFailed({ message }: { message: string }) {
+  return (
+    <div className="physical-preview-fallback" role="alert" data-testid="physical-preview-conversion-failed">
+      <h2>3D preview could not render this document</h2>
+      <p>{message} Nothing in the project was changed.</p>
+    </div>
+  );
+}
+
+interface SceneContentProps {
+  assembly: PhysicalPreviewAssembly;
+  mode: AssemblyMode;
+  view: PreviewView;
+  resetToken: number;
+  geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
+}
+
+/** Lives inside `<Canvas>` so `computeCameraFit` can use the real pixel viewport. */
+function SceneContent({ assembly, mode, view, resetToken, geometriesByLayer }: SceneContentProps) {
+  const { size } = useThree();
+  const fit = useMemo(
+    () =>
+      computeCameraFit(assembly, mode, {
+        view,
+        viewport: { widthPx: size.width, heightPx: size.height },
+      }),
+    [assembly, mode, view, size.width, size.height],
+  );
+
+  return (
+    <>
+      <color attach="background" args={["#2b2b2b"]} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[fit.distance, fit.distance, fit.distance]} intensity={1.1} />
+      <directionalLight
+        position={[-fit.distance, fit.distance * 0.5, -fit.distance]}
+        intensity={0.4}
+      />
+      {assembly.layers.map((layer) => {
+        const zRange = mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;
+        const appearance = layerAppearance(layer);
+        const entries = geometriesByLayer.get(layer.layerId)?.geometries ?? [];
+        return (
+          <group key={layer.layerId} position={[0, 0, zRange.minZmm]}>
+            {entries.map((entry) => (
+              <mesh key={entry.shapeId} geometry={entry.geometry}>
+                <meshStandardMaterial
+                  color={appearance.color}
+                  metalness={appearance.metalness}
+                  roughness={appearance.roughness}
+                  opacity={appearance.opacity}
+                  transparent={appearance.transparent}
+                />
+              </mesh>
+            ))}
+          </group>
+        );
+      })}
+      <CameraRig
+        position={fit.position}
+        target={fit.target}
+        fovDeg={fit.fovDeg}
+        near={fit.near}
+        far={fit.far}
+        resetToken={resetToken}
+      />
+    </>
+  );
+}
+
+/**
+ * Read-only physical 3D preview of the currently open document's authoritative
+ * physical layers (G4B). Never mutates geometry, dirty state, history,
+ * selection, analysis, SVG/DXF output, or production packages -- purely a
+ * derived view over the accepted G4A assembly (ADR 0024 section 7).
+ *
+ * Deliberately excluded from this slice: PNG capture (G5, privileged IPC),
+ * per-layer visibility toggles and WebGL context-loss recovery (G4C
+ * interaction/fallback completion).
+ */
+export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPreviewScreenProps) {
+  const [webglAvailable] = useState(() => isWebglAvailable());
+  const [view, setView] = useState<PreviewView>("perspective");
+  const [mode, setMode] = useState<AssemblyMode>("assembled");
+  const [resetToken, setResetToken] = useState(0);
+
+  // A pure computation (no state writes): building geometry can throw, and
+  // the resulting map and any conversion failure must be derived together
+  // from the same attempt, rather than writing an error into state as a side
+  // effect of useMemo -- which React does not guarantee runs only once.
+  const { geometriesByLayer, conversionError } = useMemo((): {
+    geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
+    conversionError: string | null;
+  } => {
+    if (!webglAvailable) {
+      return { geometriesByLayer: new Map(), conversionError: null };
+    }
+    try {
+      const built = buildAssemblyGeometries(assembly);
+      return {
+        geometriesByLayer: new Map(built.map((entry) => [entry.layerId, entry])),
+        conversionError: null,
+      };
+    } catch (error) {
+      return {
+        geometriesByLayer: new Map(),
+        conversionError:
+          error instanceof PreviewConversionError
+            ? error.message
+            : "The physical preview geometry could not be converted for rendering.",
+      };
+    }
+  }, [assembly, webglAvailable]);
+
+  useEffect(
+    () => () => {
+      disposeAssemblyGeometries([...geometriesByLayer.values()]);
+    },
+    [geometriesByLayer],
+  );
+
+  const handleReset = () => {
+    setView("perspective");
+    setResetToken((token) => token + 1);
+  };
+
+  return (
+    <div className="physical-preview-screen" data-testid="physical-preview-screen">
+      <div className="physical-preview-toolbar" role="toolbar" aria-label="Physical preview view controls">
+        {PREVIEW_VIEWS.map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            aria-pressed={view === candidate}
+            data-testid={`physical-preview-view-${candidate}`}
+            onClick={() => {
+              setView(candidate);
+            }}
+          >
+            {VIEW_LABELS[candidate]}
+          </button>
+        ))}
+        <button type="button" onClick={handleReset}>
+          Reset view
+        </button>
+        <div className="physical-preview-mode-toggle" role="group" aria-label="Assembly mode">
+          <button
+            type="button"
+            aria-pressed={mode === "assembled"}
+            data-testid="physical-preview-mode-assembled"
+            onClick={() => {
+              setMode("assembled");
+            }}
+          >
+            Assembled
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === "exploded"}
+            data-testid="physical-preview-mode-exploded"
+            onClick={() => {
+              setMode("exploded");
+            }}
+          >
+            Exploded
+          </button>
+        </div>
+        <span className="physical-preview-readout" data-testid="physical-preview-dimensions">
+          {formatMm(assembly.stockMm.widthMm)} &times; {formatMm(assembly.stockMm.heightMm)} &times;{" "}
+          {formatMm(assembly.assembledDepthMm)} {depthLabel(assembly.depthStatus)}
+        </span>
+        <button type="button" data-testid="physical-preview-close" onClick={onClose}>
+          Close preview
+        </button>
+      </div>
+      {assembly.status === "partial" && (
+        <div className="physical-preview-warning-banner" role="alert" data-testid="physical-preview-findings-banner">
+          {assembly.findings.length} preview finding(s) — at least one declared physical layer has
+          no renderable geometry or ambiguous geometry and could not be rendered. Not a
+          manufacturing certification; see the manufacturing analysis panel for cut-readiness.
+        </div>
+      )}
+      {assembly.status === "unavailable" && (
+        <div className="physical-preview-warning-banner" role="alert" data-testid="physical-preview-unavailable-banner">
+          This document declares no physical manufacturing layers, so there is nothing to preview
+          in 3D.
+        </div>
+      )}
+      <div className="physical-preview-canvas-area" data-testid="physical-preview-canvas-area">
+        {!webglAvailable ? (
+          <WebglUnavailable />
+        ) : conversionError !== null ? (
+          <ConversionFailed message={conversionError} />
+        ) : (
+          <Canvas
+            camera={{ fov: 45, near: 1, far: 10_000 }}
+            gl={{ antialias: true }}
+            dpr={DPR_RANGE}
+            data-testid="physical-preview-canvas"
+          >
+            <SceneContent
+              assembly={assembly}
+              mode={mode}
+              view={view}
+              resetToken={resetToken}
+              geometriesByLayer={geometriesByLayer}
+            />
+          </Canvas>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -88,6 +88,8 @@ import type {
   FocusVectorImportFindingRequest,
   ProductionExportRequest,
 } from "./ipc-contract.js";
+import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
+import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
 import {
   CredentialAcquisitionCancelledError,
   CredentialAcquisitionTimeoutError,
@@ -100,6 +102,15 @@ import {
   type CutabilityWorkerPort,
 } from "./cutability-worker-service.js";
 import { AppLogger } from "./logger.js";
+import {
+  PhysicalPreviewCoordinator,
+  PhysicalPreviewSupersededError,
+} from "./physical-preview-coordinator.js";
+import {
+  PhysicalPreviewCancelledError,
+  NodePhysicalPreviewWorkerService,
+  type PhysicalPreviewWorkerPort,
+} from "./physical-preview-worker-service.js";
 import {
   NodeGeometryWorkerService,
   type GeometryWorkerPort,
@@ -180,6 +191,7 @@ export interface DesktopControllerOptions {
   rasterWorker?: RasterWorkerPort;
   rasterOperationTimeoutMs?: number;
   cutabilityWorker?: CutabilityWorkerPort;
+  physicalPreviewWorker?: PhysicalPreviewWorkerPort;
   aiProvider?: AiProvider;
   credentialVault?: CredentialVaultPort;
   credentialAcquisition?: CredentialAcquisitionPort;
@@ -324,6 +336,7 @@ export class DesktopController {
   readonly #rasterWorker: RasterWorkerPort;
   readonly #rasterOperationTimeoutMs: number;
   readonly #cutabilityWorker: CutabilityWorkerPort;
+  readonly #physicalPreviewCoordinator: PhysicalPreviewCoordinator;
   readonly #aiProvider: AiProvider;
   readonly #credentialVault: CredentialVaultPort;
   readonly #credentialAcquisition: CredentialAcquisitionPort;
@@ -333,6 +346,7 @@ export class DesktopController {
   readonly #geometryAbortControllers = new Map<string, AbortController>();
   readonly #rasterAbortControllers = new Map<string, AbortController>();
   readonly #cutabilityAbortControllers = new Map<string, AbortController>();
+  readonly #physicalPreviewAbortControllers = new Map<string, AbortController>();
   #aiAbortController: AbortController | null = null;
   #credentialAbortController: AbortController | null = null;
   #recentProjects: RecentProject[] = [];
@@ -364,6 +378,19 @@ export class DesktopController {
   } | null = null;
   #focusedCutabilityIssueId: string | null = null;
   #bridgeProposal: BridgeProposal | null = null;
+  #physicalPreviewJob: {
+    operationId: string;
+    percent: number;
+    stage: "preparing" | "building";
+  } | null = null;
+  #physicalPreviewAssembly: PhysicalPreviewAssembly | null = null;
+  /**
+   * The physical-content fingerprint `#physicalPreviewAssembly` was built
+   * from. Read alongside it (never independently) so a last-valid assembly
+   * is only ever exposed while it still matches the *current* document's
+   * physical content -- see the staleness check in the `state` getter.
+   */
+  #physicalPreviewAssemblyFingerprint: string | null = null;
   #aiConnection: AiConnectionState;
   #aiReference: AiGenerationRequest["referenceImage"] = null;
   #aiJob: {
@@ -399,6 +426,9 @@ export class DesktopController {
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
     this.#cutabilityWorker =
       options.cutabilityWorker ?? new NodeCutabilityWorkerService();
+    this.#physicalPreviewCoordinator = new PhysicalPreviewCoordinator(
+      options.physicalPreviewWorker ?? new NodePhysicalPreviewWorkerService(),
+    );
     this.#aiProvider = options.aiProvider ?? new OpenAiProvider();
     this.#credentialVault = options.credentialVault ?? unavailableCredentialVault;
     this.#credentialAcquisition =
@@ -532,6 +562,20 @@ export class DesktopController {
           this.#cutabilityProjection === null
             ? null
             : structuredClone(this.#cutabilityProjection.cutability),
+      },
+      physicalPreview: {
+        job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
+        // A last-valid assembly is only ever exposed while it still matches
+        // the current document's physical content. A physical edit, or a
+        // build that failed/canceled after one, must not leave a now-stale
+        // assembly on display -- this check runs on every read rather than
+        // depending on every mutation site remembering to invalidate it.
+        assembly:
+          this.#physicalPreviewAssembly === null ||
+          this.#physicalPreviewAssemblyFingerprint !==
+            fingerprintPhysicalPreviewInput(session.project)
+            ? null
+            : structuredClone(this.#physicalPreviewAssembly),
       },
     };
   }
@@ -1460,6 +1504,24 @@ export class DesktopController {
     });
   }
 
+  public async runPhysicalPreview(operationId: string): Promise<CommandResult> {
+    return this.#run(async () => {
+      await this.#buildPhysicalPreview(operationId);
+    });
+  }
+
+  public async cancelPhysicalPreview(
+    operationId: string,
+  ): Promise<CommandResult> {
+    return this.#run(() => {
+      const controller = this.#physicalPreviewAbortControllers.get(operationId);
+      if (controller === undefined) {
+        throw new RangeError("That physical preview build is not active.");
+      }
+      controller.abort();
+    });
+  }
+
   public async focusCutabilityIssue(
     issueId: string | null,
   ): Promise<CommandResult> {
@@ -2184,6 +2246,10 @@ export class DesktopController {
       controller.abort();
     }
     this.#cutabilityAbortControllers.clear();
+    for (const controller of this.#physicalPreviewAbortControllers.values()) {
+      controller.abort();
+    }
+    this.#physicalPreviewAbortControllers.clear();
     this.#rasterJob = null;
     this.#rasterPreview = null;
     this.#cutabilityProjection = null;
@@ -2191,12 +2257,16 @@ export class DesktopController {
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
+    this.#physicalPreviewJob = null;
+    this.#physicalPreviewAssembly = null;
+    this.#physicalPreviewAssemblyFingerprint = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;
     this.#aiReference = null;
     this.#clearAiConcepts(false);
     this.#cutabilityCache.invalidate();
+    this.#physicalPreviewCoordinator.clearCache();
   }
 
   #clearRasterJob(operationId: string): void {
@@ -2208,6 +2278,12 @@ export class DesktopController {
   #clearCutabilityJob(operationId: string): void {
     if (this.#cutabilityJob?.operationId === operationId) {
       this.#cutabilityJob = null;
+    }
+  }
+
+  #clearPhysicalPreviewJob(operationId: string): void {
+    if (this.#physicalPreviewJob?.operationId === operationId) {
+      this.#physicalPreviewJob = null;
     }
   }
 
@@ -2277,6 +2353,61 @@ export class DesktopController {
         this.#cutabilityAbortControllers.delete(operationId);
       }
       this.#clearCutabilityJob(operationId);
+      this.#emit();
+    }
+  }
+
+  /**
+   * Delegates caching, coalescing of identical in-flight requests, and
+   * rejection of superseded work to `PhysicalPreviewCoordinator` (G4A) --
+   * unlike cutability, there is no manual fingerprint check or eager
+   * per-edit invalidation here: the coordinator's own physical-content key
+   * already recomputes only when physical layers/geometry/material/
+   * thickness/spacing actually change, so this method only needs to bind
+   * the current open-document snapshot to a request and publish the result.
+   */
+  async #buildPhysicalPreview(operationId: string): Promise<void> {
+    const project = this.#session.state.project;
+    const abortController = new AbortController();
+    this.#physicalPreviewAbortControllers.set(operationId, abortController);
+    this.#physicalPreviewJob = { operationId, percent: 0, stage: "preparing" };
+    this.#emit();
+    try {
+      const result = await this.#physicalPreviewCoordinator.build(
+        project,
+        undefined,
+        {
+          signal: abortController.signal,
+          onProgress: (progress) => {
+            if (
+              this.#physicalPreviewAbortControllers.get(operationId) === abortController &&
+              !abortController.signal.aborted
+            ) {
+              this.#physicalPreviewJob = {
+                operationId,
+                percent: progress.percent,
+                stage: progress.stage === "complete" ? "building" : progress.stage,
+              };
+              this.#emit();
+            }
+          },
+        },
+      );
+      this.#physicalPreviewAssembly = result.assembly;
+      this.#physicalPreviewAssemblyFingerprint = result.inputFingerprint;
+    } catch (error) {
+      if (
+        error instanceof PhysicalPreviewCancelledError ||
+        error instanceof PhysicalPreviewSupersededError
+      ) {
+        return;
+      }
+      throw error;
+    } finally {
+      if (this.#physicalPreviewAbortControllers.get(operationId) === abortController) {
+        this.#physicalPreviewAbortControllers.delete(operationId);
+      }
+      this.#clearPhysicalPreviewJob(operationId);
       this.#emit();
     }
   }
