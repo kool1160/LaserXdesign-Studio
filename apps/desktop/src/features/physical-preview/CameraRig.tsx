@@ -1,5 +1,5 @@
 import { useThree } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 /**
@@ -17,14 +17,24 @@ export interface CameraRigProps {
   resetToken: number;
 }
 
-export function CameraRig({
-  position,
-  target,
-  fovDeg,
-  near,
-  far,
-  resetToken,
-}: CameraRigProps) {
+/**
+ * Imperative keyboard-driven camera actions, using `OrbitControls`' own
+ * public `rotateLeft`/`rotateUp`/`pan`/`dollyIn`/`dollyOut` methods rather
+ * than reimplementing camera math -- each call already includes the
+ * `controls.update()` needed to apply it.
+ */
+export interface CameraRigHandle {
+  rotateLeft(angleRad: number): void;
+  rotateUp(angleRad: number): void;
+  pan(deltaXPx: number, deltaYPx: number): void;
+  dollyIn(scale: number): void;
+  dollyOut(scale: number): void;
+}
+
+export const CameraRig = forwardRef<CameraRigHandle, CameraRigProps>(function CameraRig(
+  { position, target, fovDeg, near, far, resetToken },
+  ref,
+) {
   const { camera, gl, size } = useThree();
   const controlsRef = useRef<OrbitControls | null>(null);
   const [px, py, pz] = position;
@@ -39,6 +49,33 @@ export function CameraRig({
       controlsRef.current = null;
     };
   }, [camera, gl]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      rotateLeft(angleRad) {
+        controlsRef.current?.rotateLeft(angleRad);
+        controlsRef.current?.update();
+      },
+      rotateUp(angleRad) {
+        controlsRef.current?.rotateUp(angleRad);
+        controlsRef.current?.update();
+      },
+      pan(deltaXPx, deltaYPx) {
+        controlsRef.current?.pan(deltaXPx, deltaYPx);
+        controlsRef.current?.update();
+      },
+      dollyIn(scale) {
+        controlsRef.current?.dollyIn(scale);
+        controlsRef.current?.update();
+      },
+      dollyOut(scale) {
+        controlsRef.current?.dollyOut(scale);
+        controlsRef.current?.update();
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (camera.type === "PerspectiveCamera" && "fov" in camera) {
@@ -69,4 +106,4 @@ export function CameraRig({
   }, [px, py, pz, tx, ty, tz, fovDeg, near, far, size.width, size.height, resetToken, camera]);
 
   return null;
-}
+});
