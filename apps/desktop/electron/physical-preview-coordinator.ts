@@ -198,9 +198,13 @@ export class PhysicalPreviewCoordinator {
         active.waiters.splice(index, 1);
         detach();
         reject(new PhysicalPreviewCancelledError());
-        // No one is left waiting on this content key: stop the now-unwanted
-        // work instead of letting it finish for nobody.
+        // No one is left waiting on this content key: retire it immediately,
+        // not just once #run() later notices, so a new identical request
+        // arriving before the abandoned worker call settles starts fresh
+        // work instead of coalescing onto a request that can no longer
+        // produce a usable result.
         if (active.waiters.length === 0 && this.#active === active) {
+          this.#active = null;
           active.controller.abort();
         }
       };

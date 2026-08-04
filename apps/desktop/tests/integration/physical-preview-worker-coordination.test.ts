@@ -362,6 +362,32 @@ describe("physical preview worker coordination", () => {
     expect(thick.inputFingerprint).not.toBe(thin.inputFingerprint);
   });
 
+  it("starts a fresh worker call for an identical request issued before a retired call settles", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+    const project = projectFixture();
+    const controller = new AbortController();
+
+    const cancelledOutcome = coordinator
+      .build(project, undefined, { signal: controller.signal })
+      .catch((error: unknown) => error);
+    expect(worker.calls).toHaveLength(1);
+
+    // Cancels the sole waiter. The active request must be retired immediately
+    // -- before its aborted worker call has a chance to settle -- so it can
+    // never be coalesced onto.
+    controller.abort();
+    const freshPromise = coordinator.build(project);
+    expect(worker.calls).toHaveLength(2);
+
+    expect(await cancelledOutcome).toBeInstanceOf(PhysicalPreviewCancelledError);
+
+    worker.complete(1);
+    const fresh = await freshPromise;
+    expect(fresh.cacheHit).toBe(false);
+    expect(coordinator.cacheSize).toBe(1);
+  });
+
   it("invalidates the cache when assembly spacing options change", async () => {
     const worker = new ControlledPreviewWorker();
     const coordinator = new PhysicalPreviewCoordinator(worker);
