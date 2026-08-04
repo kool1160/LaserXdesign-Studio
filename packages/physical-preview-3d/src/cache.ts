@@ -39,7 +39,7 @@ export class PhysicalPreviewAssemblyCache {
     this.#entries.set(inputFingerprint, structuredClone(result.assembly));
 
     while (this.#entries.size > this.#capacity) {
-      const oldest = this.#entries.keys().next().value as string | undefined;
+      const oldest = this.#entries.keys().next().value;
       if (oldest === undefined) break;
       this.#entries.delete(oldest);
     }
