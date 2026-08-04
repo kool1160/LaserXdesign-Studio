@@ -9,7 +9,7 @@
 - Implementation lead: Claude
 - Independent planning/review/advancement: ChatGPT
 - Codex: held unless explicitly reassigned
-- Current slice: **G1 — text-heavy and high-point-count scaling evidence**
+- Current slice: **G2 — pure physical scene package promotion**
 
 The owner explicitly activated M14 on 2026-08-03 after M13 completion and the Issue #44 planning reset.
 
@@ -71,7 +71,7 @@ M13 closed through commit `04404690c1c089a46986915ea16628bb39a8fe94`.
 - PR #54
 - Final reviewed head: `350214a70b3c9e5c1fe0a9855d703135f57c9959`
 - Review verdict: `READY`
-- Exact-head workflows: 13/13 green
+- Exact-head workflows: 12/12 pull-request workflows green; one additional push-triggered case-collision run green
 - Squash merge: `a3481541a7dd246a7c3d8074f6516de09bd5af75`
 - ADR: `docs/decisions/0024-production-physical-3d-preview-boundary.md`
 - Added mechanical audits:
@@ -79,6 +79,19 @@ M13 closed through commit `04404690c1c089a46986915ea16628bb39a8fe94`.
   - `pnpm audit:physical-preview-guard`
 
 G0 locked the authoritative 2D boundary, pure scene package, Three adapter package, no-CAD-kernel decision, no-drei decision, lazy-loading boundary, privileged PNG capture boundary, component-by-component promotion rule, and production exclusion of research fixtures, selectors, registries, benchmark hooks, and forbidden package couplings.
+
+### G1 — text-heavy scaling and topology-cost evidence — complete
+
+- PR #55
+- Final reviewed head: `1adbfbacd872f4a24e3947b5b4d18eba40d9123a`
+- Review verdict: `READY`
+- Exact-head workflows: 12/12 pull-request workflows green
+- Squash merge: `0a9dd63e31fdc7e15918c8c4651492d9d1ee44ec`
+- Evidence:
+  - `docs/experiments/m14-physical-3d-preview/G1_SCALING_EVIDENCE.md`
+  - `docs/experiments/m14-physical-3d-preview/g1-results.json`
+
+G1 established that realistic outlined-text preview cost is dominated by existing cutability analysis rather than Three conversion. The only measured safely skippable work is the spacing/manufacturing-advisory phase, approximately 36.2%–45.1%. A future preview/region-classification entry point must preserve every validity and ambiguity check, fail closed, reuse the accepted classifier, remain deterministic, and receive a separate ADR. Worker offload, fingerprint-keyed caching, progress, and cancellation remain required before arbitrary-document desktop wiring.
 
 ## M14 research basis
 
@@ -112,24 +125,27 @@ It remains isolated. M14 may use approved current-material presentation behavior
 
 Issue #39 and draft PR #40 remain isolated inputs for M16. They are not production-merge-authorized during M14.
 
-## Current G1 scope
+## Current G2 scope
 
-G1 must produce realistic scaling evidence before arbitrary-document desktop wiring:
+G2 promotes the accepted renderer-independent physical scene contract into production as `packages/physical-preview-3d/`.
 
-- outlined text-heavy fixtures with many glyph contours;
-- materially larger/high-point-count fixtures beyond the research baseline;
-- repeated parse, scene-conversion, and Three-conversion timings reported as min, median, p95, and max;
-- memory/resource observations sufficient to identify obvious scaling regressions;
-- evidence about whether cost is dominated by reused cutability topology work or renderer conversion;
-- a decision on whether a narrow topology-only cutability entry point is justified.
+Required behavior:
 
-If a topology-only entry point is proposed, it must reuse the accepted region-classification algorithm rather than fork it, preserve fail-visible findings, receive a separate architecture decision, and remain optional. G1 does not promote production scene packages, add desktop UI, or begin G2.
+- consume authoritative project/document snapshots without mutation;
+- preserve exact canonical `thicknessMm`, physical-layer order, holes, cutouts, parent/depth topology, declared-incomplete versus verified depth, findings, and deterministic fingerprints;
+- fail closed for open, duplicate, overlapping, self-intersecting, cross-intersecting, ambiguous, empty, or unsupported geometry and never invent solids;
+- include exact negative tests proving source immutability on the object actually passed through conversion;
+- remain independent from Three, React, Electron, DOM, filesystem, GPU, and the future M16 material catalog;
+- promote only reviewed components from accepted research; never merge or cherry-pick the experiment branch wholesale;
+- exclude the lab shell, fixture registry, URL selectors, benchmark hooks, research fixture payloads, and material-catalog research.
+
+The G1 optimization decision is conditional. G2 may add a separate ADR and a narrow preview/region-classification API only if exact tests prove parity for every validity and ambiguity-producing check and the accepted `classifyRegions` implementation is reused. Otherwise G2 must use the existing full cutability-analysis path. No worker, desktop UI, Three adapter, PNG capture, G3, or M15 work belongs in G2.
 
 ## M14 approved execution order
 
 1. **G0 — governance and architecture lock** — complete
-2. **G1 — text-heavy scaling evidence** — active
-3. **G2 — pure physical scene package promotion**
+2. **G1 — text-heavy scaling evidence** — complete
+3. **G2 — pure physical scene package promotion** — active
 4. **G3 — Three renderer adapter package**
 5. **G4 — lazy desktop integration**
 6. **G5 — privileged PNG capture**
