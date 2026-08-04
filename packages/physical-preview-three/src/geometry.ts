@@ -61,17 +61,68 @@ function shapeToThreeShape(shape: PhysicalPreviewShape): Shape {
   return threeShape;
 }
 
+/**
+ * A conversion failure attributed to its source geometry.
+ *
+ * Three throws plain errors with no LaserX context. Without this, a malformed
+ * shape would surface in the UI as an anonymous renderer error and the user
+ * would have no way to find the object responsible.
+ */
+export class PreviewConversionError extends Error {
+  readonly layerId: string;
+  readonly shapeId: string | null;
+  readonly sourceObjectIds: string[];
+
+  constructor(
+    message: string,
+    context: { layerId: string; shapeId: string | null; sourceObjectIds: string[] },
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "PreviewConversionError";
+    this.layerId = context.layerId;
+    this.shapeId = context.shapeId;
+    this.sourceObjectIds = [...context.sourceObjectIds];
+  }
+}
+
+/**
+ * Converts one layer's shapes.
+ *
+ * Exception-safe: `ExtrudeGeometry` allocates GPU-backed buffers, so if a later
+ * shape throws, every geometry already built here is disposed before the failure
+ * propagates. Returning early without disposing would leak buffers the caller
+ * never received and therefore cannot clean up.
+ */
 export function buildLayerGeometries(layer: PhysicalPreviewLayer): LayerShapeGeometry[] {
-  return layer.shapes.map((shape) => ({
-    shapeId: shape.id,
-    sourceObjectIds: [...shape.sourceObjectIds],
-    geometry: new ExtrudeGeometry(shapeToThreeShape(shape), {
-      // Exact canonical thickness, never rounded or defaulted.
-      depth: layer.thicknessMm,
-      bevelEnabled: false,
-      curveSegments: EXTRUDE_CURVE_SEGMENTS,
-    }),
-  }));
+  const built: LayerShapeGeometry[] = [];
+  try {
+    for (const shape of layer.shapes) {
+      built.push({
+        shapeId: shape.id,
+        sourceObjectIds: [...shape.sourceObjectIds],
+        geometry: new ExtrudeGeometry(shapeToThreeShape(shape), {
+          // Exact canonical thickness, never rounded or defaulted.
+          depth: layer.thicknessMm,
+          bevelEnabled: false,
+          curveSegments: EXTRUDE_CURVE_SEGMENTS,
+        }),
+      });
+    }
+  } catch (error) {
+    disposeLayerGeometries(built);
+    const failed = layer.shapes[built.length];
+    throw new PreviewConversionError(
+      `Physical layer "${layer.name}" could not be converted to preview geometry.`,
+      {
+        layerId: layer.layerId,
+        shapeId: failed?.id ?? null,
+        sourceObjectIds: failed === undefined ? [] : [...failed.sourceObjectIds],
+      },
+      { cause: error },
+    );
+  }
+  return built;
 }
 
 export interface AssemblyLayerGeometry {
@@ -90,11 +141,21 @@ export interface AssemblyLayerGeometry {
 export function buildAssemblyGeometries(
   assembly: PhysicalPreviewAssembly,
 ): AssemblyLayerGeometry[] {
-  return assembly.layers.map((layer) => ({
-    layerId: layer.layerId,
-    order: layer.order,
-    geometries: buildLayerGeometries(layer),
-  }));
+  const built: AssemblyLayerGeometry[] = [];
+  try {
+    for (const layer of assembly.layers) {
+      built.push({
+        layerId: layer.layerId,
+        order: layer.order,
+        geometries: buildLayerGeometries(layer),
+      });
+    }
+  } catch (error) {
+    // Every earlier layer's geometry is released before the failure escapes.
+    disposeAssemblyGeometries(built);
+    throw error;
+  }
+  return built;
 }
 
 /** Releases every GPU buffer owned by the supplied conversion result. */

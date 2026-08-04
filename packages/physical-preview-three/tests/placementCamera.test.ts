@@ -1,7 +1,7 @@
 import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
 import { describe, expect, it } from "vitest";
 
-import { computeCameraFit, computeCameraPose, PREVIEW_VIEWS } from "../src/camera.js";
+import { computeCameraPose, PREVIEW_VIEWS } from "../src/camera.js";
 import { assemblyPlacements, assemblyZExtent } from "../src/placement.js";
 
 function assembly(
@@ -90,11 +90,33 @@ describe("assembly placement", () => {
 describe("camera poses", () => {
   const target: readonly [number, number, number] = [10, 20, 5];
 
-  it("places each view on its documented axis", () => {
+  it("places each axis-aligned view on its documented axis", () => {
     expect(computeCameraPose("front", target, 100).position).toEqual([10, 20, 105]);
     expect(computeCameraPose("back", target, 100).position).toEqual([10, 20, -95]);
     expect(computeCameraPose("edge", target, 100).position).toEqual([110, 20, 5]);
-    expect(computeCameraPose("perspective", target, 100).position).toEqual([80, 75, 95]);
+  });
+
+  it("places every view at exactly the requested distance from the target", () => {
+    // The perspective direction is normalised, so `distance` is a true distance
+    // for every view. The research used raw offset ratios (0.7, 0.55, 0.9),
+    // which placed the perspective camera ~1.27x further out than requested —
+    // harmless in the lab, but it would silently under-frame a solved fit.
+    for (const view of PREVIEW_VIEWS) {
+      const pose = computeCameraPose(view, target, 100);
+      const measured = Math.hypot(
+        pose.position[0] - target[0],
+        pose.position[1] - target[1],
+        pose.position[2] - target[2],
+      );
+      expect(measured, view).toBeCloseTo(100, 9);
+    }
+  });
+
+  it("keeps the perspective view angled on all three axes", () => {
+    const pose = computeCameraPose("perspective", target, 100);
+    expect(pose.position[0]).toBeGreaterThan(target[0]);
+    expect(pose.position[1]).toBeGreaterThan(target[1]);
+    expect(pose.position[2]).toBeGreaterThan(target[2]);
   });
 
   it("keeps every view upright and deterministic", () => {
@@ -114,55 +136,5 @@ describe("camera poses", () => {
     const front = computeCameraPose("front", target, 100).position[2];
     const back = computeCameraPose("back", target, 100).position[2];
     expect(front - target[2]).toBe(-(back - target[2]));
-  });
-});
-
-describe("camera fit", () => {
-  it("frames a multi-layer assembly around the stock and Z span", () => {
-    const fit = computeCameraFit(threeLayer(), "assembled");
-    expect(fit.target).toEqual([100, 50, 6]);
-    expect(fit.distance).toBeGreaterThan(0);
-    expect(fit.far).toBeGreaterThan(fit.distance);
-    expect(fit.near).toBeLessThan(fit.distance);
-  });
-
-  it("frames an exploded assembly further out than an assembled one", () => {
-    const assembled = computeCameraFit(threeLayer(), "assembled");
-    const exploded = computeCameraFit(threeLayer(), "exploded");
-    // Exploding increases the Z span, so the fit must pull back.
-    expect(exploded.distance).toBeGreaterThan(assembled.distance);
-  });
-
-  it("stays finite and usable for an empty assembly", () => {
-    const fit = computeCameraFit(assembly([]), "assembled");
-    expect(Number.isFinite(fit.distance)).toBe(true);
-    expect(fit.distance).toBeGreaterThan(0);
-    expect(Number.isFinite(fit.far)).toBe(true);
-    expect(fit.target).toEqual([100, 50, 0]);
-  });
-
-  it("never produces a zero distance even for degenerate stock", () => {
-    // Zero-sized stock with no layers would make the diagonal 0; the guard must
-    // keep distance and far usable rather than collapsing the camera.
-    const fit = computeCameraFit(assembly([], { widthMm: 0, heightMm: 0 }), "assembled");
-    expect(fit.distance).toBeGreaterThan(0);
-    expect(fit.far).toBeGreaterThan(0);
-  });
-
-  it("is deterministic for identical input", () => {
-    for (const view of PREVIEW_VIEWS) {
-      const fit = computeCameraFit(threeLayer(), "assembled");
-      const pose = computeCameraPose(view, fit.target, fit.distance);
-      const repeatFit = computeCameraFit(threeLayer(), "assembled");
-      expect(repeatFit).toEqual(fit);
-      expect(computeCameraPose(view, repeatFit.target, repeatFit.distance)).toEqual(pose);
-    }
-  });
-
-  it("does not mutate the supplied assembly", () => {
-    const supplied = threeLayer();
-    const before = JSON.stringify(supplied);
-    computeCameraFit(supplied, "exploded");
-    expect(JSON.stringify(supplied)).toBe(before);
   });
 });

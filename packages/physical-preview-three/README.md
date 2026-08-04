@@ -35,7 +35,8 @@ this is a package rather than code inside `apps/desktop`.
 - provide deterministic front/back/edge/perspective poses and camera fit;
 - map current schema materials to presentation-only appearances, with a neutral
   fallback for anything unrecognised;
-- validate captured PNG bytes and build deterministic filenames;
+- validate captured PNG **structure** and, given pixel evidence, **content**;
+- build deterministic capture filenames;
 - own and dispose every geometry and material it allocates.
 
 ## Non-responsibilities
@@ -47,6 +48,37 @@ this is a package rather than code inside `apps/desktop`.
 - inventing, repairing, closing, simplifying, unioning, or reinterpreting
   geometry. A layer the scene package failed closed on carries zero shapes and
   therefore produces zero geometry here.
+
+## Capture validation cannot detect a blank frame on its own
+
+Encoded-header validation proves signature, `IHDR`, and non-zero dimensions. It
+**cannot** prove anything was drawn: a WebGL canvas that cleared its drawing
+buffer encodes to a perfectly valid PNG of the correct size.
+
+`validatePngCapture()` therefore returns `status: "structure-only"` with
+`ok: false` unless the caller supplies pixel evidence. Pass `content` — RGBA
+bytes, dimensions, expected background, optional tolerance and minimum coverage
+ratio — and `analyzePixelContent()` proves at least one meaningful
+non-background pixel exists before the result becomes `status: "verified"`.
+
+Only `"verified"` is a successful capture. G4 supplies the bytes from the real
+renderer; this package never reads a canvas itself beyond `toDataURL`.
+
+## Camera fit is solved, not estimated
+
+`computeCameraFit()` takes the view, viewport, and optional FOV/padding, and
+returns the **complete** descriptor it solved for — including `fovDeg`, `aspect`,
+`position`, `near`, `far`, and the `boundsMm` it framed — so a consumer cannot
+pair the distance with a different projection and clip the model.
+
+It fits the visible layers' actual `boundsMm`, which may extend outside the stock
+rectangle, and falls back to the stock only when nothing is visible. The box's
+half-extent is projected onto the camera's right/up/forward axes, so a narrow
+viewport pushes the camera back rather than cropping. The test suite builds a
+real `PerspectiveCamera` from each descriptor and projects **every corner** of
+the bounds into normalised device coordinates, across wide/narrow/square
+viewports, both modes, all four views, single/multi-layer, geometry outside
+stock, empty, and hidden-all states.
 
 ## Rendered precision — read before trusting a measurement
 

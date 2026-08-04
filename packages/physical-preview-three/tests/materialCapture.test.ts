@@ -2,6 +2,7 @@ import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
 import { describe, expect, it } from "vitest";
 
 import {
+  analyzePixelContent,
   buildCaptureFilename,
   readPngHeader,
   validatePngCapture,
@@ -63,17 +64,108 @@ function canvas(dataUrl: string, width = 1280, height = 694): CapturableCanvas {
 }
 
 describe("PNG capture validation", () => {
-  it("accepts a real PNG and reports its true pixel dimensions", () => {
+  const BACKGROUND = { r: 0x2b, g: 0x2b, b: 0x2b };
+
+  /** RGBA buffer filled with the background colour — a blank frame. */
+  const blankPixels = (width: number, height: number): Uint8Array => {
+    const rgba = new Uint8Array(width * height * 4);
+    for (let index = 0; index < rgba.length; index += 4) {
+      rgba[index] = BACKGROUND.r;
+      rgba[index + 1] = BACKGROUND.g;
+      rgba[index + 2] = BACKGROUND.b;
+      rgba[index + 3] = 255;
+    }
+    return rgba;
+  };
+
+  it("reports structure-only, not success, when no content evidence is supplied", () => {
     const result = validatePngCapture(
       canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
       "out.png",
     );
-    if (!result.ok) throw new Error(`expected success, got ${result.errorMessage}`);
+    // A cleared drawing buffer encodes to a perfectly valid PNG, so header
+    // validation alone must never be reported as a verified capture.
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("structure-only");
+    if (result.status !== "structure-only") throw new Error("unreachable");
     // Dimensions come from the IHDR header, not from the canvas element, so a
-    // canvas that lies about its size cannot fake a valid capture.
+    // canvas that lies about its size cannot fake them.
     expect(result.widthPx).toBe(1);
     expect(result.heightPx).toBe(1);
     expect(result.byteLength).toBeGreaterThan(64);
+  });
+
+  it("rejects a structurally valid PNG whose pixels are all background", () => {
+    const result = validatePngCapture(
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
+      "out.png",
+      { rgba: blankPixels(8, 8), widthPx: 8, heightPx: 8, background: BACKGROUND },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.errorMessage).toContain("only background pixels");
+  });
+
+  it("accepts a capture with real non-background content", () => {
+    const rgba = blankPixels(8, 8);
+    // One clearly non-background pixel is the weakest honest claim.
+    rgba[0] = 255;
+    rgba[1] = 255;
+    rgba[2] = 255;
+
+    const result = validatePngCapture(
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
+      "out.png",
+      { rgba, widthPx: 8, heightPx: 8, background: BACKGROUND },
+    );
+    if (!result.ok) throw new Error(`expected success, got ${result.errorMessage}`);
+    expect(result.status).toBe("verified");
+    expect(result.content.nonBackgroundPixels).toBe(1);
+    expect(result.content.sampledPixels).toBe(64);
+    expect(result.widthPx).toBe(1);
+  });
+
+  it("treats a fully transparent buffer as blank", () => {
+    const rgba = new Uint8Array(8 * 8 * 4); // alpha 0 everywhere
+    const evidence = analyzePixelContent(rgba, 8, 8, BACKGROUND);
+    expect(evidence.nonBackgroundPixels).toBe(0);
+  });
+
+  it("does not count antialiasing noise as content", () => {
+    const rgba = blankPixels(4, 4);
+    rgba[0] = BACKGROUND.r + 4; // within the default tolerance
+    expect(analyzePixelContent(rgba, 4, 4, BACKGROUND).nonBackgroundPixels).toBe(0);
+    rgba[0] = BACKGROUND.r + 40; // clearly beyond it
+    expect(analyzePixelContent(rgba, 4, 4, BACKGROUND).nonBackgroundPixels).toBe(1);
+  });
+
+  it("enforces a caller-supplied minimum coverage ratio", () => {
+    const rgba = blankPixels(10, 10);
+    rgba[0] = 255;
+    const result = validatePngCapture(
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
+      "out.png",
+      {
+        rgba,
+        widthPx: 10,
+        heightPx: 10,
+        background: BACKGROUND,
+        minimumNonBackgroundRatio: 0.05,
+      },
+    );
+    // 1/100 is below the 5% the caller demanded.
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects mismatched pixel buffer dimensions rather than guessing", () => {
+    const result = validatePngCapture(
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
+      "out.png",
+      { rgba: new Uint8Array(16), widthPx: 100, heightPx: 100, background: BACKGROUND },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.errorMessage).toContain("RGBA bytes");
   });
 
   it("rejects a zero-sized canvas", () => {

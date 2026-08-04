@@ -15,6 +15,8 @@ export {
   buildLayerGeometries,
   disposeAssemblyGeometries,
   disposeLayerGeometries,
+  PreviewConversionError,
+  RENDERED_MM_TOLERANCE,
   type AssemblyLayerGeometry,
   type LayerShapeGeometry,
 } from "./geometry.js";
@@ -30,10 +32,17 @@ export {
 export {
   computeCameraFit,
   computeCameraPose,
+  DEFAULT_FOV_DEG,
+  DEFAULT_PADDING_MM,
   PREVIEW_VIEWS,
+  viewDirection,
+  visibleBoundsMm,
   type CameraFit,
+  type CameraFitOptions,
   type CameraPose,
+  type PreviewBoundsMm,
   type PreviewView,
+  type Viewport,
 } from "./camera.js";
 
 export {
@@ -46,14 +55,20 @@ export {
 } from "./material.js";
 
 export {
+  analyzePixelContent,
   buildCaptureFilename,
+  DEFAULT_BACKGROUND_TOLERANCE,
   readPngHeader,
   validatePngCapture,
+  type BackgroundColor,
+  type CaptureContentInput,
   type CaptureFailure,
   type CaptureFilenameInput,
   type CaptureResult,
-  type CaptureSuccess,
+  type CaptureStructureOnly,
+  type CaptureVerified,
   type CapturableCanvas,
+  type PixelContentEvidence,
   type PngHeader,
 } from "./capture.js";
 
