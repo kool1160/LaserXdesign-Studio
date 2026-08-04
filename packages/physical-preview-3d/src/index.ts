@@ -1,5 +1,6 @@
 import {
   analyzeDocumentCutability,
+  MAX_CUTABILITY_SEGMENTS,
   type CutabilityIssueCode,
   type CutabilityRegion,
 } from "@laserx/cutability";
@@ -33,7 +34,16 @@ export type CutabilityTopologyFindingCode = Extract<
  * a layer would silently disappear from the preview while still counting
  * toward `assembledDepthMm` — a fail-visible violation.
  */
-export type PhysicalPreviewFindingCode = CutabilityTopologyFindingCode | "EMPTY_PHYSICAL_LAYER";
+export type PhysicalPreviewFindingCode =
+  | CutabilityTopologyFindingCode
+  /** A declared physical layer that resolves to no renderable geometry. */
+  | "EMPTY_PHYSICAL_LAYER"
+  /**
+   * The layer exceeds the manufacturing-analysis segment ceiling, so its
+   * topology cannot be verified. Package-owned: cutability reports this by
+   * throwing, and an unhandled throw would abort the entire preview.
+   */
+  | "ANALYSIS_LIMIT_EXCEEDED";
 
 const TOPOLOGY_FINDING_CODES: readonly CutabilityTopologyFindingCode[] = [
   "OPEN_CONTOUR",
@@ -222,6 +232,45 @@ interface LayerProjection {
 }
 
 /**
+ * Recognises only the documented analysis-capacity ceiling.
+ *
+ * Keyed to `MAX_CUTABILITY_SEGMENTS` rather than to the message prose, and
+ * narrowed to `RangeError`, so an ordinary programmer error is still thrown and
+ * never silently converted into a user-facing finding.
+ */
+function isAnalysisCapacityFailure(error: unknown): boolean {
+  return (
+    error instanceof RangeError &&
+    error.message.includes(String(MAX_CUTABILITY_SEGMENTS))
+  );
+}
+
+/** A layer that is declared and identifiable but renders nothing. */
+function emptyPreviewLayer(
+  layer: Layer,
+  metadata: ManufacturingLayerMetadata,
+): PhysicalPreviewLayer {
+  return {
+    layerId: layer.id,
+    name: layer.name,
+    role: metadata.role as Exclude<ManufacturingLayerRole, "non-cut-preview">,
+    thicknessMm: metadata.thicknessMm,
+    material: {
+      material: metadata.material,
+      stockThicknessDesignation: cloneStockThicknessDesignation(
+        metadata.stockThicknessDesignation,
+      ),
+      displayLabel: formatStockThickness(
+        metadata.thicknessMm,
+        metadata.stockThicknessDesignation ?? null,
+      ),
+    },
+    shapes: [],
+    boundsMm: null,
+  };
+}
+
+/**
  * The single source of per-layer contour/topology projection, shared by
  * `buildPhysicalPreviewScene` (one layer) and `buildPhysicalPreviewAssembly`
  * (all physical layers) so neither duplicates cutability's region logic.
@@ -232,7 +281,30 @@ function buildLayerProjection(
 ): LayerProjection {
   const metadata = layer.manufacturing;
   const scoped = layerScopedDocument(document, layer.id);
-  const analysis = analyzeDocumentCutability(scoped);
+
+  let analysis: ReturnType<typeof analyzeDocumentCutability>;
+  try {
+    analysis = analyzeDocumentCutability(scoped);
+  } catch (error) {
+    if (!isAnalysisCapacityFailure(error)) throw error;
+
+    // A layer above the analysis capacity ceiling is a *known* limitation, not
+    // a programmer error. Letting the RangeError escape would abort the whole
+    // preview and take every other valid physical layer down with it, which is
+    // neither a truthful partial assembly nor a fail-visible unsupported layer.
+    // Report it as this package's own finding and render nothing for the layer.
+    return {
+      previewLayer: emptyPreviewLayer(layer, metadata),
+      findings: [
+        {
+          code: "ANALYSIS_LIMIT_EXCEEDED",
+          layerId: layer.id,
+          objectIds: scoped.objects.map((object) => object.id),
+          message: `Physical layer "${layer.name}" exceeds the ${String(MAX_CUTABILITY_SEGMENTS)}-segment manufacturing-analysis limit, so its geometry cannot be verified and is not shown. Simplify the layer or preview fewer objects.`,
+        },
+      ],
+    };
+  }
 
   const findings: PhysicalPreviewFinding[] = analysis.issues
     .filter((issue) => isTopologyFindingCode(issue.code))

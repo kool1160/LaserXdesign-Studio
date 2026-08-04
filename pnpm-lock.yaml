@@ -313,6 +313,9 @@ importers:
         specifier: workspace:*
         version: link:../geometry
     devDependencies:
+      '@laserx/project-format':
+        specifier: workspace:*
+        version: link:../project-format
       '@types/node':
         specifier: 26.1.2
         version: 26.1.2

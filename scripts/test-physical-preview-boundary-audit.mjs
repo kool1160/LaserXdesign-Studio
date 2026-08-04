@@ -218,8 +218,28 @@ await rejects(
       dependencies: { "@laserx/material-catalog": "workspace:*" },
     }),
   },
-  /catalog-independent.*@laserx\/material-catalog/su,
+  // Matched on package and field rather than the reason prose, so rewording the
+  // message cannot silently turn this probe into a no-op.
+  /@laserx\/material-catalog in dependencies/u,
 );
+
+await rejects(
+  "production-export in the pure scene contract",
+  {
+    "packages/physical-preview-3d/package.json": pureManifest({
+      dependencies: { "@laserx/production-export": "workspace:*" },
+    }),
+  },
+  /@laserx\/production-export/u,
+);
+
+// project-format is test/tool-only for the scene package, but it is not a
+// renderer-unsafe coupling, so it must not be rejected outright.
+await accepts("project-format as a devDependency of the pure package", {
+  "packages/physical-preview-3d/package.json": pureManifest({
+    devDependencies: { "@laserx/project-format": "workspace:*" },
+  }),
+});
 
 await rejects(
   "drei in the pure scene contract",
@@ -249,7 +269,7 @@ await rejects(
       devDependencies: { three: "0.185.1" },
     }),
   },
-  /renderer-.*independent.*three in devDependencies/su,
+  /found three in devDependencies/u,
 );
 
 await rejects(
@@ -259,7 +279,7 @@ await rejects(
       optionalDependencies: { react: "19.2.8" },
     }),
   },
-  /React- and Electron-independent.*react in optionalDependencies/su,
+  /found react in optionalDependencies/u,
 );
 
 await rejects(

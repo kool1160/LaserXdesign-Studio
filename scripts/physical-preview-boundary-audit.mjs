@@ -139,9 +139,13 @@ const PACKAGE_BOUNDARIES = [
       "@react-three/fiber",
       "@react-three/drei",
       "@laserx/material-catalog",
+      // Imports `node:crypto`, so it cannot enter the lazily loaded renderer
+      // chunk. The physical-layer predicate is replicated in the scene package
+      // rather than imported from here.
+      "@laserx/production-export",
     ],
     reason:
-      "the pure scene contract must stay renderer-, React-, Electron-, and catalog-independent",
+      "the pure scene contract must stay renderer-, React-, Electron-, catalog-, and Node-crypto-independent",
   },
   {
     manifest: "packages/physical-preview-three/package.json",

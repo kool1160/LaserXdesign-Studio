@@ -4,20 +4,35 @@ Pure deterministic adapter from a validated LaserX project snapshot to a rendere
 
 ## Boundary
 
-Allowed dependencies:
+Allowed **runtime** dependencies — exactly three, and this list is exhaustive:
 
-- current LaserX domain and geometry contracts;
-- project-format parsing and migrations where required by tests/tools;
-- cutability and production-export contracts when they provide authoritative topology or manufacturing-layer evidence.
+- `@laserx/domain`;
+- `@laserx/geometry`;
+- `@laserx/cutability`.
+
+`@laserx/project-format` is **test/tool-only**: it may be used to parse fixtures
+in this package's own tests, and must never become a runtime dependency.
 
 Forbidden dependencies:
 
 - React;
 - Electron;
 - Three.js;
+- any material catalog;
+- `@laserx/production-export` — it imports `node:crypto`, which is not safe to
+  pull into the lazily loaded Electron **renderer** chunk this package ships in.
+  The physical-layer predicate is therefore deliberately *replicated* here
+  (`isPhysicalManufacturingLayer`) rather than imported. The two definitions are
+  currently kept in agreement by review only; a cross-check test would need to
+  import `production-export` into this suite, so if that risk is to be closed it
+  belongs in an external test rather than here;
 - browser globals;
 - filesystem APIs;
 - GPU APIs.
+
+This boundary is enforced mechanically by `pnpm audit:physical-preview`, not by
+this document — the audit rejects each forbidden package across `dependencies`,
+`devDependencies`, `peerDependencies`, and `optionalDependencies`.
 
 ## Responsibilities
 
