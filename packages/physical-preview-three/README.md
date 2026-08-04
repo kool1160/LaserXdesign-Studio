@@ -1,7 +1,8 @@
 # `@laserx/physical-preview-three`
 
 Pure, deterministic Three.js adapter over the accepted
-`@laserx/physical-preview-3d` scene contract. Created in M14 gate G3.
+`@laserx/physical-preview-3d` scene contract. Created in M14 gate G3 and hardened
+for renderer integration in G4A.
 
 ## Boundary
 
@@ -18,11 +19,13 @@ Forbidden:
 - Electron;
 - `@laserx/production-export` and any material catalog — both would drag
   `node:crypto` or unaccepted M16 identity into the lazily loaded renderer chunk;
+- Node-only globals or `node:` imports in production source;
 - DOM orchestration, filesystem access, and privileged capture.
 
-Enforced mechanically by `pnpm audit:physical-preview` across `dependencies`,
-`devDependencies`, `peerDependencies`, and `optionalDependencies`, with negative
-probes proving each rejection.
+Enforced mechanically by `pnpm audit:physical-preview` and
+`pnpm audit:renderer-source`. The production TypeScript config includes only
+`src/**`, browser APIs, and no Node globals. A separate test config enables Node
+utilities for byte-level PNG fixtures and GPU-free unit tests.
 
 Every module is unit-testable in Node **without a WebGL context**, which is why
 this is a package rather than code inside `apps/desktop`.
@@ -38,6 +41,14 @@ this is a package rather than code inside `apps/desktop`.
 - validate captured PNG **structure** and, given pixel evidence, **content**;
 - build deterministic capture filenames;
 - own and dispose every geometry and material it allocates.
+
+## Resource ownership
+
+`buildPreviewResources()` keeps private ownership of every geometry and material
+it creates. Public arrays, placements, and map views are read-only and frozen.
+A consumer cannot clear an exposed collection and accidentally prevent disposal.
+The returned `dispose()` remains idempotent and releases the private owned
+resources exactly once.
 
 ## Non-responsibilities
 
@@ -61,8 +72,9 @@ bytes, dimensions, expected background, optional tolerance and minimum coverage
 ratio — and `analyzePixelContent()` proves at least one meaningful
 non-background pixel exists before the result becomes `status: "verified"`.
 
-Only `"verified"` is a successful capture. G4 supplies the bytes from the real
-renderer; this package never reads a canvas itself beyond `toDataURL`.
+Only `"verified"` is a successful validation result. G5 supplies the encoded
+bytes and RGBA evidence from the real renderer; this package never reads a canvas
+itself beyond `toDataURL`.
 
 ### The evidence is bound to the capture, not merely present
 
@@ -78,7 +90,7 @@ misinterpreting them.
 
 **What this package cannot enforce:** that the caller actually read the encoded
 bytes and the RGBA evidence from the *same* capture transaction. Two same-sized
-but unrelated reads would still pass dimension binding. **G4 must obtain both
+but unrelated reads would still pass dimension binding. **G5 must obtain both
 from one frame, read back once** — this package can only prove the shapes are
 consistent, not the provenance.
 
@@ -127,5 +139,7 @@ evidence.**
 ## Governing documents
 
 - ADR 0024 — production physical 3D preview boundary;
+- ADR 0025 — active implementation ownership and G4/G5 boundary;
 - `docs/experiments/m14-physical-3d-preview/G1_SCALING_EVIDENCE.md` — why
-  `curveSegments: 1` is used for already-flattened contours.
+  `curveSegments: 1` is used for already-flattened contours and why scene
+  analysis must run in a worker.
