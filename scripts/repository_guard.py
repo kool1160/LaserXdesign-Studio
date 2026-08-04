@@ -26,6 +26,7 @@ def current_slice_error(text: str) -> str | None:
         )
     return None
 
+
 MILESTONE_FILENAMES = (
     "M00-foundation.md",
     "M01-desktop-shell.md",
@@ -83,6 +84,7 @@ REQUIRED_FILES = (
     "docs/decisions/0020-deterministic-cutability-and-bridge-proposals.md",
     "docs/decisions/0022-explicit-manufacturing-layers-and-atomic-production-packages.md",
     "docs/decisions/0023-windows-beta-installer-and-release-boundary.md",
+    "docs/decisions/0025-chatgpt-implementation-ownership.md",
     ".github/workflows/m06-svg-dxf.yml",
     ".github/workflows/m07-raster-tracing.yml",
     ".github/workflows/m08-cutability.yml",
@@ -199,8 +201,8 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "AGENTS.md",
         (
             "GitHub Issue #44",
-            "Claude — implementation lead",
-            "ChatGPT — planning, audit, and advancement authority",
+            "ChatGPT — implementation and orchestration lead",
+            "Claude — held unless explicitly assigned",
             "canonical stored length unit: millimeters",
             "Native DWG editing is explicitly out of scope",
             "M14 — Production physical 3D preview integration.",
@@ -217,9 +219,7 @@ def check_instruction_links(errors: list[str]) -> None:
         errors.append("agent.md must remain a compatibility pointer to authoritative AGENTS.md")
 
     milestone_index = ROOT / "docs" / "MILESTONES.md"
-    required_rows = tuple(
-        f"| M{number:02d} |" for number in range(14, 26)
-    )
+    required_rows = tuple(f"| M{number:02d} |" for number in range(14, 26))
     require_terms(errors, milestone_index, required_rows, "docs/MILESTONES.md")
 
     require_terms(
@@ -227,8 +227,8 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "docs" / "status" / "CURRENT.md",
         (
             "M14 — Production Physical 3D Preview Integration",
-            "Implementation lead: Claude",
-            "Independent planning/review/advancement: ChatGPT",
+            "Implementation and orchestration lead: ChatGPT",
+            "Current implementation sub-slice: **G4A",
             "Issues #44 and #37",
         ),
         "docs/status/CURRENT.md",
@@ -247,6 +247,7 @@ def check_instruction_links(errors: list[str]) -> None:
             "The experiment branch is never merged wholesale.",
             "No CAD kernel is justified for M14.",
             "typed Electron preload/main PNG capture",
+            "G4A — renderer-safe integration foundation",
             "Status advances to M15 only after explicit owner approval.",
         ),
         "M14 milestone",
@@ -258,10 +259,22 @@ def check_instruction_links(errors: list[str]) -> None:
         (
             "Slice G0",
             "Slice G6",
-            "Claude is the implementation lead",
-            "ChatGPT is the independent planning and audit authority",
+            "ChatGPT is the active senior software engineer",
+            "Claude is held by default",
+            "G4A — renderer-safe integration foundation",
         ),
-        "Claude execution plan",
+        "active implementation execution plan",
+    )
+
+    require_terms(
+        errors,
+        ROOT / "docs" / "decisions" / "0025-chatgpt-implementation-ownership.md",
+        (
+            "Accepted by owner on 2026-08-04.",
+            "ChatGPT is the active senior software engineer",
+            "G5 owns the complete capture transaction",
+        ),
+        "ADR 0025",
     )
 
 
