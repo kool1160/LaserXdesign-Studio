@@ -23,3 +23,4 @@ Accepted implementation decisions:
 - ADR 0021 — versioned sign templates and editable generation
 - ADR 0022 — explicit manufacturing layers and atomic production packages
 - ADR 0023 — Windows beta installer and release boundary
+- ADR 0024 — production physical 3D preview boundary

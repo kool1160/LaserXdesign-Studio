@@ -37,6 +37,22 @@ manifest centers and diameters from the same transformed geometry. Decorative
 and distorted ellipses remain ordinary geometry. It never writes the
 filesystem or changes authoritative geometry.
 
+### Physical preview — `packages/physical-preview-3d` and `packages/physical-preview-three`
+
+Own the derived, read-only physical 3D preview. `physical-preview-3d` is the
+pure, renderer-independent scene and assembly contract: physical-layer selection,
+region topology reused from `packages/cutability`, extrusion polarity, exact
+canonical `thicknessMm`, Z stackup, findings, and a deterministic fingerprint. It
+contains no React, Three, DOM, filesystem, or GPU dependency.
+`physical-preview-three` is the renderer adapter: shape/hole extrusion, camera
+poses, material appearance, and pure capture validation. It depends on Three and
+the pure package, never on React or Electron.
+
+Both consume authoritative snapshots and never mutate them. The preview is
+derived and non-persistent; it is never manufacturing evidence. These packages
+are promoted component by component during M14 gates G2 and G3 — the research
+experiment branch is never merged wholesale. ADR 0024 defines the full contract.
+
 ### Adapters
 
 - `packages/fonts`
@@ -86,6 +102,20 @@ never owns user-selected project or export files. Electron main maps session
 data, logs, and local crash dumps under the per-user `userData` root. A fatal
 renderer path settles older autosave work, writes the latest dirty recovery
 snapshot, and relaunches without changing the last explicit save.
+
+For M14, the physical 3D preview is a lazily-loaded desktop feature under
+`apps/desktop/src/features/physical-preview/`. Three.js and React Three Fiber
+load only when the user first opens the preview, so editing, import, analysis,
+save, and export do not pay for them; a failed chunk load degrades like the
+WebGL-unavailable state rather than blocking work. React owns only Canvas
+composition, controls, readouts, and fallbacks — never geometry algorithms. No
+CAD kernel is adopted, and no project-schema change belongs to M14: camera,
+assembled/exploded mode, spacing, visibility, and capture state stay derived and
+non-persistent. PNG capture crosses a typed Electron preload/main IPC boundary;
+the research anchor-download path is explicitly not promoted. The lab shell,
+`__laserxPreviewLab` benchmark hook, fixture registry, `?fixture=` selection
+surface, and bundled research fixture payloads never ship, enforced by
+`pnpm audit:physical-preview`. ADR 0024 defines the complete contract.
 
 Production signing is injected only at the packaging boundary and is required
 to succeed before publication. A manual tagged release produces a schema-1

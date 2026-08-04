@@ -22,11 +22,12 @@
     "audit:templates": "node scripts/sign-template-asset-audit.mjs",
     "audit:ai": "node scripts/ai-boundary-audit.mjs",
     "audit:production": "node scripts/production-package-audit.mjs",
+    "audit:physical-preview": "node scripts/physical-preview-boundary-audit.mjs",
     "audit:release": "node scripts/release-policy-audit.mjs",
     "audit:signing-policy": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-authenticode-policy.ps1",
     "audit:release-gate": "node scripts/test-controlled-beta-release-gate.mjs",
     "generate:raster-fixtures": "pnpm --filter @laserx/desktop exec electron ../../scripts/generate-m07-raster-fixtures.cjs",
-    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm audit:raster && pnpm audit:cutability && pnpm audit:templates && pnpm audit:ai && pnpm audit:production && pnpm audit:release && pnpm audit:signing-policy && pnpm audit:release-gate && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
+    "verify": "pnpm audit:fonts && pnpm audit:geometry && pnpm audit:raster && pnpm audit:cutability && pnpm audit:templates && pnpm audit:ai && pnpm audit:production && pnpm audit:physical-preview && pnpm audit:release && pnpm audit:signing-policy && pnpm audit:release-gate && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
