@@ -68,6 +68,8 @@ export const IPC_CHANNELS = {
   createText: "laserx:text:create",
   updateSelectedText: "laserx:text:update-selected",
   resolveRecovery: "laserx:recovery:resolve",
+  runPhysicalPreview: "laserx:physical-preview:build",
+  cancelPhysicalPreview: "laserx:physical-preview:cancel",
   stateChanged: "laserx:state:changed",
 } as const;
 
@@ -467,6 +469,14 @@ export const productionExportRequestSchema = z.strictObject({
 });
 
 export const cancelCutabilityAnalysisRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
+export const runPhysicalPreviewRequestSchema = z.strictObject({
+  operationId: z.uuid(),
+});
+
+export const cancelPhysicalPreviewRequestSchema = z.strictObject({
   operationId: z.uuid(),
 });
 
@@ -877,6 +887,70 @@ export const recentProjectSchema = z.strictObject({
   name: z.string(),
 });
 
+const physicalPreviewContourSchema = z.strictObject({
+  points: z.array(pointSchema),
+});
+const physicalPreviewFindingSchema = z.strictObject({
+  code: z.enum([
+    "OPEN_CONTOUR",
+    "SELF_INTERSECTION",
+    "DUPLICATE_SEGMENT",
+    "OVERLAPPING_SEGMENT",
+    "UNSUPPORTED_GEOMETRY",
+    "EMPTY_PHYSICAL_LAYER",
+    "ANALYSIS_LIMIT_EXCEEDED",
+  ]),
+  layerId: z.uuid(),
+  objectIds: z.array(z.uuid()),
+  message: z.string(),
+});
+const physicalPreviewZRangeSchema = z.strictObject({
+  minZmm: finiteNumber,
+  maxZmm: finiteNumber,
+});
+export const physicalPreviewAssemblySchema = z.strictObject({
+  identity: z.strictObject({
+    projectId: z.uuid(),
+    documentId: z.uuid(),
+    projectUpdatedAt: z.string(),
+  }),
+  stockMm: z.strictObject({ widthMm: positiveNumber, heightMm: positiveNumber }),
+  status: z.enum(["complete", "partial", "unavailable"]),
+  spacing: z.strictObject({
+    assembledGapMm: nonnegativeNumber,
+    explodedGapMm: nonnegativeNumber,
+  }),
+  layers: z.array(
+    z.strictObject({
+      layerId: z.uuid(),
+      name: z.string(),
+      role: z.enum(["face", "backing", "spacer-tab", "drill-reference"]),
+      thicknessMm: positiveNumber,
+      material: z.strictObject({
+        material: z.enum(["mild-steel", "stainless-steel", "aluminum", "wood", "acrylic", "other"]),
+        stockThicknessDesignation: stockThicknessDesignationSchema.nullable(),
+        displayLabel: z.string(),
+      }),
+      shapes: z.array(
+        z.strictObject({
+          id: z.string(),
+          outerContour: physicalPreviewContourSchema,
+          holeContours: z.array(physicalPreviewContourSchema),
+          sourceObjectIds: z.array(z.uuid()),
+        }),
+      ),
+      boundsMm: boundsSchema.nullable(),
+      order: z.number().int().nonnegative(),
+      assembledZRangeMm: physicalPreviewZRangeSchema,
+      explodedZRangeMm: physicalPreviewZRangeSchema,
+    }),
+  ),
+  assembledDepthMm: nonnegativeNumber,
+  depthStatus: z.enum(["verified", "declared-incomplete", "unavailable"]),
+  findings: z.array(physicalPreviewFindingSchema),
+  fingerprint: z.string(),
+});
+
 export const desktopStateSchema = z.strictObject({
   project: z.strictObject({
     id: z.uuid(),
@@ -1251,6 +1325,16 @@ export const desktopStateSchema = z.strictObject({
       })
       .nullable(),
   }),
+  physicalPreview: z.strictObject({
+    job: z
+      .strictObject({
+        operationId: z.uuid(),
+        percent: z.number().min(0).max(100),
+        stage: z.enum(["preparing", "building"]),
+      })
+      .nullable(),
+    assembly: physicalPreviewAssemblySchema.nullable(),
+  }),
 });
 
 export const commandResultSchema = z.discriminatedUnion("ok", [
@@ -1291,6 +1375,15 @@ export type ProductionExportRequest = z.infer<
 >;
 export type CancelCutabilityAnalysisRequest = z.infer<
   typeof cancelCutabilityAnalysisRequestSchema
+>;
+export type RunPhysicalPreviewRequest = z.infer<
+  typeof runPhysicalPreviewRequestSchema
+>;
+export type CancelPhysicalPreviewRequest = z.infer<
+  typeof cancelPhysicalPreviewRequestSchema
+>;
+export type PhysicalPreviewAssemblyDto = z.infer<
+  typeof physicalPreviewAssemblySchema
 >;
 export type FocusCutabilityIssueRequest = z.infer<
   typeof focusCutabilityIssueRequestSchema
@@ -1410,5 +1503,9 @@ export interface LaserxDesktopApi {
     request: TextUpdateRequestDto,
   ): Promise<CommandResult>;
   resolveRecovery(request: ResolveRecoveryRequest): Promise<CommandResult>;
+  runPhysicalPreview(request: RunPhysicalPreviewRequest): Promise<CommandResult>;
+  cancelPhysicalPreview(
+    request: CancelPhysicalPreviewRequest,
+  ): Promise<CommandResult>;
   onStateChanged(listener: (state: DesktopState) => void): () => void;
 }

@@ -38,11 +38,15 @@
     "@laserx/io-dxf": "workspace:*",
     "@laserx/io-svg": "workspace:*",
     "@laserx/import-raster": "workspace:*",
+    "@laserx/physical-preview-3d": "workspace:*",
+    "@laserx/physical-preview-three": "workspace:*",
     "@laserx/project-format": "workspace:*",
     "@laserx/production-export": "workspace:*",
     "@laserx/sign-tools": "workspace:*",
+    "@react-three/fiber": "9.7.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "three": "0.185.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -50,6 +54,7 @@
     "@types/node": "26.1.2",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@types/three": "0.185.3",
     "@vitejs/plugin-react": "6.0.5",
     "concurrently": "10.0.4",
     "cross-env": "10.1.0",
