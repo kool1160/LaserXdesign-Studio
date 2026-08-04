@@ -1,4 +1,5 @@
 import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
+import type { MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
 
 import { buildPreviewResources } from "../src/resources.js";
@@ -68,6 +69,14 @@ describe("preview resource ownership", () => {
     expect(Object.isFrozen(resources.placements)).toBe(true);
     expect("set" in resources.materialsByLayerId).toBe(false);
     expect("clear" in resources.materialsByLayerId).toBe(false);
+
+    let callbackMap: ReadonlyMap<string, MeshStandardMaterial> | null = null;
+    resources.materialsByLayerId.forEach((_value, _key, map) => {
+      callbackMap = map;
+    });
+    expect(callbackMap).toBe(resources.materialsByLayerId);
+    expect(callbackMap === null || "set" in callbackMap).toBe(false);
+    expect(callbackMap === null || "clear" in callbackMap).toBe(false);
 
     expect(() => {
       (resources.layers as unknown[]).pop();
