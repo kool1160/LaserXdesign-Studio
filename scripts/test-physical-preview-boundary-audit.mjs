@@ -292,6 +292,26 @@ await rejects(
   /@react-three\/fiber in peerDependencies/u,
 );
 
+await rejects(
+  "production-export in the renderer adapter",
+  {
+    "packages/physical-preview-three/package.json": adapterManifest({
+      dependencies: { "@laserx/production-export": "workspace:*" },
+    }),
+  },
+  /@laserx\/production-export in dependencies/u,
+);
+
+await rejects(
+  "catalog coupling in the renderer adapter",
+  {
+    "packages/physical-preview-three/package.json": adapterManifest({
+      dependencies: { "@laserx/material-catalog": "workspace:*" },
+    }),
+  },
+  /@laserx\/material-catalog in dependencies/u,
+);
+
 // The adapter legitimately depends on three; that must not be rejected.
 await accepts("three in the renderer adapter", {
   "packages/physical-preview-three/package.json": adapterManifest({
