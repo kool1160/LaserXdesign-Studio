@@ -21,14 +21,14 @@ Milestones are large, testable delivery gates. The active milestone is controlle
 | M12 | Layered production | Physical-layer separation, assembly preview, and organized export packages |
 | M13 | Windows installer and private beta hardening | Installable private beta with recovery, clean uninstall, packaging, and release gates |
 | M14 | Production physical 3D preview integration | A finished sign becomes a truthful interactive physical object inside the desktop app |
-| M15 | Guided onboarding and Learn Mode | A first-time user follows real-project guidance and finishes a usable sign without outside instruction |
+| M15 | Guided onboarding, workflow-first UI, and Learn Mode | A first-time user sees only relevant controls, repairs safe problems, and finishes a usable sign without outside instruction |
 | M16 | Material catalog and wood/acrylic expansion | Truthful material identity, nominal/measured thickness, and material-aware preview for broader maker workflows |
 | M17 | Process-aware manufacturability profiles | Plasma, laser, router, waterjet, and other reviewed workflows receive bounded process-specific guidance without machine control |
 | M18 | Downstream software export profiles | Deterministic target-aware handoff for LightBurn, plasma CAM, router, waterjet, fiber, and generic consumers |
 | M19 | Optional AI idea-to-cuttable onboarding | The optional AI path turns a plain-language idea into editable, validated, manufacturable sign geometry |
 | M20 | Licensing, trial, and purchase experience | A generous full-product trial and owner-approved affordable purchase model work without degrading the product |
 | M21 | Community beta distribution readiness | Outside users can install, learn, report problems, and complete real projects through a controlled beta |
-| M22 | Real-user usability validation | Observed users complete the ten-minute primary workflow and the product closes confirmed usability blockers |
+| M22 | Real-user usability validation and final interface polish | Real users prove the ten-minute workflow and the complete app receives its final simple, clean, workflow-aware refinement |
 | M23 | Version 1.0 release and broader-market launch | LaserX ships as a supported, signed, documented, premium-feeling Version 1.0 product |
 | M24 | Machine platform foundation | Simulator-first profiles, privileged host, deterministic job plans, and safety-state contracts |
 | M25 | First LaserX controller vertical slice | One explicitly approved controller, machine, and process validated through HIL and one supervised job |
@@ -40,11 +40,27 @@ Detailed scope and exit criteria live in `docs/milestones/Mxx-*.md`.
 The roadmap follows the product logic in Issue #44:
 
 1. **M14 integrates physical 3D first** because the guided first-run experience is expected to end in truthful preview and export.
-2. **M15 makes first-time usability a standalone gate**, not documentation buried inside release work.
+2. **M15 makes first-time usability, contextual controls, and guided repair a standalone gate**, not documentation buried inside release work. It implements the rule that LaserX presents the next useful decision rather than every possible tool.
 3. **M16–M18 broaden physical truth and downstream usefulness** without turning LaserX into machine software.
 4. **M19 strengthens the optional AI path** while preserving complete non-AI sign creation.
-5. **M20–M23 establish the commercial and beta path**: trial, distribution, real-user evidence, then Version 1.0.
-6. **M24–M25 preserve the owner’s future machine-platform path** after Version 1.0, behind explicit safety gates.
+5. **M20–M21 establish commercial trial and controlled-beta readiness.**
+6. **M22 uses real-user evidence to close usability blockers and performs the final app-wide interface polish pass** after the major Version 1 surfaces exist.
+7. **M23 publishes Version 1.0** only after the workflow, repair experience, and complete interface have passed owner and independent review.
+8. **M24–M25 preserve the owner’s future machine-platform path** after Version 1.0, behind explicit safety gates.
+
+## Locked interaction direction
+
+LaserX uses an Apple-like product philosophy without copying Apple branding or controls:
+
+- simple, clean, calm, and restrained;
+- one clear primary action for the current task;
+- contextual tools instead of permanent button walls;
+- advanced capability available through progressive disclosure;
+- SVG/DXF import never shows raster trace controls;
+- large finding sets become grouped repair decisions with a primary **Fix safe problems** action;
+- ambiguous problems are walked one at a time rather than dumped as thousands of raw messages.
+
+`docs/PRODUCT_REQUIREMENTS.md`, `docs/DESKTOP_DESIGN_SYSTEM.md`, M15, and M22 contain the enforceable requirements.
 
 ## Agent assignment
 
