@@ -78,11 +78,23 @@ function cloneOptions(
 }
 
 /**
- * Fingerprints only the immutable project snapshot and assembly options that can
- * change physical topology, thickness, material identity, order, or Z spacing.
- * Camera, view preset, assembled/exploded display mode, orbit state, and
- * presentation-only visibility are deliberately absent and therefore cannot
+ * Fingerprints only physical content: the project/document identity plus every
+ * value that can change physical topology, thickness, material identity,
+ * order, or Z spacing. Camera, view preset, assembled/exploded display mode,
+ * orbit state, presentation-only visibility, and — deliberately — the
+ * project's own `updatedAt` timestamp are all absent, so none of them can
  * invalidate this expensive scene-analysis cache.
+ *
+ * `project.project.updatedAt` is snapshot *identity*, not physical content:
+ * it changes on every edit, including edits with no effect on any physical
+ * layer (renaming the project, editing a non-physical reference layer,
+ * touching document metadata). Hashing it here would invalidate the cache on
+ * every unrelated project update. Snapshot identity is still carried on the
+ * built assembly (`PhysicalPreviewIdentity`) and is rebound to the exact
+ * requesting snapshot on every call via `rebindPhysicalPreviewAssemblyIdentity`
+ * — a cache hit never returns stale identity or fingerprint evidence, even
+ * though the cached *content* was computed from a different, physically
+ * identical snapshot.
  */
 export function fingerprintPhysicalPreviewInput(
   project: LaserxProject,
@@ -96,7 +108,6 @@ export function fingerprintPhysicalPreviewInput(
 
   return hashCanonical({
     projectId: project.project.id,
-    projectUpdatedAt: project.project.updatedAt,
     documentId: project.document.id,
     dimensions: project.document.dimensions,
     layers: physicalLayers,

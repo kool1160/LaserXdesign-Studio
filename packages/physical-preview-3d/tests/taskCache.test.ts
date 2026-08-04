@@ -109,6 +109,17 @@ describe("physical preview task fingerprint", () => {
     );
   });
 
+  it("excludes project.updatedAt: an unrelated project update must not change the physical-content key", () => {
+    const project = projectFixture();
+    const unrelatedUpdate = structuredClone(project);
+    unrelatedUpdate.project.updatedAt = "2026-08-04T18:30:00.000Z";
+    unrelatedUpdate.project.name = "Renamed project";
+
+    expect(fingerprintPhysicalPreviewInput(unrelatedUpdate)).toBe(
+      fingerprintPhysicalPreviewInput(project),
+    );
+  });
+
   it("changes for physical geometry, thickness, and assembly spacing", () => {
     const project = projectFixture();
     const geometryChanged = structuredClone(project);
@@ -188,10 +199,18 @@ describe("physical preview assembly cache", () => {
   it("evicts the least recently used entry at its configured bound", () => {
     const cache = new PhysicalPreviewAssemblyCache(2);
     const baseProject = projectFixture();
+    // Distinct *physical* content, not just a different `updatedAt` -- the
+    // cache key is content-only, so snapshots differing only by timestamp
+    // deliberately collide onto the same entry (see the fingerprint tests
+    // above) and would not exercise LRU eviction here.
     const secondProject = structuredClone(baseProject);
-    secondProject.project.updatedAt = "2026-08-04T12:01:00.000Z";
+    const secondFace = secondProject.document.layers.find((layer) => layer.id === FACE_LAYER_ID);
+    if (secondFace?.manufacturing === undefined) throw new Error("Expected physical layer.");
+    secondFace.manufacturing.thicknessMm = 4;
     const thirdProject = structuredClone(baseProject);
-    thirdProject.project.updatedAt = "2026-08-04T12:02:00.000Z";
+    const thirdFace = thirdProject.document.layers.find((layer) => layer.id === FACE_LAYER_ID);
+    if (thirdFace?.manufacturing === undefined) throw new Error("Expected physical layer.");
+    thirdFace.manufacturing.thicknessMm = 5;
 
     const first = runPhysicalPreviewTask(createPhysicalPreviewTaskRequest("a", baseProject));
     const second = runPhysicalPreviewTask(createPhysicalPreviewTaskRequest("b", secondProject));

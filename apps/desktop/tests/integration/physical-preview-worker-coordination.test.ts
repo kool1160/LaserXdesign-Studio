@@ -42,7 +42,11 @@ function physicalLayer(thicknessMm = 3): Layer {
   };
 }
 
-function projectFixture(updatedAt = "2026-08-04T12:00:00.000Z", widthMm = 80): LaserxProject {
+function projectFixture(
+  updatedAt = "2026-08-04T12:00:00.000Z",
+  widthMm = 80,
+  thicknessMm = 3,
+): LaserxProject {
   const project = createBlankProject({
     id: "cccccccc-0000-4000-8000-000000000001",
     documentId: "cccccccc-0000-4000-8000-000000000002",
@@ -51,7 +55,7 @@ function projectFixture(updatedAt = "2026-08-04T12:00:00.000Z", widthMm = 80): L
     width: 200,
     height: 100,
     inputUnit: "millimeters",
-    layers: [physicalLayer()],
+    layers: [physicalLayer(thicknessMm)],
     activeLayerId: FACE_LAYER_ID,
     objects: [
       {
@@ -272,5 +276,109 @@ describe("physical preview worker coordination", () => {
     const second = await coordinator.build(project);
     expect(second.cacheHit).toBe(true);
     expect(worker.calls).toHaveLength(1);
+  });
+
+  it("reuses cached content across an unrelated non-physical project update and rebinds identity to the newer snapshot", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+    const original = projectFixture("2026-08-04T12:10:00.000Z");
+
+    const firstPromise = coordinator.build(original);
+    worker.complete(0);
+    const first = await firstPromise;
+    expect(first.assembly.identity.projectUpdatedAt).toBe("2026-08-04T12:10:00.000Z");
+
+    // Same physical content -- same layer, material, thickness, geometry --
+    // only the project's own updatedAt changed, as it would from renaming the
+    // project or editing an unrelated non-physical layer.
+    const updated = projectFixture("2026-08-04T12:11:00.000Z");
+    const second = await coordinator.build(updated);
+
+    expect(worker.calls).toHaveLength(1);
+    expect(second.cacheHit).toBe(true);
+    expect(second.inputFingerprint).toBe(first.inputFingerprint);
+    expect(second.assembly.identity.projectUpdatedAt).toBe("2026-08-04T12:11:00.000Z");
+    expect(second.assembly.layers).toEqual(first.assembly.layers);
+    expect(second.assembly.fingerprint).not.toBe(first.assembly.fingerprint);
+  });
+
+  it("coalesces identical concurrent in-flight requests onto a single worker call", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+    const project = projectFixture();
+
+    const firstPromise = coordinator.build(project);
+    const secondPromise = coordinator.build(project);
+
+    expect(worker.calls).toHaveLength(1);
+    worker.complete(0);
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(first.cacheHit).toBe(false);
+    expect(second.cacheHit).toBe(false);
+    expect(second.assembly).toEqual(first.assembly);
+    expect(coordinator.cacheSize).toBe(1);
+  });
+
+  it("lets one cancelled caller leave another caller coalesced on the same request unaffected", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+    const project = projectFixture();
+    const controller = new AbortController();
+
+    const cancelledOutcome = coordinator
+      .build(project, undefined, { signal: controller.signal })
+      .catch((error: unknown) => error);
+    const remainingPromise = coordinator.build(project);
+
+    expect(worker.calls).toHaveLength(1);
+    controller.abort();
+
+    expect(await cancelledOutcome).toBeInstanceOf(PhysicalPreviewCancelledError);
+    // The still-interested caller's worker call must not have been aborted by
+    // the other caller's independent cancellation.
+    expect(worker.calls[0]?.signal.aborted).toBe(false);
+
+    worker.complete(0);
+    const remaining = await remainingPromise;
+    expect(remaining.cacheHit).toBe(false);
+    expect(coordinator.cacheSize).toBe(1);
+  });
+
+  it("invalidates the cache when physical layer thickness changes even though geometry is unchanged", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+
+    const thinPromise = coordinator.build(projectFixture(undefined, undefined, 3));
+    worker.complete(0);
+    const thin = await thinPromise;
+
+    const thickPromise = coordinator.build(projectFixture(undefined, undefined, 6));
+    worker.complete(1);
+    const thick = await thickPromise;
+
+    expect(worker.calls).toHaveLength(2);
+    expect(thick.cacheHit).toBe(false);
+    expect(thick.inputFingerprint).not.toBe(thin.inputFingerprint);
+  });
+
+  it("invalidates the cache when assembly spacing options change", async () => {
+    const worker = new ControlledPreviewWorker();
+    const coordinator = new PhysicalPreviewCoordinator(worker);
+    const project = projectFixture();
+
+    const defaultSpacingPromise = coordinator.build(project);
+    worker.complete(0);
+    const defaultSpacing = await defaultSpacingPromise;
+
+    const widerSpacingPromise = coordinator.build(project, {
+      spacing: { explodedGapMm: 40 },
+    });
+    worker.complete(1);
+    const widerSpacing = await widerSpacingPromise;
+
+    expect(worker.calls).toHaveLength(2);
+    expect(widerSpacing.cacheHit).toBe(false);
+    expect(widerSpacing.inputFingerprint).not.toBe(defaultSpacing.inputFingerprint);
   });
 });
