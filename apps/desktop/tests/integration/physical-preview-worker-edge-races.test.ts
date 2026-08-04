@@ -183,8 +183,9 @@ describe("physical preview edge races", () => {
     coordinator.cancelActive();
     worker.complete(0);
 
-    expect(await outcome).toBeInstanceOf(PhysicalPreviewCancelledError);
-    expect(await outcome).not.toBeInstanceOf(PhysicalPreviewSupersededError);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(PhysicalPreviewCancelledError);
+    expect(error).not.toBeInstanceOf(PhysicalPreviewSupersededError);
   });
 
   it("terminates ordinary superseded work through the worker abort signal", async () => {
@@ -194,10 +195,13 @@ describe("physical preview edge races", () => {
     const first = coordinator
       .build(project("2026-08-04T13:04:00.000Z", 110))
       .catch((error: unknown) => error);
-    void coordinator.build(project("2026-08-04T13:05:00.000Z", 130));
+    const second = coordinator
+      .build(project("2026-08-04T13:05:00.000Z", 130))
+      .catch((error: unknown) => error);
 
     expect(await first).toBeInstanceOf(PhysicalPreviewSupersededError);
     expect(worker.requests).toHaveLength(2);
     coordinator.cancelActive();
+    expect(await second).toBeInstanceOf(PhysicalPreviewCancelledError);
   });
 });
