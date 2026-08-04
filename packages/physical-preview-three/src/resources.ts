@@ -35,7 +35,7 @@ export interface PreviewResources {
 }
 
 function readonlyMapView<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
-  return Object.freeze({
+  const view: ReadonlyMap<K, V> = Object.freeze({
     get size() {
       return source.size;
     },
@@ -46,7 +46,7 @@ function readonlyMapView<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
       return source.has(key);
     },
     forEach(callbackfn: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) {
-      source.forEach((value, key) => callbackfn.call(thisArg, value, key, source));
+      source.forEach((value, key) => callbackfn.call(thisArg, value, key, view));
     },
     entries() {
       return source.entries();
@@ -61,6 +61,7 @@ function readonlyMapView<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
       return source[Symbol.iterator]();
     },
   });
+  return view;
 }
 
 function exposedLayers(layers: readonly AssemblyLayerGeometry[]): readonly PreviewResourceLayer[] {
