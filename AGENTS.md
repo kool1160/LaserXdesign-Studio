@@ -138,7 +138,8 @@ ChatGPT must:
 - post detailed findings to GitHub;
 - return `READY`, `REPAIR`, or `BLOCKED`;
 - perform the deep senior turning-point audit and assign independent verification at the checkpoints ADR 0026 defines;
-- merge and advance only after unchanged-head verification, required green CI, and the owner's explicit command;
+- merge a **routine PR inside the already-approved active gate** after focused exact-head verification, required green CI, and no unresolved blocking finding — this does not require a separate owner command for every PR;
+- merge or close a **gate or milestone**, activate the next gate or milestone, or change product direction only after unchanged-head verification, required green CI, and the owner's explicit command;
 - never treat Claude's report as proof without independently checking GitHub evidence;
 - never implement the load-bearing change it is about to audit in the same review.
 
@@ -358,9 +359,9 @@ When the owner tells Claude `Continue LaserX` or `Repair LaserX`, Claude must:
 5. otherwise implement only the next smallest complete slice authorized by the active milestone and current issue;
 6. add tests, behavior-linked documentation, and exact evidence;
 7. push or update a draft PR;
-8. stop in `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED` unless the owner also issued a valid advancement command.
+8. stop in `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`.
 
-`Continue LaserX` never authorizes Claude to merge, close the milestone issue, activate a later milestone, expand scope, or merge an experiment branch wholesale.
+Claude always stops after pushing exact-head evidence; it never merges, advances a gate or milestone, or closes the milestone issue under any circumstance, including an owner advancement command directed at the same message — advancement is performed by ChatGPT once it independently re-verifies the exact head. `Continue LaserX` never authorizes Claude to merge, close the milestone issue, activate a later milestone, expand scope, or merge an experiment branch wholesale.
 
 Detailed evidence belongs in GitHub. The owner-facing handoff stays compact:
 
