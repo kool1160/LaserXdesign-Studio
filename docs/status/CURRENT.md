@@ -6,17 +6,16 @@
 
 - Active issue: #30
 - Active milestone specification: `docs/milestones/M14-production-physical-3d-preview.md`
-- Implementation lead: Claude
-- Senior engineering lead, orchestrator, and acceptance auditor: ChatGPT
+- Implementation and orchestration lead: ChatGPT
 - Owner authority: product direction and milestone advancement
+- Claude: held unless explicitly assigned independent review, repair, comparison, or specialist work
 - Codex: held unless explicitly assigned independent review, repair, comparison, or specialist work
 - Current slice: **G4 — lazy desktop integration**
 - Current implementation sub-slice: **G4A — renderer-safe integration foundation**
-- Current PR: #61 — `REPAIRING`
 
-The owner clarified on 2026-08-04 that the intended operating model remains Claude-first implementation with ChatGPT acting as senior software engineer, project orchestrator, exact-head auditor, and acceptance authority. This clarification supersedes the temporary ChatGPT-first implementation assignment recorded by ADR 0025. A replacement governance ADR and corresponding instruction/guard cleanup are required; until that cleanup merges, this file and the explicit owner directive are the active assignment source.
+The owner explicitly reassigned implementation responsibility to ChatGPT on 2026-08-04. ADR 0025 records the durable ownership change and supersedes the former Claude-first assignment while this status remains active.
 
-`Continue LaserX` authorizes Claude to implement or repair only the next bounded active sub-slice after reading live GitHub state and ChatGPT's recorded findings. `Check LaserX` instructs ChatGPT to independently inspect the exact current head and return `READY`, `REPAIR`, or `BLOCKED`. Neither command authorizes Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope. `Advance LaserX` still requires an exact-head `READY` verdict and explicit owner authorization.
+`Continue LaserX` authorizes ChatGPT to inspect and implement only the next bounded active sub-slice. It does not authorize Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope. `Advance LaserX` still requires an exact-head `READY` verdict and explicit owner authorization.
 
 ## Mandatory product interpretation
 
@@ -99,11 +98,10 @@ Required implementation:
 - expose readonly resource collections while retaining private internal disposal ownership;
 - define typed worker request, progress, success, failure, and cancellation contracts for physical scene construction from immutable project snapshots;
 - execute measured expensive scene analysis outside the renderer/UI thread;
-- cache completed topology/scene results by a deterministic physical-content fingerprint without returning stale snapshot identity;
-- coalesce identical in-flight physical-preview requests instead of terminating and restarting equivalent work;
-- reject stale results after physical project changes or superseding requests;
+- cache completed scene results by deterministic physical-scene fingerprint;
+- reject stale results after project changes or superseding requests;
 - preserve bounded progress and cancellation;
-- prove front/back/edge/perspective, camera, assembled/exploded mode, presentation-only visibility, and unrelated non-physical project updates do not trigger topology recomputation;
+- prove front/back/edge/perspective, camera, assembled/exploded mode, and presentation-only visibility changes do not trigger topology recomputation;
 - prove worker or analysis failure does not mutate the project or block editing and saving;
 - add focused coordination, boundary, and regression tests.
 
@@ -117,19 +115,6 @@ Allowed paths are the smallest necessary set under:
 - narrowly required build, audit, and documentation files.
 
 G4A does not include the complete production preview screen, capture saving, Electron filesystem IPC, material-catalog promotion, M15 onboarding, or later-milestone work.
-
-## Current G4A review findings
-
-PR #61 at audited head `6f977eedc30d5d3c66277408fa614b95174edc9f` is `REPAIRING` despite 12/12 green CI.
-
-Blocking findings:
-
-1. the claimed physical-content cache key includes `project.project.updatedAt`, so unrelated snapshot updates invalidate expensive analysis and the tests do not prove the real no-recompute contract;
-2. identical concurrent requests supersede and restart equivalent work instead of sharing one in-flight result;
-3. cached topology must be rebound to the requesting snapshot identity without returning stale `projectUpdatedAt` or stale assembly fingerprint evidence;
-4. the PR body carries stale base/evidence and must be regenerated from the final exact head.
-
-Claude must repair only these bounded findings plus the governance ownership cleanup. G4B remains held.
 
 ## Locked G4/G5 ownership boundary
 
@@ -161,13 +146,13 @@ Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production
 3. **G2 — pure physical scene package** — complete
 4. **G3 — Three renderer adapter** — complete
 5. **G4 — lazy desktop integration** — active
-   - G4A renderer-safe integration foundation — repairing
+   - G4A renderer-safe integration foundation — active
    - G4B lazy open-document preview screen — held
    - G4C interaction, fallback, and cleanup — held
 6. **G5 — privileged PNG capture** — held
 7. **G6 — exact-head Windows evidence and owner retest** — held
 
-The operating-model correction must update `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/WORKSTREAM_OWNERSHIP.md`, `docs/CLAUDE_EXECUTION_PLAN.md`, ADR 0025 through a superseding ADR, and the repository guard. Do not erase historical ADR 0025; mark it superseded.
+Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0025.
 
 ## M14 exit rule
 
