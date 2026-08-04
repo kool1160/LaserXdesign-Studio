@@ -301,6 +301,31 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
+  packages/physical-preview-3d:
+    dependencies:
+      '@laserx/cutability':
+        specifier: workspace:*
+        version: link:../cutability
+      '@laserx/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@laserx/geometry':
+        specifier: workspace:*
+        version: link:../geometry
+    devDependencies:
+      '@laserx/project-format':
+        specifier: workspace:*
+        version: link:../project-format
+      '@types/node':
+        specifier: 26.1.2
+        version: 26.1.2
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
+
   packages/production-export:
     dependencies:
       '@laserx/domain':
