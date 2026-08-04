@@ -70,13 +70,15 @@ describe("preview resource ownership", () => {
     expect("set" in resources.materialsByLayerId).toBe(false);
     expect("clear" in resources.materialsByLayerId).toBe(false);
 
-    let callbackMap: ReadonlyMap<string, MeshStandardMaterial> | null = null;
+    const callbackMaps: ReadonlyMap<string, MeshStandardMaterial>[] = [];
     resources.materialsByLayerId.forEach((_value, _key, map) => {
-      callbackMap = map;
+      callbackMaps.push(map);
     });
+    const callbackMap = callbackMaps[0];
+    if (callbackMap === undefined) throw new Error("Expected one callback map.");
     expect(callbackMap).toBe(resources.materialsByLayerId);
-    expect(callbackMap === null || "set" in callbackMap).toBe(false);
-    expect(callbackMap === null || "clear" in callbackMap).toBe(false);
+    expect("set" in callbackMap).toBe(false);
+    expect("clear" in callbackMap).toBe(false);
 
     expect(() => {
       (resources.layers as unknown[]).pop();
