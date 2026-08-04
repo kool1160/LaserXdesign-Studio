@@ -83,21 +83,38 @@ describe("committed G1 results", () => {
       expect(roundStats(summarize(fixture.raw.sceneMs)), `${fixture.key} scene`).toEqual(fixture.scene);
       expect(roundStats(summarize(fixture.raw.threeMs)), `${fixture.key} three`).toEqual(fixture.three);
 
-      expect(round(summarize(fixture.raw.spacingMs).medianMs), `${fixture.key} spacing phase`).toBe(
-        fixture.analysisPhasesMedianMs["spacing"],
-      );
-      expect(round(summarize(fixture.raw.topologyMs).medianMs), `${fixture.key} topology phase`).toBe(
-        fixture.analysisPhasesMedianMs["topology"],
-      );
+      // All four phase medians, not just the two the decision quotes most.
+      const phases: Array<[keyof RawSamples, string]> = [
+        ["normalizingMs", "normalizing"],
+        ["topologyMs", "topology"],
+        ["spacingMs", "spacing"],
+        ["classifyingMs", "classifying"],
+      ];
+      for (const [rawKey, published] of phases) {
+        expect(
+          round(summarize(fixture.raw[rawKey]).medianMs),
+          `${fixture.key} ${published} phase median`,
+        ).toBe(fixture.analysisPhasesMedianMs[published]);
+      }
+
+      // The spacing share is the single number the G1 saving is quoted from, so
+      // it must be reproducible from the committed raw arrays too.
+      const analysisMedian = summarize(fixture.raw.analysisMs).medianMs;
+      const expectedShare =
+        analysisMedian === 0 ? 0 : round(round(summarize(fixture.raw.spacingMs).medianMs) / analysisMedian, 4);
+      expect(fixture.spacingShareOfAnalysis, `${fixture.key} spacing share`).toBe(expectedShare);
     }
   });
 
-  it("uses enough samples for p95 to be distinct from max", () => {
+  it("reports a p95 distinct from max for every scaling fixture", () => {
     expect(results.samplesPerFixture).toBeGreaterThanOrEqual(20);
-    // With 20 samples nearest-rank p95 is the 19th value, so on a spread of
-    // real timings it should differ from max at least somewhere.
-    const distinct = results.fixtures.filter((fixture) => fixture.analysis.p95Ms < fixture.analysis.maxMs);
-    expect(distinct.length).toBeGreaterThan(0);
+    // The evidence document claims this for every scaling fixture, so assert it
+    // for every scaling fixture rather than for at least one.
+    for (const fixture of results.fixtures) {
+      expect(fixture.analysis.p95Ms, `${fixture.key} analysis p95 vs max`).toBeLessThan(
+        fixture.analysis.maxMs,
+      );
+    }
   });
 
   it("records the exact production segment count for every fixture", () => {

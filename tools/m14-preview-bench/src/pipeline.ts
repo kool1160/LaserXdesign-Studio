@@ -31,10 +31,20 @@ const now = (): number => Number(process.hrtime.bigint()) / 1e6;
  * production analysis: the callback is part of its public options contract, so
  * timestamping it observes the real code path rather than a copy of it.
  *
- * - `normalizing` (5)  — path normalization and segment building. The preview needs this.
- * - `topology`    (25) — duplicate/overlapping segment detection. The preview discards this.
- * - `spacing`     (55) — minimum feature width and contour proximity. The preview discards this.
- * - `classifying` (85) — region classification. This is the only analysis output the preview uses.
+ * - `normalizing` (5)  — path normalization, segment building, `OPEN_CONTOUR`,
+ *   `UNSUPPORTED_GEOMETRY`. **Required.**
+ * - `topology`    (25) — duplicate segments, overlapping segments,
+ *   self-intersections, and intersections between separate contours.
+ *   **Required.** Every one of these raises the analysis's `ambiguous` flag,
+ *   which is passed into `classifyRegions` and decides whether any region may
+ *   be trusted as solid or hole. Skipping this phase would let broken geometry
+ *   reach classification unflagged and produce invented solids, so it is *not*
+ *   discardable even though the preview never reads its issue list directly.
+ * - `spacing`     (55) — minimum feature width, kerf collapse, gap, and contour
+ *   proximity. **Manufacturing advisory only, and the only phase currently
+ *   measured as safely skippable for the preview.**
+ * - `classifying` (85) — region classification plus island/dropout/bridge
+ *   issues. **Required.**
  */
 export interface AnalysisPhaseTimings {
   normalizingMs: number;
