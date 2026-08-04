@@ -176,7 +176,9 @@ describe("physical preview assembly cache", () => {
 
     const first = cache.get(result.inputFingerprint);
     if (first === null) throw new Error("Expected cached assembly.");
-    first.layers[0]!.name = "Mutated consumer value";
+    const firstLayer = first.layers[0];
+    if (firstLayer === undefined) throw new Error("Expected cached layer.");
+    firstLayer.name = "Mutated consumer value";
 
     const second = cache.get(result.inputFingerprint);
     expect(second?.layers[0]?.name).toBe("Face");
