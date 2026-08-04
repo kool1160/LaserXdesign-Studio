@@ -34,10 +34,13 @@ export interface PhysicalPreviewCoordinatorResult {
   cacheHit: boolean;
 }
 
+type CancellationReason = "manual" | "superseded" | null;
+
 interface ActiveRequest {
   generation: number;
   operationId: string;
   controller: AbortController;
+  cancellationReason: CancellationReason;
 }
 
 /**
@@ -96,24 +99,38 @@ export class PhysicalPreviewCoordinator {
     // A newer immutable snapshot owns the worker. Terminating the earlier worker
     // is the only honest cancellation boundary while topology analysis remains
     // synchronous inside the pure package.
-    this.#active?.controller.abort();
+    const previous = this.#active;
+    if (previous !== null) {
+      previous.cancellationReason = "superseded";
+      previous.controller.abort();
+    }
+
     const generation = ++this.#generation;
     const controller = new AbortController();
-    this.#active = { generation, operationId, controller };
+    const active: ActiveRequest = {
+      generation,
+      operationId,
+      controller,
+      cancellationReason: null,
+    };
+    this.#active = active;
 
     const externalAbort = (): void => controller.abort();
     options.signal?.addEventListener("abort", externalAbort, { once: true });
 
     try {
       const result = await this.#worker.run(request, controller.signal, (progress) => {
-        if (this.#active?.generation === generation && !controller.signal.aborted) {
+        if (this.#active === active && !controller.signal.aborted) {
           options.onProgress?.(progress);
         }
       });
 
+      if (active.cancellationReason === "manual") {
+        throw new PhysicalPreviewCancelledError();
+      }
       if (
-        this.#active?.generation !== generation ||
-        this.#active.operationId !== operationId ||
+        active.cancellationReason === "superseded" ||
+        this.#active !== active ||
         generation !== this.#generation
       ) {
         throw new PhysicalPreviewSupersededError();
@@ -127,20 +144,29 @@ export class PhysicalPreviewCoordinator {
         cacheHit: false,
       };
     } catch (error) {
-      if (generation !== this.#generation || this.#active?.generation !== generation) {
+      if (active.cancellationReason === "manual") {
+        throw new PhysicalPreviewCancelledError();
+      }
+      if (
+        active.cancellationReason === "superseded" ||
+        generation !== this.#generation ||
+        this.#active !== active
+      ) {
         throw new PhysicalPreviewSupersededError();
       }
       throw error;
     } finally {
       options.signal?.removeEventListener("abort", externalAbort);
-      if (this.#active?.generation === generation) this.#active = null;
+      if (this.#active === active) this.#active = null;
     }
   }
 
   public cancelActive(): void {
-    if (this.#active === null) return;
+    const active = this.#active;
+    if (active === null) return;
+    active.cancellationReason = "manual";
     this.#generation += 1;
-    this.#active.controller.abort();
+    active.controller.abort();
     this.#active = null;
   }
 
