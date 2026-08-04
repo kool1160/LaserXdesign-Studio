@@ -38,7 +38,17 @@ const DPR_RANGE: [number, number] = [1, 2];
 
 const KEYBOARD_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
 const KEYBOARD_PAN_STEP_PX = 20;
-const KEYBOARD_ZOOM_SCALE = 1.1;
+/**
+ * Passed directly to `OrbitControls.dollyIn`/`dollyOut`. Despite the method
+ * names reading like a direction, the scale factor itself must be *below* 1
+ * for `dollyIn` to move the camera closer (matching the real mouse-wheel
+ * handler's own `_getZoomScale`, which always returns `Math.pow(0.95, ...)`,
+ * a fraction). A factor above 1 inverts both methods: `dollyIn(1.1)` moves
+ * the camera farther away, not closer. Exported so the regression test
+ * exercises this exact constant against real OrbitControls math rather than
+ * a value that could silently drift out of sync.
+ */
+export const KEYBOARD_ZOOM_SCALE = 0.9;
 
 export interface PhysicalPreviewScreenProps {
   assembly: PhysicalPreviewAssembly;
