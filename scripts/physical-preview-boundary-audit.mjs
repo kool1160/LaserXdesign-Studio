@@ -155,8 +155,13 @@ const PACKAGE_BOUNDARIES = [
       "electron",
       "@react-three/fiber",
       "@react-three/drei",
+      // Same renderer-safety reason as the scene package: node:crypto cannot
+      // enter the lazily loaded preview chunk.
+      "@laserx/production-export",
+      "@laserx/material-catalog",
     ],
-    reason: "the renderer adapter must stay React- and Electron-independent",
+    reason:
+      "the renderer adapter must stay React-, Electron-, catalog-, and Node-crypto-independent",
   },
 ];
 

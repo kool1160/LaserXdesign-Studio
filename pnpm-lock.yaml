@@ -326,6 +326,28 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
 
+  packages/physical-preview-three:
+    dependencies:
+      '@laserx/physical-preview-3d':
+        specifier: workspace:*
+        version: link:../physical-preview-3d
+      three:
+        specifier: 0.185.1
+        version: 0.185.1
+    devDependencies:
+      '@types/node':
+        specifier: 26.1.2
+        version: 26.1.2
+      '@types/three':
+        specifier: 0.185.3
+        version: 0.185.3
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@26.1.2)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0))
+
   packages/production-export:
     dependencies:
       '@laserx/domain':
