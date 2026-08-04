@@ -81,9 +81,17 @@ export class NodePhysicalPreviewWorkerService implements PhysicalPreviewWorkerPo
             return;
           }
           resolveResult(response.result);
-        } else {
-          reject(new Error(response.error));
+          return;
         }
+
+        if (
+          response.operationId !== request.operationId ||
+          response.inputFingerprint !== request.inputFingerprint
+        ) {
+          reject(new Error("Physical preview worker returned a failure for another request."));
+          return;
+        }
+        reject(new Error(response.error));
       });
       worker.once("error", (error) => {
         if (finish()) {
