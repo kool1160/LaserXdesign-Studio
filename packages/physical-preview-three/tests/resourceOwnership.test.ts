@@ -50,7 +50,7 @@ function assembly(): PhysicalPreviewAssembly {
     depthStatus: "verified",
     findings: [],
     fingerprint: "fingerprint",
-  } as PhysicalPreviewAssembly;
+  };
 }
 
 describe("preview resource ownership", () => {
