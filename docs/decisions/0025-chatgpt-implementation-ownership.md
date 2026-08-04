@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted by owner on 2026-08-04.
+**Superseded by ADR 0026 on 2026-08-04.** Accepted by owner on 2026-08-04; the owner clarified the same day that this reassignment did not reflect the intended durable operating model, and ADR 0026 restores Claude as the implementation agent with ChatGPT as senior orchestrator, exact-head auditor, and acceptance authority.
+
+This record is retained, not deleted, so the reasoning behind the temporary reassignment and its reversal both stay inspectable. Do not treat any role assignment below as current; consult ADR 0026 and `docs/status/CURRENT.md` for the active model.
 
 ## Context
 

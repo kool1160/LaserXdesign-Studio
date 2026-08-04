@@ -106,11 +106,11 @@ Do not start a later milestone because it appears convenient. Milestones are gat
 
 The owner decides product direction, milestone order, pricing philosophy, trial policy, and milestone advancement.
 
-### 6.2 ChatGPT — implementation and orchestration lead
+### 6.2 Claude — implementation agent
 
-ChatGPT is the active senior software engineer, implementation lead, and project orchestrator while `docs/status/CURRENT.md` records that assignment under ADR 0025.
+Claude is the active implementation agent while `docs/status/CURRENT.md` records that assignment under ADR 0026.
 
-ChatGPT must:
+Claude must:
 
 - work only on the one active milestone and one approved bounded slice;
 - start fresh implementation slices from current `main` unless a reviewed repair continues an existing PR;
@@ -121,19 +121,28 @@ ChatGPT must:
 - run required verification and inspect exact-head CI;
 - keep PR evidence, issues, status, and code synchronized;
 - distinguish implementation evidence from acceptance review;
-- perform a fresh exact-head review before merge;
-- merge and advance only after unchanged-head verification and explicit owner command;
+- stop at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`;
+- never merge, close the milestone issue, activate the next gate, or approve its own work;
 - never treat an earlier summary or another agent's handoff as proof.
 
-Implementation ownership does not authorize speculative rewrites, duplicate research, broad cleanup, parallel future milestones, or self-directed milestone advancement.
+Implementation responsibility does not authorize speculative rewrites, duplicate research, broad cleanup, parallel future milestones, or self-directed milestone advancement.
 
-### 6.3 Claude — held unless explicitly assigned
+### 6.3 ChatGPT — senior engineer, orchestrator, exact-head auditor, acceptance authority
 
-Claude is not the default implementation agent while `CURRENT.md` assigns implementation to ChatGPT.
+ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority under ADR 0026.
 
-Claude remains available for an explicitly assigned independent review, repair, comparison, or specialist implementation task. The assignment must be recorded in `CURRENT.md`, the active issue, or the active PR.
+ChatGPT must:
 
-An old `Continue LaserX` instruction, stale execution plan, or local worktree does not authorize Claude to begin product work.
+- convert accepted owner decisions into GitHub issues, milestone documents, ADRs, and status changes;
+- inspect the exact PR head, full diff, review threads, tests, fixtures, and required CI;
+- post detailed findings to GitHub;
+- return `READY`, `REPAIR`, or `BLOCKED`;
+- perform the deep senior turning-point audit and assign independent verification at the checkpoints ADR 0026 defines;
+- merge and advance only after unchanged-head verification, required green CI, and the owner's explicit command;
+- never treat Claude's report as proof without independently checking GitHub evidence;
+- never implement the load-bearing change it is about to audit in the same review.
+
+An old `Continue LaserX` instruction, stale execution plan, or local worktree does not by itself authorize either agent to act outside the assignment recorded in `CURRENT.md`.
 
 ### 6.4 Codex — held unless explicitly assigned
 
@@ -338,9 +347,9 @@ M18 may add target-software export profiles for LightBurn, plasma CAM, router CA
 - Never log credentials, full private prompts, or unnecessary user content.
 - Future machine access remains in a privileged host, never the renderer.
 
-## 17. ChatGPT implementation protocol
+## 17. Claude implementation protocol
 
-When the owner tells ChatGPT `Continue LaserX` or `Repair LaserX`, ChatGPT must:
+When the owner tells Claude `Continue LaserX` or `Repair LaserX`, Claude must:
 
 1. read the mandatory sources and live GitHub state;
 2. identify the one active milestone, issue, bounded sub-slice, and any open PR;
@@ -351,7 +360,7 @@ When the owner tells ChatGPT `Continue LaserX` or `Repair LaserX`, ChatGPT must:
 7. push or update a draft PR;
 8. stop in `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED` unless the owner also issued a valid advancement command.
 
-`Continue LaserX` never authorizes ChatGPT to close the milestone issue, activate a later milestone, expand scope, or merge an experiment branch wholesale.
+`Continue LaserX` never authorizes Claude to merge, close the milestone issue, activate a later milestone, expand scope, or merge an experiment branch wholesale.
 
 Detailed evidence belongs in GitHub. The owner-facing handoff stays compact:
 
@@ -367,7 +376,7 @@ Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
 
 ## 18. Exact-head review and advancement protocol
 
-`Check LaserX` requires a fresh review of:
+`Check LaserX` requires ChatGPT to perform a fresh review of:
 
 - current milestone and issue acceptance criteria;
 - exact PR head and full diff;
@@ -377,7 +386,7 @@ Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
 - scope control and later-gate restraint;
 - whether PR claims match live code and CI.
 
-The review must not rely on the implementation handoff or an earlier summary. A second-model review may be assigned to Claude or Codex when risk, uncertainty, or owner direction warrants it.
+The review must not rely on the implementation handoff or an earlier summary. A second-model review may be assigned to Codex, another capable model, or a human reviewer — whichever party did not author the implementation under review — when risk, uncertainty, or owner direction warrants it.
 
 Detailed findings go on GitHub. The chat verdict is:
 

@@ -201,8 +201,8 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "AGENTS.md",
         (
             "GitHub Issue #44",
-            "ChatGPT — implementation and orchestration lead",
-            "Claude — held unless explicitly assigned",
+            "Claude — implementation agent",
+            "ChatGPT — senior engineer, orchestrator, exact-head auditor, acceptance authority",
             "canonical stored length unit: millimeters",
             "Native DWG editing is explicitly out of scope",
             "M14 — Production physical 3D preview integration.",
@@ -227,7 +227,7 @@ def check_instruction_links(errors: list[str]) -> None:
         ROOT / "docs" / "status" / "CURRENT.md",
         (
             "M14 — Production Physical 3D Preview Integration",
-            "Implementation and orchestration lead: ChatGPT",
+            "Implementation lead: Claude",
             "Current implementation sub-slice: **G4A",
             "Issues #44 and #37",
         ),
@@ -259,8 +259,8 @@ def check_instruction_links(errors: list[str]) -> None:
         (
             "Slice G0",
             "Slice G6",
-            "ChatGPT is the active senior software engineer",
-            "Claude is held by default",
+            "Claude is the active implementation agent",
+            "ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority",
             "G4A — renderer-safe integration foundation",
         ),
         "active implementation execution plan",
@@ -268,13 +268,24 @@ def check_instruction_links(errors: list[str]) -> None:
 
     require_terms(
         errors,
-        ROOT / "docs" / "decisions" / "0025-chatgpt-implementation-ownership.md",
+        ROOT / "docs" / "decisions" / "0026-claude-implementation-chatgpt-orchestration.md",
         (
             "Accepted by owner on 2026-08-04.",
-            "ChatGPT is the active senior software engineer",
+            "Claude is the active implementation agent",
+            "ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority",
             "G5 owns the complete capture transaction",
         ),
-        "ADR 0025",
+        "ADR 0026",
+    )
+
+    # ADR 0025 is retained for history rather than deleted; it must stay
+    # visibly marked superseded so a future edit cannot silently make it read
+    # as the current model again.
+    require_terms(
+        errors,
+        ROOT / "docs" / "decisions" / "0025-chatgpt-implementation-ownership.md",
+        ("Superseded by ADR 0026",),
+        "ADR 0025 (superseded)",
     )
 
 
