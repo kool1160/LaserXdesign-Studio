@@ -178,9 +178,24 @@ describe("resource construction exception safety", () => {
       },
     });
 
-    expect(() => buildPreviewResources(assembly, "assembled")).toThrow(
-      "material allocation failed",
-    );
+    let thrown: unknown;
+    try {
+      buildPreviewResources(assembly, "assembled");
+      throw new Error("expected a material allocation failure");
+    } catch (error) {
+      thrown = error;
+    }
+
+    // Attributed the same way a geometry conversion failure is: G4 must be able
+    // to identify which layer's material failed, not just see an anonymous
+    // renderer error.
+    expect(thrown).toBeInstanceOf(PreviewConversionError);
+    const failure = thrown as PreviewConversionError;
+    expect(failure.layerId).toBe("b");
+    expect(failure.shapeId).toBeNull();
+    expect(failure.sourceObjectIds).toEqual(["o2"]);
+    expect(failure.cause).toBeInstanceOf(Error);
+    expect((failure.cause as Error).message).toBe("material allocation failed");
 
     // Both layers' geometries were already built before materials were
     // allocated, so both must be released...

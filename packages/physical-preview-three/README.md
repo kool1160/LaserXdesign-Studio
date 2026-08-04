@@ -64,6 +64,24 @@ non-background pixel exists before the result becomes `status: "verified"`.
 Only `"verified"` is a successful capture. G4 supplies the bytes from the real
 renderer; this package never reads a canvas itself beyond `toDataURL`.
 
+### The evidence is bound to the capture, not merely present
+
+Supplying *some* non-background RGBA bytes is not enough: they must be bytes
+*of this capture*. `validatePngCapture()` requires the content evidence's
+`widthPx`/`heightPx` to exactly equal both the canvas's own `width`/`height` and
+the encoded `IHDR` dimensions before it will report `"verified"`. Evidence of a
+different size — even genuinely non-background evidence — is rejected.
+`analyzePixelContent()` also requires the RGBA buffer length to equal exactly
+`width * height * 4`, not merely be at least that size, and rejects non-finite
+or out-of-range background/tolerance/ratio parameters rather than silently
+misinterpreting them.
+
+**What this package cannot enforce:** that the caller actually read the encoded
+bytes and the RGBA evidence from the *same* capture transaction. Two same-sized
+but unrelated reads would still pass dimension binding. **G4 must obtain both
+from one frame, read back once** — this package can only prove the shapes are
+consistent, not the provenance.
+
 ## Camera fit is solved, not estimated
 
 `computeCameraFit()` takes the view, viewport, and optional FOV/padding, and

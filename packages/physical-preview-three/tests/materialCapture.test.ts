@@ -1,3 +1,5 @@
+import { deflateSync } from "node:zlib";
+
 import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
 import { describe, expect, it } from "vitest";
 
@@ -55,12 +57,71 @@ describe("material appearance", () => {
   });
 });
 
-/** A minimal 1×1 PNG, used as a real byte-level fixture. */
+/** A minimal 1×1 PNG, used for structure-only byte-level fixtures. */
 const ONE_BY_ONE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 function canvas(dataUrl: string, width = 1280, height = 694): CapturableCanvas {
   return { width, height, toDataURL: () => dataUrl };
+}
+
+/**
+ * Encodes real, decodable RGBA pixels into a real PNG.
+ *
+ * Content-evidence tests need a PNG whose encoded dimensions genuinely match
+ * multi-pixel content evidence, which the fixed 1×1 fixture cannot provide.
+ * Uses only `node:zlib`, uncompressed deflate stored blocks and filter byte 0
+ * (no per-scanline filtering) — a minimal but fully spec-valid encoder.
+ */
+function encodePng(rgba: Uint8Array, width: number, height: number): string {
+  const crcTable = Array.from({ length: 256 }, (_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    return value >>> 0;
+  });
+  const crc32 = (bytes: Uint8Array): number => {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc = (crcTable[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Uint8Array): Buffer => {
+    const typeBytes = Buffer.from(type, "ascii");
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length, 0);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([typeBytes, data])), 0);
+    return Buffer.concat([length, typeBytes, Buffer.from(data), crc]);
+  };
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // color type: RGBA
+  // bytes 10-12 (compression, filter, interlace) default to 0.
+
+  const rgbaBuffer = Buffer.from(rgba);
+  const scanlines = Buffer.alloc((1 + width * 4) * height);
+  for (let row = 0; row < height; row += 1) {
+    const rowStart = row * (1 + width * 4);
+    scanlines[rowStart] = 0; // filter type "none"
+    rgbaBuffer.copy(scanlines, rowStart + 1, row * width * 4, (row + 1) * width * 4);
+  }
+
+  const idat = deflateSync(scanlines);
+
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const png = Buffer.concat([
+    signature,
+    chunk("IHDR", ihdr),
+    chunk("IDAT", idat),
+    chunk("IEND", new Uint8Array(0)),
+  ]);
+  return png.toString("base64");
 }
 
 describe("PNG capture validation", () => {
@@ -80,7 +141,7 @@ describe("PNG capture validation", () => {
 
   it("reports structure-only, not success, when no content evidence is supplied", () => {
     const result = validatePngCapture(
-      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`, 1, 1),
       "out.png",
     );
     // A cleared drawing buffer encodes to a perfectly valid PNG, so header
@@ -96,11 +157,14 @@ describe("PNG capture validation", () => {
   });
 
   it("rejects a structurally valid PNG whose pixels are all background", () => {
-    const result = validatePngCapture(
-      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
-      "out.png",
-      { rgba: blankPixels(8, 8), widthPx: 8, heightPx: 8, background: BACKGROUND },
-    );
+    const rgba = blankPixels(8, 8);
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 8, 8)}`;
+    const result = validatePngCapture(canvas(dataUrl, 8, 8), "out.png", {
+      rgba,
+      widthPx: 8,
+      heightPx: 8,
+      background: BACKGROUND,
+    });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.errorMessage).toContain("only background pixels");
@@ -112,17 +176,50 @@ describe("PNG capture validation", () => {
     rgba[0] = 255;
     rgba[1] = 255;
     rgba[2] = 255;
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 8, 8)}`;
 
-    const result = validatePngCapture(
-      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
-      "out.png",
-      { rgba, widthPx: 8, heightPx: 8, background: BACKGROUND },
-    );
+    const result = validatePngCapture(canvas(dataUrl, 8, 8), "out.png", {
+      rgba,
+      widthPx: 8,
+      heightPx: 8,
+      background: BACKGROUND,
+    });
     if (!result.ok) throw new Error(`expected success, got ${result.errorMessage}`);
     expect(result.status).toBe("verified");
     expect(result.content.nonBackgroundPixels).toBe(1);
     expect(result.content.sampledPixels).toBe(64);
-    expect(result.widthPx).toBe(1);
+    expect(result.widthPx).toBe(8);
+    expect(result.heightPx).toBe(8);
+  });
+
+  it("rejects content evidence whose dimensions do not match the encoded PNG", () => {
+    // The committed defect this repairs, exactly as the review demonstrated it:
+    // real 1x1 PNG bytes blessed by unrelated 8x8 non-background evidence.
+    const rgba = blankPixels(8, 8);
+    rgba[0] = 255;
+    const result = validatePngCapture(
+      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`, 1, 1),
+      "out.png",
+      { rgba, widthPx: 8, heightPx: 8, background: BACKGROUND },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.errorMessage).toContain("does not match");
+  });
+
+  it("rejects content evidence when the canvas itself disagrees on size", () => {
+    // Encoded PNG and evidence agree (8x8), but the canvas the caller read from
+    // claims a different size — still not a trustworthy single transaction.
+    const rgba = blankPixels(8, 8);
+    rgba[0] = 255;
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 8, 8)}`;
+    const result = validatePngCapture(canvas(dataUrl, 16, 16), "out.png", {
+      rgba,
+      widthPx: 8,
+      heightPx: 8,
+      background: BACKGROUND,
+    });
+    expect(result.ok).toBe(false);
   });
 
   it("treats a fully transparent buffer as blank", () => {
@@ -142,30 +239,60 @@ describe("PNG capture validation", () => {
   it("enforces a caller-supplied minimum coverage ratio", () => {
     const rgba = blankPixels(10, 10);
     rgba[0] = 255;
-    const result = validatePngCapture(
-      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
-      "out.png",
-      {
-        rgba,
-        widthPx: 10,
-        heightPx: 10,
-        background: BACKGROUND,
-        minimumNonBackgroundRatio: 0.05,
-      },
-    );
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 10, 10)}`;
+    const result = validatePngCapture(canvas(dataUrl, 10, 10), "out.png", {
+      rgba,
+      widthPx: 10,
+      heightPx: 10,
+      background: BACKGROUND,
+      minimumNonBackgroundRatio: 0.05,
+    });
     // 1/100 is below the 5% the caller demanded.
     expect(result.ok).toBe(false);
   });
 
-  it("rejects mismatched pixel buffer dimensions rather than guessing", () => {
-    const result = validatePngCapture(
-      canvas(`data:image/png;base64,${ONE_BY_ONE_PNG_BASE64}`),
-      "out.png",
-      { rgba: new Uint8Array(16), widthPx: 100, heightPx: 100, background: BACKGROUND },
+  it("meets a caller-supplied minimum coverage ratio when content is high enough", () => {
+    const rgba = blankPixels(10, 10);
+    for (let index = 0; index < 40; index += 1) rgba[index] = 255; // 10/100 pixels
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 10, 10)}`;
+    const result = validatePngCapture(canvas(dataUrl, 10, 10), "out.png", {
+      rgba,
+      widthPx: 10,
+      heightPx: 10,
+      background: BACKGROUND,
+      minimumNonBackgroundRatio: 0.05,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects mismatched pixel buffer byte length rather than guessing", () => {
+    // Isolates analyzePixelContent's own length check: dimension binding in
+    // validatePngCapture would otherwise catch the width/height mismatch first
+    // and report the wrong reason.
+    expect(() => analyzePixelContent(new Uint8Array(16), 100, 100, BACKGROUND)).toThrow(
+      /RGBA bytes/u,
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("unreachable");
-    expect(result.errorMessage).toContain("RGBA bytes");
+  });
+
+  it("rejects non-finite or out-of-range content parameters", () => {
+    const rgba = blankPixels(2, 2);
+    expect(() =>
+      analyzePixelContent(rgba, 2, 2, { r: Number.NaN, g: 0, b: 0 }),
+    ).toThrow(/finite/u);
+    expect(() => analyzePixelContent(rgba, 2, 2, { r: 300, g: 0, b: 0 })).toThrow(/finite/u);
+    expect(() => analyzePixelContent(rgba, 2, 2, BACKGROUND, -1)).toThrow(/tolerance/u);
+
+    const dataUrl = `data:image/png;base64,${encodePng(rgba, 2, 2)}`;
+    const badRatio = validatePngCapture(canvas(dataUrl, 2, 2), "out.png", {
+      rgba,
+      widthPx: 2,
+      heightPx: 2,
+      background: BACKGROUND,
+      minimumNonBackgroundRatio: 1.5,
+    });
+    expect(badRatio.ok).toBe(false);
+    if (badRatio.ok) throw new Error("unreachable");
+    expect(badRatio.errorMessage).toContain("ratio");
   });
 
   it("rejects a zero-sized canvas", () => {

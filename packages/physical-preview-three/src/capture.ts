@@ -52,6 +52,40 @@ export const DEFAULT_BACKGROUND_TOLERANCE = 8;
  * Fully transparent pixels count as background: a transparent buffer is exactly
  * the blank readback this exists to catch.
  */
+function isFiniteChannel(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 255;
+}
+
+/**
+ * Rejects trust inputs that are not usable, rather than letting `NaN` or an
+ * out-of-range channel silently make every pixel compare as background (or as
+ * content). These parameters gate whether a capture is reported as verified, so
+ * they are validated exactly as strictly as the pixels themselves.
+ */
+function assertUsableContentParameters(
+  background: BackgroundColor,
+  tolerance: number,
+  minimumNonBackgroundRatio: number,
+): void {
+  if (
+    !isFiniteChannel(background.r) ||
+    !isFiniteChannel(background.g) ||
+    !isFiniteChannel(background.b)
+  ) {
+    throw new RangeError("Pixel content background channels must be finite numbers in 0-255.");
+  }
+  if (!Number.isFinite(tolerance) || tolerance < 0) {
+    throw new RangeError("Pixel content tolerance must be a finite, non-negative number.");
+  }
+  if (
+    !Number.isFinite(minimumNonBackgroundRatio) ||
+    minimumNonBackgroundRatio < 0 ||
+    minimumNonBackgroundRatio > 1
+  ) {
+    throw new RangeError("Pixel content minimum ratio must be a finite number in 0-1.");
+  }
+}
+
 export function analyzePixelContent(
   rgba: Uint8Array | Uint8ClampedArray,
   widthPx: number,
@@ -59,10 +93,14 @@ export function analyzePixelContent(
   background: BackgroundColor,
   tolerance: number = DEFAULT_BACKGROUND_TOLERANCE,
 ): PixelContentEvidence {
+  assertUsableContentParameters(background, tolerance, 0);
   const expected = widthPx * heightPx * 4;
-  if (widthPx <= 0 || heightPx <= 0 || rgba.length < expected) {
+  // Exact equality, not "at least": a longer buffer is evidence for pixels this
+  // call was never told about, and accepting it would let unrelated bytes past
+  // the shape this function's contract promises to check.
+  if (widthPx <= 0 || heightPx <= 0 || rgba.length !== expected) {
     throw new RangeError(
-      `Pixel content evidence needs ${String(expected)} RGBA bytes for ${String(widthPx)}x${String(heightPx)}, received ${String(rgba.length)}.`,
+      `Pixel content evidence needs exactly ${String(expected)} RGBA bytes for ${String(widthPx)}x${String(heightPx)}, received ${String(rgba.length)}.`,
     );
   }
 
@@ -216,6 +254,17 @@ export interface CaptureContentInput {
  * perfectly valid PNG of the right dimensions. Content therefore requires
  * `content` evidence from the caller; without it the result is
  * `status: "structure-only"` with `ok: false`.
+ *
+ * Binding, not just presence: `content`'s dimensions must exactly match both
+ * the canvas's own `width`/`height` and the encoded `IHDR` dimensions. Without
+ * that, RGBA bytes from an unrelated buffer of a different size could bless a
+ * structurally valid but blank PNG — the evidence would prove *some* pixels
+ * have content, not that *this* capture does.
+ *
+ * This package can enforce that shape/size consistency, but it cannot prove
+ * the caller's provenance: G4 must obtain the encoded bytes and the RGBA
+ * evidence from the **same capture transaction** (the same frame, read back
+ * once), not from two different reads that merely happen to agree in size.
  */
 export function validatePngCapture(
   canvas: CapturableCanvas,
@@ -277,8 +326,28 @@ export function validatePngCapture(
     };
   }
 
+  // Bind the evidence to *this* capture before trusting it at all: the canvas's
+  // own reported size, the encoded IHDR dimensions, and the supplied evidence
+  // dimensions must all agree.
+  if (
+    content.widthPx !== canvas.width ||
+    content.heightPx !== canvas.height ||
+    content.widthPx !== header.widthPx ||
+    content.heightPx !== header.heightPx
+  ) {
+    return rejected(
+      `Pixel content evidence is ${String(content.widthPx)}x${String(content.heightPx)}, which does not match the captured ${String(header.widthPx)}x${String(header.heightPx)} PNG.`,
+    );
+  }
+
+  const minimumRatio = content.minimumNonBackgroundRatio ?? 0;
   let evidence: PixelContentEvidence;
   try {
+    // Validates background/tolerance internally; the ratio is this function's
+    // own concern, so it is checked alongside them here.
+    if (!Number.isFinite(minimumRatio) || minimumRatio < 0 || minimumRatio > 1) {
+      throw new RangeError("Pixel content minimum ratio must be a finite number in 0-1.");
+    }
     evidence = analyzePixelContent(
       content.rgba,
       content.widthPx,
@@ -291,8 +360,6 @@ export function validatePngCapture(
       error instanceof Error ? error.message : "Pixel content evidence was unusable.",
     );
   }
-
-  const minimumRatio = content.minimumNonBackgroundRatio ?? 0;
   const hasContent =
     evidence.nonBackgroundPixels > 0 && evidence.nonBackgroundRatio >= minimumRatio;
   if (!hasContent) {

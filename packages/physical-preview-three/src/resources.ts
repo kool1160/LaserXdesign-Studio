@@ -4,6 +4,7 @@ import type { MeshStandardMaterial } from "three";
 import {
   buildAssemblyGeometries,
   disposeAssemblyGeometries,
+  PreviewConversionError,
   type AssemblyLayerGeometry,
 } from "./geometry.js";
 import { createLayerMaterial, layerAppearance } from "./material.js";
@@ -43,7 +44,24 @@ export function buildPreviewResources(
       // a resource with no purpose, and disposal counts are part of this
       // contract.
       if (layer.shapes.length === 0) continue;
-      materialsByLayerId.set(layer.layerId, createLayerMaterial(layerAppearance(layer)));
+      try {
+        materialsByLayerId.set(layer.layerId, createLayerMaterial(layerAppearance(layer)));
+      } catch (error) {
+        // Attributed the same way a geometry conversion failure is: a raw
+        // Three/JS error here would give G4 no way to identify which layer's
+        // material failed to build.
+        throw new PreviewConversionError(
+          `Physical layer "${layer.name}" could not be given a preview material.`,
+          {
+            layerId: layer.layerId,
+            shapeId: null,
+            sourceObjectIds: [
+              ...new Set(layer.shapes.flatMap((shape) => shape.sourceObjectIds)),
+            ],
+          },
+          { cause: error },
+        );
+      }
     }
   } catch (error) {
     // The geometries are already allocated and the caller will never receive
