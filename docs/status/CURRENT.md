@@ -9,7 +9,7 @@
 - Implementation lead: Claude
 - Independent planning/review/advancement: ChatGPT
 - Codex: held unless explicitly reassigned
-- Current slice: **G2 — pure physical scene package promotion**
+- Current slice: **G3 — Three renderer adapter package**
 
 The owner explicitly activated M14 on 2026-08-03 after M13 completion and the Issue #44 planning reset.
 
@@ -93,6 +93,18 @@ G0 locked the authoritative 2D boundary, pure scene package, Three adapter packa
 
 G1 established that realistic outlined-text preview cost is dominated by existing cutability analysis rather than Three conversion. The only measured safely skippable work is the spacing/manufacturing-advisory phase, approximately 36.2%–45.1%. A future preview/region-classification entry point must preserve every validity and ambiguity check, fail closed, reuse the accepted classifier, remain deterministic, and receive a separate ADR. Worker offload, fingerprint-keyed caching, progress, and cancellation remain required before arbitrary-document desktop wiring.
 
+### G2 — pure physical scene package promotion — complete
+
+- PR #56
+- Final reviewed head: `8ecf0fb002d712bd1110cade5b1d67e3ad34122e`
+- Review verdict: `READY`
+- Exact-head workflows: 12/12 pull-request workflows green
+- Squash merge: `e8b10c67d61decd310ccf1d5a7ad76100047babb`
+- Production package: `packages/physical-preview-3d/`
+- Focused package verification: 43 tests across four files
+
+G2 promoted the renderer-independent physical scene and assembly contract component by component. It preserves exact canonical thickness, authoritative physical-layer order, nested holes/cutouts, deterministic fingerprints, verified versus declared-incomplete depth, and source immutability. Open, duplicate, overlapping, self-intersecting, cross-intersecting, empty, unsupported, ambiguous, and analysis-over-limit layers fail visibly with zero invented solids. A layer above the 50,000-segment cutability ceiling no longer aborts otherwise valid assembly layers. Parse/build determinism is proven through the real project-format path. The package remains renderer-safe and mechanically rejects Three, React, Electron, the material catalog, and Node-only production-export coupling. The G1 optimized cutability API remains deferred; G2 uses the full accepted analysis path.
+
 ## M14 research basis
 
 ### Physical 3D research
@@ -125,28 +137,35 @@ It remains isolated. M14 may use approved current-material presentation behavior
 
 Issue #39 and draft PR #40 remain isolated inputs for M16. They are not production-merge-authorized during M14.
 
-## Current G2 scope
+## Current G3 scope
 
-G2 promotes the accepted renderer-independent physical scene contract into production as `packages/physical-preview-3d/`.
+G3 creates `packages/physical-preview-three/` as the production renderer adapter for the accepted pure `@laserx/physical-preview-3d` contract.
 
 Required behavior:
 
-- consume authoritative project/document snapshots without mutation;
-- preserve exact canonical `thicknessMm`, physical-layer order, holes, cutouts, parent/depth topology, declared-incomplete versus verified depth, findings, and deterministic fingerprints;
-- fail closed for open, duplicate, overlapping, self-intersecting, cross-intersecting, ambiguous, empty, or unsupported geometry and never invent solids;
-- include exact negative tests proving source immutability on the object actually passed through conversion;
-- remain independent from Three, React, Electron, DOM, filesystem, GPU, and the future M16 material catalog;
-- promote only reviewed components from accepted research; never merge or cherry-pick the experiment branch wholesale;
-- exclude the lab shell, fixture registry, URL selectors, benchmark hooks, research fixture payloads, and material-catalog research.
+- depend on `three` and `@laserx/physical-preview-3d` only unless an additional pure dependency is explicitly justified in the PR;
+- remain independent from React, React Three Fiber, Electron, filesystem access, the DOM-oriented desktop feature, and the future M16 material catalog;
+- convert each authoritative outer contour and its hole contours into deterministic Three `Shape`/hole geometry and exact-thickness `ExtrudeGeometry` without changing the supplied scene or assembly;
+- preserve assembled and exploded Z ranges exactly, including partial assemblies where failed layers produce no geometry;
+- provide deterministic front, back, edge, and perspective camera-pose descriptors and fit calculations for empty, single-layer, and multi-layer assemblies;
+- provide truthful current-material appearance descriptors and neutral fallback behavior without inventing unsupported material identity or promoting the M16 catalog;
+- promote pure PNG validation and deterministic filename helpers only; privileged filesystem save remains G5;
+- provide explicit disposal/cleanup helpers for every generated geometry and material resource and prove repeated conversion/disposal remains bounded;
+- preserve deterministic conversion output and source immutability across repeated builds and project parse/build cycles;
+- fail visibly and safely when geometry conversion cannot proceed; never repair, close, simplify, union, or invent solids;
+- use Three.js directly and do not adopt `@react-three/drei`;
+- promote only reviewed components from accepted research; never merge or cherry-pick the experiment branch wholesale.
 
-The G1 optimization decision is conditional. G2 may add a separate ADR and a narrow preview/region-classification API only if exact tests prove parity for every validity and ambiguity-producing check and the accepted `classifyRegions` implementation is reused. Otherwise G2 must use the existing full cutability-analysis path. No worker, desktop UI, Three adapter, PNG capture, G3, or M15 work belongs in G2.
+Required evidence includes focused and root tests for exact extrusion depth, genuine through-holes, nested islands, assembled/exploded placement, camera poses, material mapping, deterministic output, disposal, malformed/empty/partial inputs, capture validation, package boundaries, license/version review, production audit, and exact-head CI.
+
+No React/R3F Canvas, desktop screen, OrbitControls UI wiring, lazy open-document integration, worker wiring, WebGL fallback UI, context-loss recovery UI, privileged PNG save, G4, or M15 work belongs in G3.
 
 ## M14 approved execution order
 
 1. **G0 — governance and architecture lock** — complete
 2. **G1 — text-heavy scaling evidence** — complete
-3. **G2 — pure physical scene package promotion** — active
-4. **G3 — Three renderer adapter package**
+3. **G2 — pure physical scene package promotion** — complete
+4. **G3 — Three renderer adapter package** — active
 5. **G4 — lazy desktop integration**
 6. **G5 — privileged PNG capture**
 7. **G6 — exact-head Windows evidence and owner retest**
