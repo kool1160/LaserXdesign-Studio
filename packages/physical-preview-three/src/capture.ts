@@ -175,16 +175,15 @@ const MINIMUM_PNG_BYTES = 64;
 
 function decodeBase64(base64: string): Uint8Array | null {
   try {
-    // `atob` in the renderer, `Buffer` in Node tests — both are pure decoders.
-    if (typeof atob === "function") {
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index);
-      }
-      return bytes;
+    // The production package is renderer-bound, so its decoder must use the
+    // browser-standard API rather than depending on Node's Buffer global.
+    if (typeof atob !== "function") return null;
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
     }
-    return new Uint8Array(Buffer.from(base64, "base64"));
+    return bytes;
   } catch {
     return null;
   }
@@ -262,7 +261,7 @@ export interface CaptureContentInput {
  * have content, not that *this* capture does.
  *
  * This package can enforce that shape/size consistency, but it cannot prove
- * the caller's provenance: G4 must obtain the encoded bytes and the RGBA
+ * the caller's provenance: G5 must obtain the encoded bytes and the RGBA
  * evidence from the **same capture transaction** (the same frame, read back
  * once), not from two different reads that merely happen to agree in size.
  */

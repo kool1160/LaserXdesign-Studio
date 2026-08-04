@@ -6,25 +6,85 @@ import {
   disposeAssemblyGeometries,
   PreviewConversionError,
   type AssemblyLayerGeometry,
+  type LayerShapeGeometry,
 } from "./geometry.js";
 import { createLayerMaterial, layerAppearance } from "./material.js";
 import { assemblyPlacements, type AssemblyMode, type LayerPlacement } from "./placement.js";
+
+/** A read-only view of one layer's renderer resources. */
+export interface PreviewResourceLayer {
+  readonly layerId: string;
+  readonly order: number;
+  readonly geometries: readonly LayerShapeGeometry[];
+}
 
 /**
  * Everything the adapter allocates for one assembly, with a single owner and a
  * single `dispose()`.
  *
- * The research lab leaked resources precisely because geometry and material
- * lifetimes were tracked ad hoc across React effects. Bundling them means a
- * caller cannot dispose the geometries and forget the materials, and repeated
- * build/dispose cycles stay bounded.
+ * Public collections are read-only views. Disposal retains separate private
+ * ownership, so a consumer cannot clear an exposed collection and accidentally
+ * prevent the adapter from releasing resources it allocated.
  */
 export interface PreviewResources {
-  layers: AssemblyLayerGeometry[];
-  placements: LayerPlacement[];
-  materialsByLayerId: Map<string, MeshStandardMaterial>;
+  readonly layers: readonly PreviewResourceLayer[];
+  readonly placements: readonly LayerPlacement[];
+  readonly materialsByLayerId: ReadonlyMap<string, MeshStandardMaterial>;
   /** Idempotent: calling it twice is safe and disposes nothing twice. */
-  dispose: () => void;
+  readonly dispose: () => void;
+}
+
+function readonlyMapView<K, V>(source: ReadonlyMap<K, V>): ReadonlyMap<K, V> {
+  const view: ReadonlyMap<K, V> = Object.freeze({
+    get size() {
+      return source.size;
+    },
+    get(key: K) {
+      return source.get(key);
+    },
+    has(key: K) {
+      return source.has(key);
+    },
+    forEach(callbackfn: (value: V, key: K, map: ReadonlyMap<K, V>) => void, thisArg?: unknown) {
+      source.forEach((value, key) => callbackfn.call(thisArg, value, key, view));
+    },
+    entries() {
+      return source.entries();
+    },
+    keys() {
+      return source.keys();
+    },
+    values() {
+      return source.values();
+    },
+    [Symbol.iterator]() {
+      return source[Symbol.iterator]();
+    },
+  });
+  return view;
+}
+
+function exposedLayers(layers: readonly AssemblyLayerGeometry[]): readonly PreviewResourceLayer[] {
+  return Object.freeze(
+    layers.map((layer) =>
+      Object.freeze({
+        layerId: layer.layerId,
+        order: layer.order,
+        geometries: Object.freeze([...layer.geometries]),
+      }),
+    ),
+  );
+}
+
+function exposedPlacements(placements: readonly LayerPlacement[]): readonly LayerPlacement[] {
+  return Object.freeze(
+    placements.map((placement) =>
+      Object.freeze({
+        ...placement,
+        zRangeMm: Object.freeze({ ...placement.zRangeMm }),
+      }),
+    ),
+  );
 }
 
 export function buildPreviewResources(
@@ -33,10 +93,10 @@ export function buildPreviewResources(
 ): PreviewResources {
   // Geometry conversion is exception-safe on its own; if it throws here nothing
   // has been allocated yet from this call's perspective.
-  const layers = buildAssemblyGeometries(assembly);
-  const materialsByLayerId = new Map<string, MeshStandardMaterial>();
+  const ownedLayers = buildAssemblyGeometries(assembly);
+  const ownedMaterials = new Map<string, MeshStandardMaterial>();
 
-  let placements;
+  let placements: LayerPlacement[];
   try {
     placements = assemblyPlacements(assembly, mode);
     for (const layer of assembly.layers) {
@@ -45,7 +105,7 @@ export function buildPreviewResources(
       // contract.
       if (layer.shapes.length === 0) continue;
       try {
-        materialsByLayerId.set(layer.layerId, createLayerMaterial(layerAppearance(layer)));
+        ownedMaterials.set(layer.layerId, createLayerMaterial(layerAppearance(layer)));
       } catch (error) {
         // Attributed the same way a geometry conversion failure is: a raw
         // Three/JS error here would give G4 no way to identify which layer's
@@ -67,23 +127,27 @@ export function buildPreviewResources(
     // The geometries are already allocated and the caller will never receive
     // them, so this call owns releasing them — along with any material built
     // before the failure.
-    disposeAssemblyGeometries(layers);
-    for (const material of materialsByLayerId.values()) material.dispose();
-    materialsByLayerId.clear();
+    disposeAssemblyGeometries(ownedLayers);
+    for (const material of ownedMaterials.values()) material.dispose();
+    ownedMaterials.clear();
     throw error;
   }
 
+  const layers = exposedLayers(ownedLayers);
+  const visiblePlacements = exposedPlacements(placements);
+  const materialsByLayerId = readonlyMapView(ownedMaterials);
   let disposed = false;
-  return {
+
+  return Object.freeze({
     layers,
-    placements,
+    placements: visiblePlacements,
     materialsByLayerId,
     dispose: () => {
       if (disposed) return;
       disposed = true;
-      disposeAssemblyGeometries(layers);
-      for (const material of materialsByLayerId.values()) material.dispose();
-      materialsByLayerId.clear();
+      disposeAssemblyGeometries(ownedLayers);
+      for (const material of ownedMaterials.values()) material.dispose();
+      ownedMaterials.clear();
     },
-  };
+  });
 }

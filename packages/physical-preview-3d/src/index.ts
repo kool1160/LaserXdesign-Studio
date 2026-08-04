@@ -591,3 +591,64 @@ export function buildPhysicalPreviewAssembly(
     fingerprint: computeFingerprint(assemblyWithoutFingerprint),
   };
 }
+
+/**
+ * Rebinds a previously built assembly's identity to a newer project snapshot
+ * of the *same* project/document, without rerunning topology or geometry
+ * analysis.
+ *
+ * A cache or in-flight request keyed on physical content alone (see
+ * `fingerprintPhysicalPreviewInput` in `task.ts`) can validly reuse an
+ * assembly built from a different snapshot of the same document — one where
+ * only unrelated project metadata such as `project.project.updatedAt`
+ * differs. Returning that assembly unmodified would leave `identity` and
+ * `fingerprint` describing the wrong snapshot: evidence a caller could
+ * mistake for belonging to the project it actually asked about. This performs
+ * only the identity/fingerprint rebind; every layer, shape, and finding is
+ * carried over unchanged, so it stays cheap regardless of scene size.
+ *
+ * A no-op (returns `assembly` itself) when the snapshot is already an exact
+ * match, so repeated calls with an unchanged project cost nothing extra.
+ *
+ * Throws if `project` names a different project or document than the
+ * assembly was built for: rebinding across genuinely different projects would
+ * be misattribution, not a cache hit, and this defends against that even
+ * though callers are expected to key on a fingerprint that already implies
+ * matching identity.
+ */
+export function rebindPhysicalPreviewAssemblyIdentity(
+  assembly: PhysicalPreviewAssembly,
+  project: LaserxProject,
+): PhysicalPreviewAssembly {
+  if (
+    assembly.identity.projectId !== project.project.id ||
+    assembly.identity.documentId !== project.document.id
+  ) {
+    throw new RangeError(
+      "Cannot rebind a physical preview assembly to a different project or document.",
+    );
+  }
+  if (assembly.identity.projectUpdatedAt === project.project.updatedAt) {
+    return assembly;
+  }
+
+  const rebound: Omit<PhysicalPreviewAssembly, "fingerprint"> = {
+    identity: {
+      projectId: assembly.identity.projectId,
+      documentId: assembly.identity.documentId,
+      projectUpdatedAt: project.project.updatedAt,
+    },
+    stockMm: assembly.stockMm,
+    status: assembly.status,
+    spacing: assembly.spacing,
+    layers: assembly.layers,
+    assembledDepthMm: assembly.assembledDepthMm,
+    depthStatus: assembly.depthStatus,
+    findings: assembly.findings,
+  };
+
+  return {
+    ...rebound,
+    fingerprint: computeFingerprint(rebound),
+  };
+}

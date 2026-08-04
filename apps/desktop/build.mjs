@@ -49,4 +49,10 @@ await Promise.all([
     outfile: "dist/electron/cutability-worker.cjs",
     format: "cjs",
   }),
+  build({
+    ...shared,
+    entryPoints: ["electron/physical-preview-worker.ts"],
+    outfile: "dist/electron/physical-preview-worker.cjs",
+    format: "cjs",
+  }),
 ]);
