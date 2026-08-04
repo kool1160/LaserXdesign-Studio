@@ -135,7 +135,7 @@ G4 may expose renderer capability needed by G5 but does not save files or indepe
 
 Issue #34 is accepted at exact head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`.
 
-Issue #42 is accepted at exact head `76fa77a8ed976b46e8e345a4a232b938768b3f` and remains isolated except for approved current-material presentation behavior.
+Issue #42 is accepted at exact head `76fa77a8edeb976b46e8e345a4a232b938768b3f` and remains isolated except for approved current-material presentation behavior.
 
 Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production-merge-authorized during M14.
 
