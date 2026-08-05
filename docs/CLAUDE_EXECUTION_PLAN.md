@@ -15,11 +15,11 @@ Claude is the active implementation agent while `docs/status/CURRENT.md` records
 Claude must:
 
 - inspect current `main`, active issues, open PRs, neighboring code, tests, and accepted ADRs before editing;
-- implement only the active bounded slice recorded in `CURRENT.md`;
-- use a focused branch and reviewable PR;
-- add regression coverage and exact-head evidence with the implementation;
+- implement or validate only the active bounded slice recorded in `CURRENT.md`;
+- use a focused branch and reviewable PR for any repair or durable evidence change;
+- add regression coverage and exact-head evidence with repairs;
 - distinguish implementation evidence from acceptance judgment;
-- push exact-head evidence and stop at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`;
+- push exact-head evidence and stop at `AWAITING_REVIEW`, `OWNER_RETEST_REQUIRED`, `REPAIRING`, or `BLOCKED`;
 - never merge, close the milestone issue, activate the next gate, or approve its own work;
 - keep GitHub status, issues, PR evidence, and code synchronized.
 
@@ -27,7 +27,7 @@ Claude must:
 
 ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority under ADR 0026.
 
-ChatGPT performs a fresh exact-head review before merge, merges routine work inside the active gate, performs the deep senior audit at turning points, assigns independent verification at critical checkpoints, and merges or advances only after the owner's explicit command.
+ChatGPT performs fresh exact-head review, defines bounded repairs, verifies evidence, merges routine work inside the active gate, and advances or closes gates only after the owner's explicit command.
 
 ### Codex
 
@@ -35,20 +35,20 @@ Codex is held by default. It remains available for explicit independent audit, r
 
 ### Owner
 
-The owner controls product direction, milestone order, and advancement. No code or green CI advances a milestone without the owner's command.
+The owner controls product direction, milestone order, advancement, and hands-on acceptance. Green CI alone never advances a gate.
 
 ## Evidence rules
 
-Every implementation PR records:
+Every repair or evidence PR records:
 
 - exact base and head SHAs;
-- current changed-file count;
+- changed-file count;
 - focused and root test results;
-- required CI on the final head or reviewed merge ref;
+- required exact-head CI or reviewed merge-ref evidence;
 - unresolved findings and limitations;
-- what later-gate work was deliberately excluded.
+- later-gate work deliberately excluded.
 
-PR bodies contain stable scope and architecture. A final exact-head comment or review contains volatile evidence. A handoff is never proof by itself.
+PR bodies contain stable scope and architecture. Final exact-head comments or reviews contain volatile evidence. A handoff is never proof by itself.
 
 ## M14 implementation queue
 
@@ -56,95 +56,68 @@ M14 is implemented component by component from current `main`. The accepted expe
 
 ### Slice G0 — governance and architecture lock — complete
 
-- production preview ADR;
-- package boundaries;
-- no CAD kernel;
-- lazy-loading and privileged capture decisions;
-- mechanical production exclusions.
+Production preview architecture, package boundaries, no-CAD-kernel decision, lazy loading, privileged capture boundary, and production exclusions are accepted.
 
 ### Slice G1 — text-heavy scaling evidence — complete
 
-- realistic outlined-text and high-point-count evidence;
-- full ambiguity preservation;
-- measured requirement for worker offload, fingerprint caching, progress, and cancellation.
+Realistic outlined-text and high-point-count evidence established worker, caching, progress, cancellation, and stale-result requirements.
 
 ### Slice G2 — pure physical scene package — complete
 
-- renderer-independent scene and assembly contract;
-- exact thickness, physical order, holes, cutouts, findings, determinism, and immutability;
-- fail-closed behavior and renderer-safe boundaries.
+Renderer-independent scene and assembly contracts, exact thickness, order, holes, findings, determinism, immutability, and fail-closed behavior are merged.
 
 ### Slice G3 — Three renderer adapter package — complete
 
-- deterministic Three geometry and placement;
-- solved camera fit;
-- current-material appearance;
-- content-bound capture validation helpers;
-- source-attributed exception safety and bounded resource cleanup.
+Deterministic Three geometry, placement, camera fit, current-material appearance, capture helpers, and bounded cleanup are merged.
 
-### Slice G4 — lazy desktop integration — active
+### Slice G4 — lazy desktop integration — complete
 
-G4 is divided into bounded implementation sub-slices.
+#### G4A — renderer-safe integration foundation — complete
 
-#### G4A — renderer-safe integration foundation — active
+Worker protocol, physical-content caching, in-flight coalescing, cancellation, stale-result rejection, progress, and renderer-safe boundaries are merged.
 
-- remove Node-only runtime fallback and Node global typing from renderer-bound adapter source;
-- expose readonly resource collections while preserving private disposal ownership;
-- define the worker message and result contract for preview scene construction;
-- cache results by a deterministic **physical-content** key — topology, geometry, material, thickness, stock, spacing — kept separate from the requesting project-snapshot identity, so an unrelated project update cannot invalidate a valid cache entry and a cache hit never returns stale snapshot identity or fingerprint evidence;
-- coalesce identical in-flight requests instead of restarting them, while preserving per-caller cancellation;
-- provide cancellation and stale-result rejection;
-- preserve progress reporting;
-- prove camera, mode, and visibility changes do not trigger topology recomputation;
-- prove an actual unrelated, non-physical project update reuses cached topology/geometry and returns identity matching the newer snapshot;
-- no production preview screen yet except the smallest harness required to prove the contract.
+#### G4B — lazy open-document preview screen — complete
 
-#### G4B — lazy open-document preview screen — held
+The current document is wired to a lazily loaded, bounded, non-mutating preview screen.
 
-- lazy-load the full preview feature and Three/R3F chunk only when opened;
-- consume the current open document through an immutable snapshot;
-- show bounded loading, progress, empty, partial, failed, and unavailable states;
-- render exact thickness, holes, layer order, assembled/exploded placement, and exact readouts;
-- leave project geometry, dirty state, selection, history, analysis, save, and exports unchanged.
+#### G4C — interaction, fallback, and cleanup — complete
 
-#### G4C — interaction, fallback, and cleanup — held
+Views, modes, orbit/pan/zoom/reset, visibility, keyboard/high-DPI behavior, WebGL/context handling, and cleanup are merged.
 
-- front, back, edge, perspective;
-- assembled, exploded, orbit, pan, zoom, reset;
-- presentation-only layer visibility;
-- keyboard and high-DPI behavior;
-- WebGL-unavailable state and runtime context-loss recovery;
-- listener, geometry, material, worker, and renderer cleanup;
-- screenshots and packaged desktop evidence;
-- prove editing and saving remain usable when preview rendering fails.
+### Slice G5 — privileged PNG capture — complete
 
-### Slice G5 — privileged PNG capture — held
+PR #65 was accepted at head `d34c9cca2b7552551cfcd1efcd6fccd7baaa6a58` and squash-merged as `3f0d8dba70e0c218308d28d1917cd5584c928bd6`.
 
-G5 owns the entire capture transaction:
+G5 delivered same-frame capture evidence, deterministic content-bound naming, typed sender-checked IPC, complete PNG validation and real decode, resource bounds, blank-image rejection, path/overwrite/cancellation handling, atomic writes, stale-status lifetime control, and non-mutation evidence.
 
-- obtain RGBA evidence and encoded PNG from the same rendered frame/readback;
-- validate structure, dimensions, content, and deterministic name;
-- cross a typed, sender-checked preload/main IPC boundary;
-- validate path and overwrite policy;
-- write atomically and report failures explicitly;
-- preserve project state and normal editing.
+### Slice G6 — exact-head Windows evidence and owner retest — active
 
-G4 may expose renderer access required by G5, but it does not write files or claim capture success.
+G6 is validation and closure evidence, not feature expansion.
 
-### Slice G6 — exact-head Windows evidence and owner retest — held
+Claude must:
 
-- production package and Windows E2E;
-- lazy-bundle proof and absence of research payloads;
-- representative real projects, high DPI, keyboard, GPU fallback, context loss, and resource cleanup;
-- fresh private installer for owner validation;
-- exact evidence and milestone closure audit.
+- start from current `main` and record its exact SHA;
+- run the production package and complete packaged Windows E2E suite;
+- prove the preview remains lazy-loaded, Three.js is absent from the main editor entry, and no lab/research fixture or hook ships;
+- exercise representative real projects, exact thickness/dimensions, all views and modes, mouse and keyboard interaction, layer visibility, high DPI, GPU/WebGL fallback, context loss, and repeated cleanup;
+- verify preview and capture remain non-mutating across project geometry, dirty state, history, selection, analysis, save, SVG/DXF, and production packages;
+- generate a fresh private Windows installer with exact provenance;
+- prepare a compact owner retest checklist covering preview, manipulation, capture, save, reopen, export, and controlled failures;
+- stop at `OWNER_RETEST_REQUIRED` once machine-verifiable evidence is complete;
+- after owner results are recorded, stop at `AWAITING_REVIEW` for the final milestone closure audit.
+
+If validation finds a concrete defect, create the smallest bounded G6 repair PR with regression coverage. Do not turn G6 into cleanup, redesign, or new capability work.
+
+G6 excludes M15 onboarding, M16 material expansion and draft PR #40, process/export profiles, new AI work, licensing, public beta, Version 1, CAD/CAM, nesting, G-code, and machine control.
 
 ## Operating loop
 
-1. Owner gives Claude a project command such as `Continue LaserX` or `Repair LaserX`.
-2. Claude reads the live GitHub state and performs the requested implementation or repair within the active boundary, then stops at a draft PR with exact evidence.
-3. ChatGPT performs routine exact-head verification and merges inside the active gate, or `Check LaserX` triggers a deep senior audit at a turning point.
-4. `Advance LaserX` is valid only after a `READY` verdict, unchanged-head verification, green required CI, and owner authorization.
+1. Owner gives Claude `Continue LaserX` or `Repair LaserX`.
+2. Claude reads live GitHub state and performs only the active G6 evidence or bounded repair work.
+3. Claude records exact evidence and stops at `OWNER_RETEST_REQUIRED`, `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`.
+4. ChatGPT audits the exact head and evidence.
+5. Issue #30 closes only after machine evidence passes, owner hands-on validation passes, no blocker remains, and the owner explicitly advances.
+6. M15 remains blocked until a separate owner command after M14 closure.
 
 ## Restraint
 
