@@ -295,6 +295,26 @@ describe("physical preview desktop controller wiring", () => {
     expect(controller.state.editor.selectionIds).toEqual(beforeSelection);
   });
 
+  it("repeated build/cancel cycles (simulating repeated open/close) leave no stuck job state and do not block a later legitimate build", async () => {
+    const worker = new DeferredWorker();
+    const controller = await desktop(worker);
+
+    for (let index = 0; index < 5; index += 1) {
+      const operationId = `f0000000-0000-4000-8000-00000000000${String(index)}`;
+      const outcome = controller.runPhysicalPreview(operationId);
+      await Promise.resolve();
+      expect(await controller.cancelPhysicalPreview(operationId)).toMatchObject({ ok: true });
+      await outcome;
+      expect(controller.state.physicalPreview.job).toBeNull();
+    }
+
+    const finalOperationId = "f0000000-0000-4000-8000-000000000099";
+    const finalPromise = controller.runPhysicalPreview(finalOperationId);
+    worker.complete(worker.calls.length - 1);
+    expect(await finalPromise).toMatchObject({ ok: true });
+    expect(controller.state.physicalPreview.assembly).not.toBeNull();
+  });
+
   it("clears the previous physical preview job and assembly when a different project is opened", async () => {
     const controller = await desktop(immediateWorker(), physicalProject());
     await controller.runPhysicalPreview(OPERATION_ID);

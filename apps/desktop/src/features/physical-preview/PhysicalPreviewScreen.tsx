@@ -11,9 +11,18 @@ import {
   type PreviewView,
 } from "@laserx/physical-preview-three";
 import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type Ref,
+} from "react";
 
-import { CameraRig } from "./CameraRig.js";
+import { CameraRig, type CameraRigHandle } from "./CameraRig.js";
+import { useWebglContextLossState } from "./useWebglContextLossState.js";
 import { isWebglAvailable } from "./webgl.js";
 
 const VIEW_LABELS: Record<PreviewView, string> = {
@@ -26,6 +35,20 @@ const VIEW_LABELS: Record<PreviewView, string> = {
 /** Bounded to [1, 2]: crisp on standard/retina displays without paying full
  * native resolution on very-high-DPR devices. */
 const DPR_RANGE: [number, number] = [1, 2];
+
+const KEYBOARD_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
+const KEYBOARD_PAN_STEP_PX = 20;
+/**
+ * Passed directly to `OrbitControls.dollyIn`/`dollyOut`. Despite the method
+ * names reading like a direction, the scale factor itself must be *below* 1
+ * for `dollyIn` to move the camera closer (matching the real mouse-wheel
+ * handler's own `_getZoomScale`, which always returns `Math.pow(0.95, ...)`,
+ * a fraction). A factor above 1 inverts both methods: `dollyIn(1.1)` moves
+ * the camera farther away, not closer. Exported so the regression test
+ * exercises this exact constant against real OrbitControls math rather than
+ * a value that could silently drift out of sync.
+ */
+export const KEYBOARD_ZOOM_SCALE = 0.9;
 
 export interface PhysicalPreviewScreenProps {
   assembly: PhysicalPreviewAssembly;
@@ -67,24 +90,48 @@ function ConversionFailed({ message }: { message: string }) {
   );
 }
 
+function ContextLostOverlay({ failedToRestore }: { failedToRestore: boolean }) {
+  return (
+    <div className="physical-preview-context-lost-overlay" role="alert" data-testid="physical-preview-context-lost">
+      <h2>3D preview lost its graphics context</h2>
+      <p>
+        {failedToRestore
+          ? "The graphics context could not be restored automatically. Close and reopen the preview to try again. Nothing in the project was changed."
+          : "The browser reclaimed the WebGL context, so rendering paused. Nothing in the project was changed. The preview will resume automatically if the context is restored."}
+      </p>
+    </div>
+  );
+}
+
 interface SceneContentProps {
   assembly: PhysicalPreviewAssembly;
   mode: AssemblyMode;
   view: PreviewView;
   resetToken: number;
+  visibleLayerIds: ReadonlySet<string>;
   geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
+  cameraRigRef: Ref<CameraRigHandle>;
 }
 
 /** Lives inside `<Canvas>` so `computeCameraFit` can use the real pixel viewport. */
-function SceneContent({ assembly, mode, view, resetToken, geometriesByLayer }: SceneContentProps) {
+function SceneContent({
+  assembly,
+  mode,
+  view,
+  resetToken,
+  visibleLayerIds,
+  geometriesByLayer,
+  cameraRigRef,
+}: SceneContentProps) {
   const { size } = useThree();
   const fit = useMemo(
     () =>
       computeCameraFit(assembly, mode, {
         view,
         viewport: { widthPx: size.width, heightPx: size.height },
+        visibleLayerIds,
       }),
-    [assembly, mode, view, size.width, size.height],
+    [assembly, mode, view, size.width, size.height, visibleLayerIds],
   );
 
   return (
@@ -96,27 +143,30 @@ function SceneContent({ assembly, mode, view, resetToken, geometriesByLayer }: S
         position={[-fit.distance, fit.distance * 0.5, -fit.distance]}
         intensity={0.4}
       />
-      {assembly.layers.map((layer) => {
-        const zRange = mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;
-        const appearance = layerAppearance(layer);
-        const entries = geometriesByLayer.get(layer.layerId)?.geometries ?? [];
-        return (
-          <group key={layer.layerId} position={[0, 0, zRange.minZmm]}>
-            {entries.map((entry) => (
-              <mesh key={entry.shapeId} geometry={entry.geometry}>
-                <meshStandardMaterial
-                  color={appearance.color}
-                  metalness={appearance.metalness}
-                  roughness={appearance.roughness}
-                  opacity={appearance.opacity}
-                  transparent={appearance.transparent}
-                />
-              </mesh>
-            ))}
-          </group>
-        );
-      })}
+      {assembly.layers
+        .filter((layer) => visibleLayerIds.has(layer.layerId))
+        .map((layer) => {
+          const zRange = mode === "assembled" ? layer.assembledZRangeMm : layer.explodedZRangeMm;
+          const appearance = layerAppearance(layer);
+          const entries = geometriesByLayer.get(layer.layerId)?.geometries ?? [];
+          return (
+            <group key={layer.layerId} position={[0, 0, zRange.minZmm]}>
+              {entries.map((entry) => (
+                <mesh key={entry.shapeId} geometry={entry.geometry}>
+                  <meshStandardMaterial
+                    color={appearance.color}
+                    metalness={appearance.metalness}
+                    roughness={appearance.roughness}
+                    opacity={appearance.opacity}
+                    transparent={appearance.transparent}
+                  />
+                </mesh>
+              ))}
+            </group>
+          );
+        })}
       <CameraRig
+        ref={cameraRigRef}
         position={fit.position}
         target={fit.target}
         fovDeg={fit.fovDeg}
@@ -130,19 +180,26 @@ function SceneContent({ assembly, mode, view, resetToken, geometriesByLayer }: S
 
 /**
  * Read-only physical 3D preview of the currently open document's authoritative
- * physical layers (G4B). Never mutates geometry, dirty state, history,
- * selection, analysis, SVG/DXF output, or production packages -- purely a
- * derived view over the accepted G4A assembly (ADR 0024 section 7).
+ * physical layers (G4B foundation; G4C interaction/fallback/cleanup
+ * completion). Never mutates geometry, dirty state, history, selection,
+ * analysis, SVG/DXF output, or production packages -- purely a derived view
+ * over the accepted G4A assembly (ADR 0024 section 7). Layer visibility is
+ * presentation-only client state; it never recomputes topology or reaches
+ * the authoritative project.
  *
- * Deliberately excluded from this slice: PNG capture (G5, privileged IPC),
- * per-layer visibility toggles and WebGL context-loss recovery (G4C
- * interaction/fallback completion).
+ * Deliberately excluded from this slice: PNG capture (G5, privileged IPC).
  */
 export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPreviewScreenProps) {
   const [webglAvailable] = useState(() => isWebglAvailable());
   const [view, setView] = useState<PreviewView>("perspective");
   const [mode, setMode] = useState<AssemblyMode>("assembled");
   const [resetToken, setResetToken] = useState(0);
+  const [hiddenLayerIds, setHiddenLayerIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const cameraRigRef = useRef<CameraRigHandle>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const { lost: contextLost, failedToRestore } = useWebglContextLossState(canvasElement);
 
   // A pure computation (no state writes): building geometry can throw, and
   // the resulting map and any conversion failure must be derived together
@@ -179,13 +236,105 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
     [geometriesByLayer],
   );
 
-  const handleReset = () => {
+  const visibleLayerIds = useMemo(
+    () =>
+      new Set(
+        assembly.layers
+          .map((layer) => layer.layerId)
+          .filter((layerId) => !hiddenLayerIds.has(layerId)),
+      ),
+    [assembly, hiddenLayerIds],
+  );
+
+  const toggleLayerVisibility = useCallback((layerId: string) => {
+    setHiddenLayerIds((current) => {
+      const next = new Set(current);
+      if (next.has(layerId)) next.delete(layerId);
+      else next.add(layerId);
+      return next;
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
     setView("perspective");
     setResetToken((token) => token + 1);
-  };
+  }, []);
+
+  // Keyboard access to every action already available by mouse: orbit, pan,
+  // zoom, reset, canonical views, and assembled/exploded mode. Scoped to
+  // this focusable container (not the window) and stops propagation for
+  // every key it handles, so it never reaches the global 2D-editor keyboard
+  // handler in App.tsx -- arrow keys in particular would otherwise also
+  // move selected path nodes still selected underneath this overlay.
+  const handleContainerKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      switch (event.key) {
+        case "ArrowLeft":
+          if (event.shiftKey) cameraRigRef.current?.pan(-KEYBOARD_PAN_STEP_PX, 0);
+          else cameraRigRef.current?.rotateLeft(-KEYBOARD_ROTATE_STEP_RAD);
+          break;
+        case "ArrowRight":
+          if (event.shiftKey) cameraRigRef.current?.pan(KEYBOARD_PAN_STEP_PX, 0);
+          else cameraRigRef.current?.rotateLeft(KEYBOARD_ROTATE_STEP_RAD);
+          break;
+        case "ArrowUp":
+          if (event.shiftKey) cameraRigRef.current?.pan(0, KEYBOARD_PAN_STEP_PX);
+          else cameraRigRef.current?.rotateUp(KEYBOARD_ROTATE_STEP_RAD);
+          break;
+        case "ArrowDown":
+          if (event.shiftKey) cameraRigRef.current?.pan(0, -KEYBOARD_PAN_STEP_PX);
+          else cameraRigRef.current?.rotateUp(-KEYBOARD_ROTATE_STEP_RAD);
+          break;
+        case "+":
+        case "=":
+          cameraRigRef.current?.dollyIn(KEYBOARD_ZOOM_SCALE);
+          break;
+        case "-":
+        case "_":
+          cameraRigRef.current?.dollyOut(KEYBOARD_ZOOM_SCALE);
+          break;
+        case "1":
+          setView("front");
+          break;
+        case "2":
+          setView("back");
+          break;
+        case "3":
+          setView("edge");
+          break;
+        case "4":
+          setView("perspective");
+          break;
+        case "0":
+          handleReset();
+          break;
+        case "m":
+        case "M":
+          setMode((current) => (current === "assembled" ? "exploded" : "assembled"));
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    [handleReset],
+  );
+
+  useEffect(() => {
+    containerRef.current?.focus();
+  }, []);
 
   return (
-    <div className="physical-preview-screen" data-testid="physical-preview-screen">
+    <div
+      className="physical-preview-screen"
+      data-testid="physical-preview-screen"
+      ref={containerRef}
+      tabIndex={0}
+      role="application"
+      aria-label="Physical 3D preview. Arrow keys orbit, shift plus arrow keys pan, plus and minus zoom, 1 through 4 select a view, 0 resets, M toggles assembled and exploded mode."
+      onKeyDown={handleContainerKeyDown}
+    >
       <div className="physical-preview-toolbar" role="toolbar" aria-label="Physical preview view controls">
         {PREVIEW_VIEWS.map((candidate) => (
           <button
@@ -229,6 +378,9 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
           {formatMm(assembly.stockMm.widthMm)} &times; {formatMm(assembly.stockMm.heightMm)} &times;{" "}
           {formatMm(assembly.assembledDepthMm)} {depthLabel(assembly.depthStatus)}
         </span>
+        <span className="physical-preview-shortcuts-hint" data-testid="physical-preview-shortcuts-hint">
+          Keyboard: arrows orbit &middot; shift+arrows pan &middot; +/- zoom &middot; 1–4 views &middot; 0 reset &middot; M mode
+        </span>
         <button type="button" data-testid="physical-preview-close" onClick={onClose}>
           Close preview
         </button>
@@ -246,6 +398,25 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
           in 3D.
         </div>
       )}
+      {assembly.layers.length > 0 && (
+        <ul className="physical-preview-layer-list" data-testid="physical-preview-layer-list">
+          {assembly.layers.map((layer) => (
+            <li key={layer.layerId} data-testid={`physical-preview-layer-${layer.layerId}`}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={!hiddenLayerIds.has(layer.layerId)}
+                  data-testid={`physical-preview-layer-visibility-${layer.layerId}`}
+                  onChange={() => {
+                    toggleLayerVisibility(layer.layerId);
+                  }}
+                />
+                <strong>{layer.name}</strong> — {layer.material.material} — {formatMm(layer.thicknessMm)}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="physical-preview-canvas-area" data-testid="physical-preview-canvas-area">
         {!webglAvailable ? (
           <WebglUnavailable />
@@ -257,16 +428,22 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
             gl={{ antialias: true }}
             dpr={DPR_RANGE}
             data-testid="physical-preview-canvas"
+            onCreated={(state) => {
+              setCanvasElement(state.gl.domElement);
+            }}
           >
             <SceneContent
               assembly={assembly}
               mode={mode}
               view={view}
               resetToken={resetToken}
+              visibleLayerIds={visibleLayerIds}
               geometriesByLayer={geometriesByLayer}
+              cameraRigRef={cameraRigRef}
             />
           </Canvas>
         )}
+        {contextLost && <ContextLostOverlay failedToRestore={failedToRestore} />}
       </div>
     </div>
   );
