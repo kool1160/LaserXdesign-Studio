@@ -13,6 +13,8 @@ import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
 import type { SignToolRequest } from "@laserx/sign-tools";
 import { z } from "zod";
 
+import { MAX_CAPTURE_BASE64_LENGTH } from "./capture-limits.js";
+
 export const IPC_CHANNELS = {
   getState: "laserx:state:get",
   newProject: "laserx:project:new",
@@ -493,8 +495,8 @@ export const cancelPhysicalPreviewRequestSchema = z.strictObject({
  */
 export const savePhysicalPreviewCaptureRequestSchema = z.strictObject({
   filename: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._-]{0,199}\.png$/u),
-  // ~88 MB of base64 encodes ~64 MB of PNG, matching the writer's ceiling.
-  pngBase64: z.string().min(1).max(88 * 1024 * 1024),
+  // Derived from the writer's own byte ceiling so the two cannot drift.
+  pngBase64: z.string().min(1).max(MAX_CAPTURE_BASE64_LENGTH),
   overwrite: z.boolean(),
   /**
    * The renderer's claimed capture dimensions. The privileged side decodes

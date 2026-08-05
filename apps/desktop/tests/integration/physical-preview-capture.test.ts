@@ -21,6 +21,7 @@ import {
   type PhysicalPreviewTaskResult,
 } from "../../../../packages/physical-preview-3d/src/task.js";
 import type { PhysicalPreviewWorkerPort } from "../../electron/physical-preview-worker-service.js";
+import { MAX_CAPTURE_BYTES } from "../../electron/capture-limits.js";
 
 const OPERATION_ID = "a0000000-0000-4000-8000-000000000001";
 const FACE_LAYER_ID = "b0000000-0000-4000-8000-000000000001";
@@ -69,6 +70,38 @@ function realPngBase64(widthPx = CAPTURE_WIDTH, heightPx = CAPTURE_HEIGHT): stri
     chunk("IDAT", deflateSync(raw)),
     chunk("IEND", Buffer.alloc(0)),
   ]).toString("base64");
+}
+
+/** Signature + a well-formed IHDR only: passes a header-only check, but has
+ * no IDAT and no terminal IEND. */
+function headerOnlyBase64(): string {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.alloc(13);
+  ihdrData.writeUInt32BE(CAPTURE_WIDTH, 0);
+  ihdrData.writeUInt32BE(CAPTURE_HEIGHT, 4);
+  ihdrData[8] = 8;
+  ihdrData[9] = 6;
+  return Buffer.concat([
+    signature,
+    chunk("IHDR", ihdrData),
+    Buffer.alloc(64), // padding so it clears the minimum-size check
+  ]).toString("base64");
+}
+
+/** A real PNG with its final bytes removed: framing no longer terminates. */
+function truncatedBase64(): string {
+  const full = Buffer.from(realPngBase64(), "base64");
+  return full.subarray(0, full.length - 12).toString("base64");
+}
+
+/** A real PNG with one IDAT payload byte flipped, invalidating its CRC. */
+function corruptedCrcBase64(): string {
+  const full = Buffer.from(realPngBase64(), "base64");
+  // 8 signature + 25 IHDR chunk = first byte of the IDAT chunk header; step
+  // into its data region and flip a bit.
+  const idatDataStart = 8 + 25 + 8;
+  full[idatDataStart] = (full[idatDataStart] ?? 0) ^ 0xff;
+  return full.toString("base64");
 }
 
 /** Only the 8-byte signature plus padding: structurally not a PNG. */
@@ -280,6 +313,67 @@ describe("privileged physical preview capture save", () => {
 
     expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
     expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects a header-only PNG with no IDAT or IEND without prompting or writing", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: headerOnlyBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /complete, valid PNG/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+    expect(await readdir(harness.directory)).not.toContain(
+      "laserx-preview-fixture-front-assembled.png",
+    );
+  });
+
+  it("rejects a truncated PNG without prompting or writing", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: truncatedBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.chosenPaths).toEqual([]);
+    expect((await readdir(harness.directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
+  });
+
+  it("rejects a PNG whose chunk CRC no longer matches its data", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: corruptedCrcBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /bad-chunk-crc/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects decoded bytes above the shared size limit before prompting", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+    // Just over the writer's own ceiling: the point is that the controller
+    // refuses it before a dialog, not that the writer refuses it after one.
+    const oversized = Buffer.alloc(MAX_CAPTURE_BYTES + 1).toString("base64");
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: oversized }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /64 MB safety limit/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+    expect((await readdir(harness.directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
   });
 
   it("treats a canceled save dialog as a clean no-op that writes nothing", async () => {

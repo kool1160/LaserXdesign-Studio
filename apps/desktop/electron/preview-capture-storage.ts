@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { link, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
+import { MAX_CAPTURE_BYTES } from "./capture-limits.js";
+
 /**
  * Privileged PNG capture write (M14 G5, ADR 0024 section 6).
  *
@@ -13,8 +15,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
  * capture used to be.
  */
 
-/** 64 MB: far above any realistic preview capture, far below memory risk. */
-export const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
+export { MAX_CAPTURE_BYTES } from "./capture-limits.js";
 
 export type CaptureConflictPolicy = "fail" | "replace";
 

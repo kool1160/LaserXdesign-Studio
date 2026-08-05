@@ -91,7 +91,10 @@ import type {
 } from "./ipc-contract.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
-import { readPngHeader } from "../../../packages/physical-preview-three/src/capture.js";
+import {
+  readPngHeader,
+  validatePngStructure,
+} from "../../../packages/physical-preview-three/src/capture.js";
 import {
   CredentialAcquisitionCancelledError,
   CredentialAcquisitionTimeoutError,
@@ -147,6 +150,7 @@ import {
   ProductionStorage,
   type ProductionPackageFileService,
 } from "./production-storage.js";
+import { MAX_CAPTURE_BYTES } from "./capture-limits.js";
 import {
   PreviewCaptureStorage,
   type PreviewCaptureFileService,
@@ -1601,10 +1605,30 @@ export class DesktopController {
         reject("The capture image was too small to be a real PNG, so nothing was written.");
         return;
       }
+      // Checked here, before the dialog, against the same constant the writer
+      // enforces: a payload the writer would reject must never prompt the
+      // user for a destination first.
+      if (pngBytes.byteLength > MAX_CAPTURE_BYTES) {
+        reject("The capture exceeds the 64 MB safety limit, so nothing was written.");
+        return;
+      }
 
       // Reuses the accepted pure PNG validation rather than a second decoder,
       // so main and renderer agree on what a valid PNG is by construction.
-      const header = readPngHeader(new Uint8Array(pngBytes));
+      // The header alone is not sufficient -- it proves only the signature,
+      // IHDR marker, and dimensions, so a truncated or CRC-corrupt chunk
+      // stream behind a plausible header would still pass. The full structure
+      // walk additionally proves chunk framing, every CRC, a real IDAT, and a
+      // terminal IEND with no trailing bytes.
+      const captureBytes = new Uint8Array(pngBytes);
+      const structureFailure = validatePngStructure(captureBytes);
+      if (structureFailure !== null) {
+        reject(
+          `The capture was not a complete, valid PNG image (${structureFailure}), so nothing was written.`,
+        );
+        return;
+      }
+      const header = readPngHeader(captureBytes);
       if (header === null) {
         reject("The capture was not a valid PNG image, so nothing was written.");
         return;

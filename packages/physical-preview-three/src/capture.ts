@@ -401,3 +401,106 @@ export function buildCaptureFilename({
 }: CaptureFilenameInput): string {
   return `laserx-preview-${slug(projectName)}-${view}-${mode}.png`;
 }
+
+/**
+ * Why `readPngHeader` is not sufficient on its own: it proves the signature,
+ * the `IHDR` marker, and non-zero dimensions. A payload with a plausible
+ * header but missing, truncated, or corrupt chunk framing — no `IDAT`, a bad
+ * CRC, no terminal `IEND` — still passes it. A privileged writer must not
+ * treat that as a real image, so this walks the entire chunk stream and
+ * verifies it end to end.
+ *
+ * Pure and dependency-free (CRC-32 computed inline) so it stays inside this
+ * renderer-safe package and can be shared verbatim by the privileged main
+ * process — one definition of "valid PNG", not two that can drift.
+ */
+export type PngStructureFailure =
+  | "bad-signature"
+  | "truncated"
+  | "bad-chunk-crc"
+  | "missing-ihdr"
+  | "missing-idat"
+  | "missing-iend"
+  | "trailing-bytes";
+
+const CRC_TABLE: number[] = (() => {
+  const table: number[] = [];
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    crc = (CRC_TABLE[(crc ^ (bytes[index] ?? 0)) & 0xff] ?? 0) ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function chunkType(bytes: Uint8Array, offset: number): string {
+  return String.fromCharCode(
+    bytes[offset] ?? 0,
+    bytes[offset + 1] ?? 0,
+    bytes[offset + 2] ?? 0,
+    bytes[offset + 3] ?? 0,
+  );
+}
+
+/**
+ * Returns `null` when the bytes are a structurally complete PNG, or the first
+ * structural defect found.
+ */
+export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | null {
+  if (bytes.length < IHDR_MINIMUM_BYTES) return "truncated";
+  for (let index = 0; index < PNG_SIGNATURE.length; index += 1) {
+    if (bytes[index] !== PNG_SIGNATURE[index]) return "bad-signature";
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  let sawIhdrFirst = false;
+  let sawIdat = false;
+  let sawIend = false;
+  let isFirstChunk = true;
+
+  while (offset < bytes.length) {
+    // length(4) + type(4) + data(length) + crc(4)
+    if (offset + 8 > bytes.length) return "truncated";
+    const length = readUint32BigEndian(bytes, offset);
+    const type = chunkType(bytes, offset + 4);
+    const dataStart = offset + 8;
+    const crcStart = dataStart + length;
+    if (crcStart + 4 > bytes.length) return "truncated";
+
+    // The CRC covers the type and data, not the length field.
+    if (crc32(bytes, offset + 4, crcStart) !== readUint32BigEndian(bytes, crcStart)) {
+      return "bad-chunk-crc";
+    }
+
+    if (isFirstChunk) {
+      if (type !== "IHDR") return "missing-ihdr";
+      sawIhdrFirst = true;
+      isFirstChunk = false;
+    }
+    if (type === "IDAT") sawIdat = true;
+    if (type === "IEND") {
+      sawIend = true;
+      offset = crcStart + 4;
+      // IEND must terminate the stream; anything after it is unaccounted for.
+      if (offset !== bytes.length) return "trailing-bytes";
+      break;
+    }
+
+    offset = crcStart + 4;
+  }
+
+  if (!sawIhdrFirst) return "missing-ihdr";
+  if (!sawIdat) return "missing-idat";
+  if (!sawIend) return "missing-iend";
+  return null;
+}
