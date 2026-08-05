@@ -458,6 +458,7 @@ export type PngStructureFailure =
   | "bad-ihdr-length"
   | "duplicate-ihdr"
   | "missing-idat"
+  | "non-consecutive-idat"
   | "missing-iend"
   | "bad-iend-length"
   | "trailing-bytes";
@@ -513,6 +514,7 @@ export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | n
   let offset = PNG_SIGNATURE.length;
   let ihdrCount = 0;
   let idatCount = 0;
+  let sawNonIdatAfterIdat = false;
   let sawIend = false;
   let isFirstChunk = true;
 
@@ -543,13 +545,23 @@ export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | n
       if (length !== IHDR_DATA_BYTES) return "bad-ihdr-length";
     }
 
-    // Ordering invariants are enforced structurally rather than by explicit
-    // branches, which would be unreachable: an IDAT can never precede IHDR
-    // because a non-IHDR first chunk already returned `missing-ihdr`, and
-    // nothing can follow IEND because IEND must end the stream exactly (any
-    // remaining byte is `trailing-bytes`). That also makes a duplicate IEND
-    // impossible to reach.
-    if (type === "IDAT") idatCount += 1;
+    // Two ordering invariants are enforced structurally rather than by
+    // explicit branches, which would be unreachable: an IDAT can never
+    // precede IHDR because a non-IHDR first chunk already returned
+    // `missing-ihdr`, and nothing can follow IEND because IEND must end the
+    // stream exactly (any remaining byte is `trailing-bytes`), which also
+    // makes a duplicate IEND impossible to reach.
+    //
+    // IDAT consecutiveness is *not* structural and must be checked: the PNG
+    // specification requires every IDAT chunk to be consecutive, so a stream
+    // like `IHDR, IDAT, tEXt, IDAT, IEND` is malformed even though each
+    // chunk is individually well-framed and CRC-correct.
+    if (type === "IDAT") {
+      if (sawNonIdatAfterIdat) return "non-consecutive-idat";
+      idatCount += 1;
+    } else if (idatCount > 0) {
+      sawNonIdatAfterIdat = true;
+    }
 
     if (type === "IEND") {
       if (length !== 0) return "bad-iend-length";
