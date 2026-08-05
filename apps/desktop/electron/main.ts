@@ -10,6 +10,7 @@ import {
   nativeImage,
   safeStorage,
   shell,
+  type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from "electron";
 import {
@@ -71,6 +72,7 @@ import {
   focusVectorImportFindingRequestSchema,
   runPhysicalPreviewRequestSchema,
   cancelPhysicalPreviewRequestSchema,
+  savePhysicalPreviewCaptureRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
@@ -297,7 +299,38 @@ const dialogs: DesktopDialogs = {
       ? null
       : join(parent, suggestedName);
   },
+  async choosePreviewCapturePath(suggestedName) {
+    const configured = process.env.LASERX_TEST_CAPTURE_PATH;
+    if (configured !== undefined) return resolve(configured);
+    const result = await dialog.showSaveDialog(requireMainWindow(), {
+      title: "Save physical preview capture",
+      defaultPath: suggestedName,
+      filters: [{ name: "PNG image", extensions: ["png"] }],
+    });
+    return result.canceled ? null : result.filePath;
+  },
 };
+
+/**
+ * Rejects any privileged request that did not originate from this
+ * application's own main window.
+ *
+ * `ipcMain.handle` fires for *any* frame in the process that can reach the
+ * channel. The preview feature never loads remote or third-party content
+ * today, but a privileged filesystem write must not depend on that staying
+ * true -- this makes the trust boundary explicit at the handler rather than
+ * implicit in the app's current navigation policy (ADR 0024 section 6).
+ */
+function assertTrustedSender(event: IpcMainInvokeEvent): void {
+  const window = mainWindow;
+  if (
+    window === null ||
+    window.isDestroyed() ||
+    event.sender !== window.webContents
+  ) {
+    throw new Error("Rejected a privileged request from an untrusted sender.");
+  }
+}
 
 function requireController(): DesktopController {
   if (controller === null) {
@@ -490,6 +523,13 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.cancelPhysicalPreview, (_event, request: unknown) => {
     const validated = cancelPhysicalPreviewRequestSchema.parse(request);
     return requireController().cancelPhysicalPreview(validated.operationId);
+  });
+  ipcMain.handle(IPC_CHANNELS.savePhysicalPreviewCapture, (event, request: unknown) => {
+    // Sender is checked before the payload is even parsed: an untrusted frame
+    // must not reach the privileged filesystem path at all.
+    assertTrustedSender(event);
+    const validated = savePhysicalPreviewCaptureRequestSchema.parse(request);
+    return requireController().savePhysicalPreviewCapture(validated);
   });
   ipcMain.handle(IPC_CHANNELS.previewBridge, (_event, request: unknown) => {
     const validated = bridgeProposalRequestSchema.parse(request);

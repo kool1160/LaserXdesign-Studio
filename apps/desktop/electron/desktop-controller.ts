@@ -87,6 +87,7 @@ import type {
   ConfigureVectorImportRequest,
   FocusVectorImportFindingRequest,
   ProductionExportRequest,
+  SavePhysicalPreviewCaptureRequest,
 } from "./ipc-contract.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
@@ -145,6 +146,10 @@ import {
   ProductionStorage,
   type ProductionPackageFileService,
 } from "./production-storage.js";
+import {
+  PreviewCaptureStorage,
+  type PreviewCaptureFileService,
+} from "./preview-capture-storage.js";
 
 const UNTITLED_PROJECT_NAME = "Untitled";
 const MAX_PROJECT_NAME_LENGTH = 200;
@@ -172,6 +177,7 @@ export interface DesktopDialogs {
     suggestedName: string,
   ): Promise<string | null>;
   chooseProductionDirectory?(suggestedName: string): Promise<string | null>;
+  choosePreviewCapturePath?(suggestedName: string): Promise<string | null>;
 }
 
 export interface DesktopControllerOptions {
@@ -186,6 +192,7 @@ export interface DesktopControllerOptions {
   geometryWorker?: GeometryWorkerPort;
   vectorStorage?: VectorFileService;
   productionStorage?: ProductionPackageFileService;
+  previewCaptureStorage?: PreviewCaptureFileService;
   rasterStorage?: RasterFileService;
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
@@ -331,6 +338,7 @@ export class DesktopController {
   readonly #geometryWorker: GeometryWorkerPort;
   readonly #vectorStorage: VectorFileService;
   readonly #productionStorage: ProductionPackageFileService;
+  readonly #previewCaptureStorage: PreviewCaptureFileService;
   readonly #rasterStorage: RasterFileService;
   readonly #rasterCodec: RasterCodecPort | null;
   readonly #rasterWorker: RasterWorkerPort;
@@ -384,6 +392,12 @@ export class DesktopController {
     stage: "preparing" | "building";
   } | null = null;
   #physicalPreviewAssembly: PhysicalPreviewAssembly | null = null;
+  #physicalPreviewCapture: {
+    status: "saved" | "canceled" | "failed";
+    targetPath: string | null;
+    byteLength: number | null;
+    error: string | null;
+  } | null = null;
   /**
    * The physical-content fingerprint `#physicalPreviewAssembly` was built
    * from. Read alongside it (never independently) so a last-valid assembly
@@ -421,6 +435,8 @@ export class DesktopController {
       options.geometryWorker ?? new NodeGeometryWorkerService();
     this.#vectorStorage = options.vectorStorage ?? new VectorStorage();
     this.#productionStorage = options.productionStorage ?? new ProductionStorage();
+    this.#previewCaptureStorage =
+      options.previewCaptureStorage ?? new PreviewCaptureStorage();
     this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
     this.#rasterCodec = options.rasterCodec ?? null;
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
@@ -576,6 +592,10 @@ export class DesktopController {
             fingerprintPhysicalPreviewInput(session.project)
             ? null
             : structuredClone(this.#physicalPreviewAssembly),
+        capture:
+          this.#physicalPreviewCapture === null
+            ? null
+            : { ...this.#physicalPreviewCapture },
       },
     };
   }
@@ -1522,6 +1542,70 @@ export class DesktopController {
     });
   }
 
+  /**
+   * Saves an already-validated preview capture through the privileged
+   * filesystem boundary (G5).
+   *
+   * The renderer supplies only bytes and a flat filename; the *destination*
+   * always comes from the main-process save dialog the user confirms here,
+   * so the renderer can never steer the write. Reports success, user
+   * cancellation, and failure with equal explicitness, and never touches the
+   * project: capture is a read-only side effect of a derived view.
+   */
+  public async savePhysicalPreviewCapture(
+    request: SavePhysicalPreviewCaptureRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      const dialogs = this.#dialogs;
+      if (dialogs.choosePreviewCapturePath === undefined) {
+        throw new RangeError("Saving a preview capture is unavailable in this window.");
+      }
+
+      const pngBytes = Buffer.from(request.pngBase64, "base64");
+      // Round-trips the decode: base64 that silently drops invalid characters
+      // would otherwise write a corrupt PNG that still looked plausible.
+      if (pngBytes.byteLength === 0 || pngBytes.toString("base64") !== request.pngBase64) {
+        this.#physicalPreviewCapture = {
+          status: "failed",
+          targetPath: null,
+          byteLength: null,
+          error: "The capture image data was malformed, so nothing was written.",
+        };
+        return;
+      }
+
+      const chosenPath = await dialogs.choosePreviewCapturePath(request.filename);
+      if (chosenPath === null) {
+        this.#physicalPreviewCapture = {
+          status: "canceled",
+          targetPath: null,
+          byteLength: null,
+          error: null,
+        };
+        return;
+      }
+
+      const result = await this.#previewCaptureStorage.write(
+        chosenPath,
+        new Uint8Array(pngBytes),
+        request.overwrite ? "replace" : "fail",
+      );
+      this.#physicalPreviewCapture = result.ok
+        ? {
+            status: "saved",
+            targetPath: result.targetPath,
+            byteLength: result.byteLength,
+            error: null,
+          }
+        : {
+            status: "failed",
+            targetPath: result.targetPath,
+            byteLength: null,
+            error: result.error,
+          };
+    });
+  }
+
   public async focusCutabilityIssue(
     issueId: string | null,
   ): Promise<CommandResult> {
@@ -2260,6 +2344,7 @@ export class DesktopController {
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
     this.#physicalPreviewAssemblyFingerprint = null;
+    this.#physicalPreviewCapture = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;

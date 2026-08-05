@@ -70,6 +70,7 @@ export const IPC_CHANNELS = {
   resolveRecovery: "laserx:recovery:resolve",
   runPhysicalPreview: "laserx:physical-preview:build",
   cancelPhysicalPreview: "laserx:physical-preview:cancel",
+  savePhysicalPreviewCapture: "laserx:physical-preview:save-capture",
   stateChanged: "laserx:state:changed",
 } as const;
 
@@ -478,6 +479,23 @@ export const runPhysicalPreviewRequestSchema = z.strictObject({
 
 export const cancelPhysicalPreviewRequestSchema = z.strictObject({
   operationId: z.uuid(),
+});
+
+/**
+ * Privileged capture save (G5). The renderer supplies only already-validated
+ * bytes and a flat filename; it never supplies a directory or full path, so
+ * it cannot steer the write anywhere the user has not chosen through the
+ * main-process save dialog.
+ *
+ * `filename` is constrained here to the same flat, portable `.png` shape the
+ * privileged writer enforces, so a malformed name is rejected at the IPC
+ * boundary rather than deeper in the filesystem layer.
+ */
+export const savePhysicalPreviewCaptureRequestSchema = z.strictObject({
+  filename: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._-]{0,199}\.png$/u),
+  // ~88 MB of base64 encodes ~64 MB of PNG, matching the writer's ceiling.
+  pngBase64: z.string().min(1).max(88 * 1024 * 1024),
+  overwrite: z.boolean(),
 });
 
 export const focusCutabilityIssueRequestSchema = z.strictObject({
@@ -1334,6 +1352,19 @@ export const desktopStateSchema = z.strictObject({
       })
       .nullable(),
     assembly: physicalPreviewAssemblySchema.nullable(),
+    /**
+     * Result of the most recent privileged capture save. Reports success and
+     * failure with equal explicitness -- a silent failure here would let a
+     * user believe an image was written when it was not.
+     */
+    capture: z
+      .strictObject({
+        status: z.enum(["saved", "canceled", "failed"]),
+        targetPath: z.string().nullable(),
+        byteLength: z.number().int().nonnegative().nullable(),
+        error: z.string().nullable(),
+      })
+      .nullable(),
   }),
 });
 
@@ -1378,6 +1409,9 @@ export type CancelCutabilityAnalysisRequest = z.infer<
 >;
 export type RunPhysicalPreviewRequest = z.infer<
   typeof runPhysicalPreviewRequestSchema
+>;
+export type SavePhysicalPreviewCaptureRequest = z.infer<
+  typeof savePhysicalPreviewCaptureRequestSchema
 >;
 export type CancelPhysicalPreviewRequest = z.infer<
   typeof cancelPhysicalPreviewRequestSchema
@@ -1506,6 +1540,9 @@ export interface LaserxDesktopApi {
   runPhysicalPreview(request: RunPhysicalPreviewRequest): Promise<CommandResult>;
   cancelPhysicalPreview(
     request: CancelPhysicalPreviewRequest,
+  ): Promise<CommandResult>;
+  savePhysicalPreviewCapture(
+    request: SavePhysicalPreviewCaptureRequest,
   ): Promise<CommandResult>;
   onStateChanged(listener: (state: DesktopState) => void): () => void;
 }
