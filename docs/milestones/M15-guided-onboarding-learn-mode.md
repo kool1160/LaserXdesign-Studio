@@ -1,14 +1,18 @@
 # M15 — Guided Onboarding, Workflow-First UI, and Learn Mode
 
+## Status
+
+**Active.** The owner explicitly advanced LaserX to M15 on 2026-08-05 after M14 passed owner validation and the final closure audit.
+
+Active issue: #45.
+
+Current slice: **G0 — guided-workflow architecture and first-run contract**.
+
 ## User-visible outcome
 
 A first-time user opens LaserX, chooses a real goal, sees only the controls relevant to that goal, follows clear shop-language guidance, repairs the problems LaserX can safely fix, completes a usable sign, views it in 3D, and exports it without needing the owner, CAD knowledge, or an external tutorial.
 
 LaserX should feel simple and obvious despite the depth of the underlying geometry and manufacturing systems.
-
-## Activation gate
-
-M15 remains blocked until M14 is reviewed, merged, closed, recorded complete, and explicitly advanced by the owner.
 
 ## Included
 
@@ -73,6 +77,39 @@ Remaining ambiguous decisions are grouped and visually navigable one category or
 - sample projects that teach real workflows rather than disconnected slides;
 - progress and recovery behavior that cannot corrupt the project or trap the user;
 - measurable first-session instrumentation that is local/privacy-respecting unless a later explicit opt-in design is accepted.
+
+## Approved implementation gates
+
+1. **G0 — guided-workflow architecture and first-run contract** — active.
+2. **G1 — first-launch goal chooser and resumable guidance shell** — held.
+3. **G2 — Create My First Sign guided vertical slice** — held.
+4. **G3 — vector import and raster trace contextual guidance** — held.
+5. **G4 — grouped repair decisions and Fix safe problems workflow** — held.
+6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held.
+7. **G6 — packaged accessibility and owner-observed first-session validation** — held.
+
+Each gate requires exact-head review and explicit owner advancement before the next gate becomes active.
+
+## Active G0 contract
+
+G0 is architecture and contract lock only. It must establish one coherent guided-workflow system before visible onboarding is implemented in separate screens.
+
+Required outcome:
+
+- inspect the packaged application and inventory the current first-launch, empty-state, create, vector-import, raster-trace, repair, 3D, save, and export flows;
+- document where unrelated controls, unclear next actions, or technical language compete with the user's goal;
+- define a tutorial/guidance state machine separated from feature logic and authoritative project state;
+- lock the three first-run goal contracts;
+- define a contextual-control matrix for every primary workflow;
+- define one clear primary action per guided step whenever practical;
+- define skip, back, resume, replay, cancel, failure, and recovery behavior that cannot trap the user;
+- define local/privacy-respecting evidence and the owner-observed ten-minute fixture set;
+- define keyboard, focus, high-DPI, reduced-motion, screen-reader, and non-color-only guidance requirements;
+- record the architecture in an ADR and add mechanical checks where they genuinely prevent drift;
+- make only the smallest implementation or harness change needed to prove the boundary;
+- open one focused draft PR and stop at `AWAITING_REVIEW`.
+
+G0 does not implement the complete first-launch shell, tutorial content, grouped repair engine, broad visual redesign, material expansion, process profiles, export profiles, new AI capability, licensing, public beta, or M16 work.
 
 ## Acceptance tests
 
