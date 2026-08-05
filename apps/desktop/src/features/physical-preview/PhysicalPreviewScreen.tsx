@@ -142,7 +142,7 @@ interface SceneContentProps {
   visibleLayerIds: ReadonlySet<string>;
   geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
   cameraRigRef: Ref<CameraRigHandle>;
-  captureRigRef: Ref<CaptureRigHandle>;
+  onCaptureReady: (handle: CaptureRigHandle | null) => void;
 }
 
 /** Lives inside `<Canvas>` so `computeCameraFit` can use the real pixel viewport. */
@@ -154,7 +154,7 @@ function SceneContent({
   visibleLayerIds,
   geometriesByLayer,
   cameraRigRef,
-  captureRigRef,
+  onCaptureReady,
 }: SceneContentProps) {
   const { size } = useThree();
   const fit = useMemo(
@@ -207,7 +207,7 @@ function SceneContent({
         far={fit.far}
         resetToken={resetToken}
       />
-      <CaptureRig ref={captureRigRef} />
+      <CaptureRig onReady={onCaptureReady} />
     </>
   );
 }
@@ -237,7 +237,7 @@ export default function PhysicalPreviewScreen({
   const [hiddenLayerIds, setHiddenLayerIds] = useState<ReadonlySet<string>>(() => new Set());
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const cameraRigRef = useRef<CameraRigHandle>(null);
-  const captureRigRef = useRef<CaptureRigHandle>(null);
+  const [captureHandle, setCaptureHandle] = useState<CaptureRigHandle | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -305,7 +305,7 @@ export default function PhysicalPreviewScreen({
    */
   const handleCapture = useCallback(() => {
     setCaptureError(null);
-    const rig = captureRigRef.current;
+    const rig = captureHandle;
     if (rig === null) {
       setCaptureError("The preview canvas is not ready to capture yet.");
       return;
@@ -349,7 +349,7 @@ export default function PhysicalPreviewScreen({
       return;
     }
     onCapture({ filename, pngBase64 });
-  }, [projectName, view, mode, onCapture]);
+  }, [projectName, view, mode, onCapture, captureHandle]);
 
   const handleReset = useCallback(() => {
     setView("perspective");
@@ -477,7 +477,12 @@ export default function PhysicalPreviewScreen({
         <span className="physical-preview-shortcuts-hint" data-testid="physical-preview-shortcuts-hint">
           Keyboard: arrows orbit &middot; shift+arrows pan &middot; +/- zoom &middot; 1–4 views &middot; 0 reset &middot; M mode
         </span>
-        <button type="button" data-testid="physical-preview-capture" onClick={handleCapture}>
+        <button
+          type="button"
+          data-testid="physical-preview-capture"
+          disabled={captureHandle === null}
+          onClick={handleCapture}
+        >
           Capture PNG
         </button>
         <button type="button" data-testid="physical-preview-close" onClick={onClose}>
@@ -556,7 +561,7 @@ export default function PhysicalPreviewScreen({
               visibleLayerIds={visibleLayerIds}
               geometriesByLayer={geometriesByLayer}
               cameraRigRef={cameraRigRef}
-              captureRigRef={captureRigRef}
+              onCaptureReady={setCaptureHandle}
             />
           </Canvas>
         )}

@@ -46,6 +46,12 @@ test("capture writes a real non-empty PNG through the privileged boundary withou
     await page.getByTestId("open-physical-preview").click();
     await expect(page.getByTestId("physical-preview-canvas")).toBeVisible({ timeout: 15_000 });
 
+    // The capture control is enabled only once React Three Fiber has mounted
+    // the scene tree and the capture rig has published its handle -- the
+    // canvas element becoming visible happens earlier than that.
+    await expect(page.getByTestId("physical-preview-capture")).toBeEnabled({
+      timeout: 15_000,
+    });
     await page.getByTestId("physical-preview-capture").click();
     await expect(page.getByTestId("physical-preview-capture-status")).toContainText(
       "Saved",
@@ -86,6 +92,12 @@ test("a rejected capture destination reports failure and writes nothing", async 
     await page.getByTestId("open-physical-preview").click();
     await expect(page.getByTestId("physical-preview-canvas")).toBeVisible({ timeout: 15_000 });
 
+    // The capture control is enabled only once React Three Fiber has mounted
+    // the scene tree and the capture rig has published its handle -- the
+    // canvas element becoming visible happens earlier than that.
+    await expect(page.getByTestId("physical-preview-capture")).toBeEnabled({
+      timeout: 15_000,
+    });
     await page.getByTestId("physical-preview-capture").click();
     await expect(page.getByTestId("physical-preview-capture-status")).toContainText(
       /\.png/u,

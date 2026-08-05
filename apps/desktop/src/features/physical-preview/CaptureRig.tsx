@@ -1,5 +1,5 @@
 import { useThree } from "@react-three/fiber";
-import { forwardRef, useImperativeHandle } from "react";
+import { useEffect } from "react";
 
 import { captureSameFrame, type SameFrameCapture } from "./sameFrameCapture.js";
 
@@ -12,17 +12,27 @@ import { captureSameFrame, type SameFrameCapture } from "./sameFrameCapture.js";
  * privileged evidence path. The actual transaction ordering lives in
  * `sameFrameCapture.ts` so it stays unit-testable without WebGL; this
  * component only adapts the real Three renderer to that interface.
+ *
+ * Publishes its handle through `onReady` rather than a forwarded ref
+ * because React Three Fiber mounts the scene tree through its own
+ * reconciler, *after* the canvas element itself is in the DOM. A ref would
+ * therefore still be null in the window between "canvas is visible" and
+ * "scene is mounted" -- so the capture control must be driven by an
+ * explicit readiness signal, not by the canvas's presence.
  */
 export interface CaptureRigHandle {
   capture(): SameFrameCapture;
 }
 
-export const CaptureRig = forwardRef<CaptureRigHandle>(function CaptureRig(_props, ref) {
+export interface CaptureRigProps {
+  onReady: (handle: CaptureRigHandle | null) => void;
+}
+
+export function CaptureRig({ onReady }: CaptureRigProps) {
   const { gl, scene, camera } = useThree();
 
-  useImperativeHandle(
-    ref,
-    () => ({
+  useEffect(() => {
+    const handle: CaptureRigHandle = {
       capture() {
         const context = gl.getContext();
         const canvas = gl.domElement;
@@ -54,9 +64,12 @@ export const CaptureRig = forwardRef<CaptureRigHandle>(function CaptureRig(_prop
           toDataURL: () => canvas.toDataURL("image/png"),
         });
       },
-    }),
-    [gl, scene, camera],
-  );
+    };
+    onReady(handle);
+    return () => {
+      onReady(null);
+    };
+  }, [gl, scene, camera, onReady]);
 
   return null;
-});
+}
