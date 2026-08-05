@@ -13,7 +13,10 @@ import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
 import type { SignToolRequest } from "@laserx/sign-tools";
 import { z } from "zod";
 
-import { MAX_CAPTURE_BASE64_LENGTH } from "./capture-limits.js";
+import {
+  isWithinCapturePixelBudget,
+  MAX_CAPTURE_BASE64_LENGTH,
+} from "./capture-limits.js";
 
 export const IPC_CHANNELS = {
   getState: "laserx:state:get",
@@ -512,7 +515,12 @@ export const savePhysicalPreviewCaptureRequestSchema = z.strictObject({
    * current document.
    */
   assemblyFingerprint: z.string().min(1).max(256),
-});
+}).refine(
+  (request) => isWithinCapturePixelBudget(request.widthPx, request.heightPx),
+  // Per-axis bounds alone still permit ~4.3 billion pixels; the product is
+  // what determines the decoder allocation, so it is bounded explicitly.
+  { message: "Capture dimensions exceed the supported decoded-pixel budget." },
+);
 
 export const focusCutabilityIssueRequestSchema = z.strictObject({
   issueId: z.string().min(1).nullable(),

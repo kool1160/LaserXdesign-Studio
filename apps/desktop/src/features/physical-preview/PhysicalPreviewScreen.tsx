@@ -6,6 +6,8 @@ import {
   disposeAssemblyGeometries,
   layerAppearance,
   PREVIEW_VIEWS,
+  PREVIEW_CAPTURE_BACKGROUND,
+  PREVIEW_CAPTURE_BACKGROUND_HEX,
   PreviewConversionError,
   validatePngCapture,
   type AssemblyLayerGeometry,
@@ -39,9 +41,6 @@ const VIEW_LABELS: Record<PreviewView, string> = {
 /** Bounded to [1, 2]: crisp on standard/retina displays without paying full
  * native resolution on very-high-DPR devices. */
 const DPR_RANGE: [number, number] = [1, 2];
-
-/** Matches the scene background below; content detection compares against it. */
-const PREVIEW_BACKGROUND_RGB = { r: 0x2b, g: 0x2b, b: 0x2b };
 
 const KEYBOARD_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
 const KEYBOARD_PAN_STEP_PX = 20;
@@ -175,7 +174,7 @@ function SceneContent({
 
   return (
     <>
-      <color attach="background" args={["#2b2b2b"]} />
+      <color attach="background" args={[PREVIEW_CAPTURE_BACKGROUND_HEX]} />
       <ambientLight intensity={0.6} />
       <directionalLight position={[fit.distance, fit.distance, fit.distance]} intensity={1.1} />
       <directionalLight
@@ -360,7 +359,7 @@ export default function PhysicalPreviewScreen({
         rgba: frame.rgba,
         widthPx: frame.widthPx,
         heightPx: frame.heightPx,
-        background: PREVIEW_BACKGROUND_RGB,
+        background: PREVIEW_CAPTURE_BACKGROUND,
       },
     );
     if (!result.ok) {

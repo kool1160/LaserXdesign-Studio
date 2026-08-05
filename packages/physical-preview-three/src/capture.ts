@@ -43,6 +43,20 @@ export interface PixelContentEvidence {
 export const DEFAULT_BACKGROUND_TOLERANCE = 8;
 
 /**
+ * The single source of truth for the preview background, shared by the scene
+ * that clears to it, the renderer that validates a capture against it, and
+ * the privileged main process that independently re-validates.
+ *
+ * Three copies of this value would be three chances to drift, and a drifted
+ * background silently turns the blank-capture check into a no-op: every pixel
+ * would compare as "content" against the wrong reference colour.
+ */
+export const PREVIEW_CAPTURE_BACKGROUND: BackgroundColor = { r: 0x2b, g: 0x2b, b: 0x2b };
+
+/** The same colour as a CSS hex string, for the scene clear colour. */
+export const PREVIEW_CAPTURE_BACKGROUND_HEX = "#2b2b2b";
+
+/**
  * Proves at least one meaningful non-background pixel exists.
  *
  * Pure and renderer-independent: it takes raw RGBA bytes, so G4 can supply them

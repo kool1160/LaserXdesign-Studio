@@ -53,17 +53,32 @@ function chunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([length, typeAndData, crc]);
 }
 
-/** A genuinely well-formed PNG, so tests exercise real header validation. */
-function realPngBase64(widthPx = CAPTURE_WIDTH, heightPx = CAPTURE_HEIGHT): string {
+/**
+ * A genuinely well-formed PNG filled with one RGBA colour, so tests exercise
+ * real header validation *and* real decoded-pixel content.
+ */
+function pngWithPixels(
+  fill: readonly [number, number, number, number],
+  widthPx = CAPTURE_WIDTH,
+  heightPx = CAPTURE_HEIGHT,
+): string {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const ihdrData = Buffer.alloc(13);
   ihdrData.writeUInt32BE(widthPx, 0);
   ihdrData.writeUInt32BE(heightPx, 4);
   ihdrData[8] = 8; // bit depth
   ihdrData[9] = 6; // RGBA
-  const raw = Buffer.alloc(heightPx * (1 + widthPx * 4));
+  const stride = 1 + widthPx * 4;
+  const raw = Buffer.alloc(heightPx * stride);
   for (let row = 0; row < heightPx; row += 1) {
-    raw[row * (1 + widthPx * 4)] = 0; // filter: none
+    raw[row * stride] = 0; // filter: none
+    for (let column = 0; column < widthPx; column += 1) {
+      const at = row * stride + 1 + column * 4;
+      raw[at] = fill[0];
+      raw[at + 1] = fill[1];
+      raw[at + 2] = fill[2];
+      raw[at + 3] = fill[3];
+    }
   }
   return Buffer.concat([
     signature,
@@ -71,6 +86,26 @@ function realPngBase64(widthPx = CAPTURE_WIDTH, heightPx = CAPTURE_HEIGHT): stri
     chunk("IDAT", deflateSync(raw)),
     chunk("IEND", Buffer.alloc(0)),
   ]).toString("base64");
+}
+
+/** Opaque red: unmistakably non-background content. */
+function realPngBase64(widthPx = CAPTURE_WIDTH, heightPx = CAPTURE_HEIGHT): string {
+  return pngWithPixels([255, 0, 0, 255], widthPx, heightPx);
+}
+
+/** Fully transparent: decodable, but nothing was rendered. */
+function transparentPngBase64(): string {
+  return pngWithPixels([0, 0, 0, 0]);
+}
+
+/** Filled with exactly the preview background: decodable, but blank. */
+function backgroundOnlyPngBase64(): string {
+  return pngWithPixels([0x2b, 0x2b, 0x2b, 255]);
+}
+
+/** Tiny valid image data advertising enormous dimensions: a decode bomb. */
+function dimensionBombBase64(): string {
+  return pngWithPixels([255, 0, 0, 255], 1, 1);
 }
 
 /** Signature + a well-formed IHDR only: passes a header-only check, but has
@@ -238,8 +273,10 @@ function physicalProject(): LaserxProject {
  * exactly as Electron's decoder would reject it. A stub that merely returned
  * null would not prove anything about the boundary.
  */
+const decoderCalls: number[] = [];
 const inflatingDecoder: PreviewCaptureDecoderPort = {
   decode(bytes) {
+    decoderCalls.push(bytes.length);
     const buffer = Buffer.from(bytes);
     let offset = 8;
     let widthPx = 0;
@@ -258,14 +295,22 @@ const inflatingDecoder: PreviewCaptureDecoderPort = {
       offset = dataStart + length + 4;
     }
     if (widthPx <= 0 || heightPx <= 0 || idatParts.length === 0) return null;
+    let raw: Buffer;
     try {
-      const raw = inflateSync(Buffer.concat(idatParts));
-      // A real decode also requires the inflated data to be the expected size.
-      if (raw.length !== heightPx * (1 + widthPx * 4)) return null;
+      raw = inflateSync(Buffer.concat(idatParts));
     } catch {
       return null;
     }
-    return { widthPx, heightPx };
+    const stride = 1 + widthPx * 4;
+    // A real decode also requires the inflated data to be the expected size.
+    if (raw.length !== heightPx * stride) return null;
+    // Drop the per-row filter byte to recover the RGBA pixels (filter 0 only,
+    // which is what these fixtures use).
+    const rgba = new Uint8Array(widthPx * heightPx * 4);
+    for (let row = 0; row < heightPx; row += 1) {
+      raw.copy(rgba, row * widthPx * 4, row * stride + 1, (row + 1) * stride);
+    }
+    return { widthPx, heightPx, rgba };
   },
 };
 
@@ -285,6 +330,7 @@ async function desktop(
   choose: (directory: string, suggested: string) => string | null,
   options: { omitDecoder?: boolean } = {},
 ): Promise<Harness> {
+  decoderCalls.length = 0;
   const directory = await mkdtemp(join(tmpdir(), "laserx-capture-ipc-"));
   temporaryDirectories.push(directory);
   const chosenPaths: string[] = [];
@@ -559,6 +605,56 @@ describe("privileged physical preview capture save", () => {
 
     expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
       /could not be decoded as an image/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects a dimension bomb without ever invoking the native decoder", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+    const callsBefore = decoderCalls.length;
+
+    // A 1x1 image's worth of valid compressed data, advertising dimensions
+    // that would demand a multi-gigabyte decode.
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, {
+        pngBase64: dimensionBombBase64(),
+        widthPx: 60_000,
+        heightPx: 60_000,
+      }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /exceed the supported preview size/u,
+    );
+    // The whole point: the decoder must never be reached for these dimensions.
+    expect(decoderCalls.length).toBe(callsBefore);
+    expect(harness.chosenPaths).toEqual([]);
+    expect((await readdir(harness.directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
+  });
+
+  it("rejects a decodable but fully transparent capture", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: transparentPngBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /only background pixels/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+    expect((await readdir(harness.directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
+  });
+
+  it("rejects a decodable capture containing only the preview background", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: backgroundOnlyPngBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /only background pixels/u,
     );
     expect(harness.chosenPaths).toEqual([]);
   });

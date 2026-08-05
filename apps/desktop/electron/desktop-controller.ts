@@ -92,8 +92,11 @@ import type {
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
 import {
+  analyzePixelContent,
+  PREVIEW_CAPTURE_BACKGROUND,
   readPngHeader,
   validatePngStructure,
+  type PixelContentEvidence,
 } from "../../../packages/physical-preview-three/src/capture.js";
 import {
   CredentialAcquisitionCancelledError,
@@ -150,7 +153,10 @@ import {
   ProductionStorage,
   type ProductionPackageFileService,
 } from "./production-storage.js";
-import { MAX_CAPTURE_BYTES } from "./capture-limits.js";
+import {
+  isWithinCapturePixelBudget,
+  MAX_CAPTURE_BYTES,
+} from "./capture-limits.js";
 import {
   unavailablePreviewCaptureDecoder,
   type PreviewCaptureDecoderPort,
@@ -1622,6 +1628,17 @@ export class DesktopController {
         reject("The capture exceeds the 64 MB safety limit, so nothing was written.");
         return;
       }
+      // Bounds the *decoded* cost before any native decode is attempted.
+      // MAX_CAPTURE_BYTES caps only the compressed payload, so a few kilobytes
+      // advertising enormous dimensions would otherwise ask the decoder for a
+      // multi-gigabyte allocation inside the privileged process. Repeated here
+      // independently of the schema, because main must not trust preload.
+      if (!isWithinCapturePixelBudget(request.widthPx, request.heightPx)) {
+        reject(
+          "The capture dimensions exceed the supported preview size, so nothing was written.",
+        );
+        return;
+      }
 
       // Reuses the accepted pure PNG validation rather than a second decoder,
       // so main and renderer agree on what a valid PNG is by construction.
@@ -1671,6 +1688,33 @@ export class DesktopController {
       ) {
         reject(
           "The decoded capture dimensions did not match the encoded image, so nothing was written.",
+        );
+        return;
+      }
+
+      // Independently proves the decoded image is not blank. The renderer runs
+      // the same check, but main cannot rely on that: a trusted-main-frame IPC
+      // payload could still carry a perfectly decodable all-transparent or
+      // all-background PNG, and saving it as a customer capture would be a
+      // silent failure. Uses the shared background/tolerance contract so the
+      // two sides cannot drift into disagreeing about what "blank" means, and
+      // derives the answer from the pixels rather than any renderer-supplied
+      // flag.
+      let decodedContent: PixelContentEvidence;
+      try {
+        decodedContent = analyzePixelContent(
+          decoded.rgba,
+          decoded.widthPx,
+          decoded.heightPx,
+          PREVIEW_CAPTURE_BACKGROUND,
+        );
+      } catch {
+        reject("The decoded capture pixels were unusable, so nothing was written.");
+        return;
+      }
+      if (decodedContent.nonBackgroundPixels === 0) {
+        reject(
+          "The capture contains only background pixels, so nothing was rendered and nothing was written.",
         );
         return;
       }

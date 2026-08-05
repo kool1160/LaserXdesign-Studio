@@ -56,6 +56,8 @@ export {
 
 export {
   analyzePixelContent,
+  PREVIEW_CAPTURE_BACKGROUND,
+  PREVIEW_CAPTURE_BACKGROUND_HEX,
   buildCaptureFilename,
   DEFAULT_BACKGROUND_TOLERANCE,
   readPngHeader,

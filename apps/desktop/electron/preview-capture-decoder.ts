@@ -18,6 +18,15 @@
 export interface DecodedCaptureImage {
   widthPx: number;
   heightPx: number;
+  /**
+   * Decoded pixels in **RGBA** order, 4 bytes per pixel.
+   *
+   * Returned so the privileged process can independently verify the image is
+   * not blank. Dimensions alone cannot distinguish a real capture from a
+   * fully transparent or all-background one, and a renderer-supplied
+   * "hasContent" flag would just be the untrusted side marking its own work.
+   */
+  rgba: Uint8Array;
 }
 
 export interface PreviewCaptureDecoderPort {
@@ -30,6 +39,8 @@ export interface PreviewCaptureDecoderPort {
 export interface NativeImageLike {
   isEmpty(): boolean;
   getSize(): { width: number; height: number };
+  /** Raw decoded pixels. Electron documents this buffer as **BGRA** order. */
+  toBitmap(): Buffer;
 }
 
 /**
@@ -67,7 +78,25 @@ export function createElectronPreviewCaptureDecoder(
         ) {
           return null;
         }
-        return { widthPx: width, heightPx: height };
+
+        const bitmap = image.toBitmap();
+        const expected = width * height * 4;
+        // A bitmap that disagrees with the reported size is not evidence about
+        // this image, so it is a rejection rather than something to reinterpret.
+        if (bitmap.length !== expected) return null;
+
+        // Electron hands back BGRA; every shared content check is written
+        // against RGBA. Normalising here — at the one place that knows the
+        // platform's order — keeps that detail out of the shared validator.
+        const rgba = new Uint8Array(expected);
+        for (let index = 0; index < expected; index += 4) {
+          rgba[index] = bitmap[index + 2] ?? 0;
+          rgba[index + 1] = bitmap[index + 1] ?? 0;
+          rgba[index + 2] = bitmap[index] ?? 0;
+          rgba[index + 3] = bitmap[index + 3] ?? 0;
+        }
+
+        return { widthPx: width, heightPx: height, rgba };
       } catch {
         return null;
       }
