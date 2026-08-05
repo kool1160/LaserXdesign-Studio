@@ -6,6 +6,7 @@ import {
   initialGuidedWorkflowState,
   initialOnboardingPreferences,
   isTerminalStatus,
+  isValidWorkflowDefinition,
   reduceGuidedWorkflow,
   toWorkflowSnapshot,
   type GuidedGoal,
@@ -55,7 +56,7 @@ describe("guided workflow -- basic transitions", () => {
   it("fails closed rather than starting with zero steps", () => {
     const state = start({ ...DEFINITION, stepIds: [] });
     expect(state.status).toBe("failed");
-    expect(state.failureReason).toMatch(/at least one step/u);
+    expect(state.failureReason).toMatch(/at least one unique, non-blank step id/u);
   });
 
   it("advances through every step to completed", () => {
@@ -72,6 +73,26 @@ describe("guided workflow -- basic transitions", () => {
     expect(reduceGuidedWorkflow(second, { type: "back" }).currentStepId).toBe("choose-material");
     const first = start();
     expect(reduceGuidedWorkflow(first, { type: "back" })).toBe(first);
+  });
+
+  it("going back reopens the destination step and discards progress from there forward", () => {
+    let state = reduceGuidedWorkflow(start(), { type: "advance" });
+    state = reduceGuidedWorkflow(state, { type: "skip-step" });
+    expect(state.currentStepId).toBe("review-cutability");
+    expect(state.completedStepIds).toEqual(["choose-material"]);
+    expect(state.skippedStepIds).toEqual(["add-text"]);
+
+    // Back to add-text: that step is being redone, so it is no longer skipped.
+    state = reduceGuidedWorkflow(state, { type: "back" });
+    expect(state.currentStepId).toBe("add-text");
+    expect(state.skippedStepIds).toEqual([]);
+    expect(state.completedStepIds).toEqual(["choose-material"]);
+
+    // Back again to the first step: nothing at or after it stays recorded.
+    state = reduceGuidedWorkflow(state, { type: "back" });
+    expect(state.currentStepId).toBe("choose-material");
+    expect(state.completedStepIds).toEqual([]);
+    expect(state.skippedStepIds).toEqual([]);
   });
 
   it("fail records a reason and is terminal", () => {
@@ -92,6 +113,64 @@ describe("guided workflow -- basic transitions", () => {
     expect(replayed.currentStepId).toBe("choose-material");
     expect(replayed.completedStepIds).toEqual([]);
     expect(replayed.skippedStepIds).toEqual([]);
+  });
+});
+
+describe("guided workflow -- definition validity", () => {
+  const INVALID: readonly (readonly [string, GuidedWorkflowDefinition])[] = [
+    ["duplicate step ids", { ...DEFINITION, stepIds: ["a", "a", "b"] }],
+    ["a blank step id", { ...DEFINITION, stepIds: ["a", "   ", "b"] }],
+    ["an empty step id", { ...DEFINITION, stepIds: ["a", "", "b"] }],
+    ["no steps at all", { ...DEFINITION, stepIds: [] }],
+    ["a zero version", { ...DEFINITION, definitionVersion: 0 }],
+    ["a negative version", { ...DEFINITION, definitionVersion: -1 }],
+    ["a fractional version", { ...DEFINITION, definitionVersion: 1.5 }],
+  ];
+
+  it.each(INVALID)("rejects %s", (_label, definition) => {
+    expect(isValidWorkflowDefinition(definition)).toBe(false);
+  });
+
+  it("accepts a well-formed definition", () => {
+    expect(isValidWorkflowDefinition(DEFINITION)).toBe(true);
+  });
+
+  it.each(INVALID)("fails closed instead of starting on %s", (_label, definition) => {
+    const state = start(definition);
+    expect(state.status).toBe("failed");
+    expect(state.currentStepId).toBeNull();
+  });
+
+  it("duplicate step ids cannot create a permanently non-progressing active workflow", () => {
+    // Step lookup resolves an id to its FIRST index, so ["a","a","b"] would
+    // advance from the first `a` to the second `a`, resolve back to index 0,
+    // and never reach `b` -- an "active" workflow with no forward exit.
+    const trapped = { ...DEFINITION, stepIds: ["a", "a", "b"] };
+    let state = start(trapped);
+    for (let i = 0; i < 6; i += 1) {
+      state = reduceGuidedWorkflow(state, { type: "advance" });
+    }
+    expect(state.status).not.toBe("active");
+    expect(state.status).toBe("failed");
+  });
+
+  it("refuses to resume or replay a malformed definition", () => {
+    const trapped = { ...DEFINITION, stepIds: ["a", "a", "b"] };
+    const resumed = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: trapped,
+      snapshot: {
+        goal: trapped.goal,
+        definitionVersion: trapped.definitionVersion,
+        currentStepId: "b",
+        completedStepIds: ["a"],
+        skippedStepIds: [],
+      },
+    });
+    expect(resumed).toEqual(initialGuidedWorkflowState);
+
+    const failedStart = start(trapped);
+    expect(reduceGuidedWorkflow(failedStart, { type: "replay" }).status).toBe("failed");
   });
 });
 
@@ -205,6 +284,86 @@ describe("guided workflow -- persistence round trip", () => {
     const snapshot = toWorkflowSnapshot(advanceTo("add-text"));
     const otherGoal = { ...DEFINITION, goal: "import-own-design" as const };
     expect(canResumeSnapshot(otherGoal, snapshot as OnboardingWorkflowSnapshot)).toBe(false);
+  });
+
+  const base = {
+    goal: DEFINITION.goal,
+    definitionVersion: DEFINITION.definitionVersion,
+  } as const;
+
+  const CONTRADICTORY: readonly (readonly [string, OnboardingWorkflowSnapshot])[] = [
+    [
+      "the current step already marked completed",
+      { ...base, currentStepId: "add-text", completedStepIds: ["add-text"], skippedStepIds: [] },
+    ],
+    [
+      "the current step already marked skipped",
+      { ...base, currentStepId: "add-text", completedStepIds: [], skippedStepIds: ["add-text"] },
+    ],
+    [
+      "a later step marked completed while an earlier one is open",
+      {
+        ...base,
+        currentStepId: "choose-material",
+        completedStepIds: ["review-cutability"],
+        skippedStepIds: [],
+      },
+    ],
+    [
+      "the same step both completed and skipped",
+      {
+        ...base,
+        currentStepId: "review-cutability",
+        completedStepIds: ["choose-material"],
+        skippedStepIds: ["choose-material"],
+      },
+    ],
+    [
+      "a duplicated completed id",
+      {
+        ...base,
+        currentStepId: "review-cutability",
+        completedStepIds: ["choose-material", "choose-material"],
+        skippedStepIds: [],
+      },
+    ],
+  ];
+
+  it.each(CONTRADICTORY)("refuses a snapshot with %s", (_label, snapshot) => {
+    expect(canResumeSnapshot(DEFINITION, snapshot)).toBe(false);
+    expect(
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "resume",
+        definition: DEFINITION,
+        snapshot,
+      }),
+    ).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("a snapshot taken after going back is still resumable and truthful", () => {
+    // The exact sequence the review flagged: complete two steps, reach the
+    // third, then go back. The persisted snapshot must not claim the step
+    // being redone -- or any later one -- is already finished.
+    let live = reduceGuidedWorkflow(start(), { type: "advance" });
+    live = reduceGuidedWorkflow(live, { type: "advance" });
+    expect(live.currentStepId).toBe("review-cutability");
+    expect(live.completedStepIds).toEqual(["choose-material", "add-text"]);
+
+    live = reduceGuidedWorkflow(live, { type: "back" });
+    expect(live.currentStepId).toBe("add-text");
+    expect(live.completedStepIds).toEqual(["choose-material"]);
+
+    const snapshot = toWorkflowSnapshot(live);
+    expect(snapshot).not.toBeNull();
+    expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot)).toBe(true);
+
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: DEFINITION,
+      snapshot: snapshot as OnboardingWorkflowSnapshot,
+    });
+    expect(restored.currentStepId).toBe("add-text");
+    expect(restored.completedStepIds).toEqual(["choose-material"]);
   });
 });
 

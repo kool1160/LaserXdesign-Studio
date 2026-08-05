@@ -101,6 +101,16 @@ only meaningful against one exact step set; an id survives a definition
 gaining or reordering steps, and makes a stale persisted snapshot detectable
 instead of silently pointing at a different step.
 
+Because step lookup resolves an id to its *first* occurrence, a definition is
+only usable if its ids are unique and non-blank, its step list is non-empty,
+and its version is a positive integer. `isValidWorkflowDefinition` enforces
+this before `start`, `resume`, and `replay`, and an invalid definition
+**fails closed** rather than entering an active workflow. This is not
+defensive tidiness: duplicate ids such as `["a", "a", "b"]` would advance
+from the first `a` to the second, resolve back to the first, and never reach
+`b` or complete -- a permanently non-progressing "active" state, which is
+exactly the trapped state this contract promises cannot exist.
+
 The module reads relevant signals from existing state (e.g.
 `workspaceIsEmpty`, `ai.connection.status`) but **never mutates** authoritative
 project state, dirty state, undo/redo history, selection, analysis results,
@@ -151,6 +161,12 @@ A step is recorded as completed or skipped but never both, so the summary the
 user is shown afterwards is truthful even if they went back and redid a step
 they had skipped.
 
+**Going back reopens the destination step and discards completion/skip records
+from that step forward.** Keeping them would let an interrupted journey resume
+while claiming the step currently being redone -- and every step after it --
+is already finished. If the user returns to change an earlier decision such as
+material or text, any later "completion" is simply false.
+
 ### 5. Every action declares its allowed source states
 
 `ALLOWED_SOURCE_STATUSES` is part of the contract, not an implementation
@@ -192,12 +208,15 @@ interface OnboardingPreferences {
 `definitionVersion` is what makes a stale snapshot detectable: step ids are
 stable, but their meaning and ordering belong to one specific step set.
 
-Resume is **fail-closed**. A snapshot from a different goal, a different
-definition version, or naming a step the current definition no longer contains
-is refused outright and the state returns to `idle`, because there is no way to
-repair it into "probably this step" without claiming progress the user never
-made. `canResumeSnapshot` exposes that decision so a caller can offer a clean
-restart instead.
+Resume is **fail-closed**, and validates the full semantic invariant rather
+than only checking that ids are recognizable. A snapshot is refused when it
+comes from a different goal or definition version, names a step the definition
+no longer contains, repeats an id, records the same step as both completed and
+skipped, or claims the current step -- or any step after it -- is already
+finished. Progress can only exist *behind* the open step; anything else
+describes a journey that cannot have happened, and resuming it would invent
+progress the user never made. `canResumeSnapshot` exposes that decision so a
+caller can offer a clean restart instead.
 
 Persistence is versioned the same way `RecentProjectsStore`/`RecoveryStore`
 are, written atomically, and stored alongside `recent-projects.json` in

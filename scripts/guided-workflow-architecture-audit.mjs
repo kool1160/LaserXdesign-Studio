@@ -37,27 +37,41 @@ const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
   },
   // Import checks alone would let `window.localStorage` or `document.body`
   // through, so the advertised no-DOM guarantee is enforced directly rather
-  // than implied. Matched as whole-word reads/calls so ordinary identifiers
-  // that merely contain these names (`windowSize`, `documentId`) still pass.
+  // than implied.
+  //
+  // Matching any *reference*, not just property access: `const root = document`
+  // and `typeof window` are bypasses of a `\.`-anchored pattern but are exactly
+  // the coupling this is meant to prevent. The trailing `(?![\w$:])` keeps
+  // ordinary property names (`{ document: ... }`, `windowSize`) passing, and
+  // the leading `(?<![.\w$])` keeps member access on the caller's own objects
+  // (`host.document.title`) passing -- a guard that rejects legitimate code
+  // gets switched off, which is worse than no guard.
   {
-    pattern: /(?<![.\w$])window\s*(?:\.|\[)/u,
-    message: "guided-workflow state must not touch the window global",
+    pattern: /(?<![.\w$])window(?![\w$:])/u,
+    message: "guided-workflow state must not reference the window global",
   },
   {
-    pattern: /(?<![.\w$])document\s*(?:\.|\[)/u,
-    message: "guided-workflow state must not touch the document global",
+    pattern: /(?<![.\w$])document(?![\w$:])/u,
+    message: "guided-workflow state must not reference the document global",
   },
   {
-    pattern: /(?<![.\w$])(?:localStorage|sessionStorage)\s*(?:\.|\[)/u,
-    message: "guided-workflow state must not touch browser storage",
+    pattern: /(?<![.\w$])(?:localStorage|sessionStorage)(?![\w$:])/u,
+    message: "guided-workflow state must not reference browser storage",
   },
   {
-    pattern: /(?<![.\w$])navigator\s*(?:\.|\[)/u,
-    message: "guided-workflow state must not touch the navigator global",
+    pattern: /(?<![.\w$])navigator(?![\w$:])/u,
+    message: "guided-workflow state must not reference the navigator global",
   },
   {
-    pattern: /(?<![.\w$])(?:globalThis|process)\s*(?:\.|\[)/u,
+    pattern: /(?<![.\w$])(?:globalThis|process)(?![\w$:])/u,
     message: "guided-workflow state must not reach for ambient globals",
+  },
+  {
+    // Representative DOM types: a type-only dependency still couples this
+    // module to a DOM lib it must compile without.
+    pattern:
+      /(?<![.\w$])(?:HTMLElement|HTMLInputElement|HTMLDivElement|Element|Document|Window|Node|NodeList|Event|EventTarget|DOMRect|MutationObserver)(?![\w$:])/u,
+    message: "guided-workflow state must not reference a DOM type",
   },
 ];
 

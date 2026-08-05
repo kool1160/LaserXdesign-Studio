@@ -141,6 +141,26 @@ export const ALLOWED_SOURCE_STATUSES: Readonly<
   fail: ["active"],
 };
 
+/**
+ * Whether a step definition is well-formed enough to drive the reducer.
+ *
+ * Duplicate ids are not a cosmetic problem: step lookup resolves an id to its
+ * *first* index, so `["a", "a", "b"]` would advance from the first `a` to the
+ * second `a`, resolve that back to index 0, and never reach `b` or complete --
+ * a permanently non-progressing "active" workflow, which is exactly the
+ * trapped state this contract promises cannot exist. Blank ids have the same
+ * effect through a different route, and a non-positive or fractional version
+ * cannot order snapshots.
+ */
+export function isValidWorkflowDefinition(definition: GuidedWorkflowDefinition): boolean {
+  if (!Number.isInteger(definition.definitionVersion) || definition.definitionVersion <= 0) {
+    return false;
+  }
+  if (definition.stepIds.length === 0) return false;
+  if (definition.stepIds.some((id) => typeof id !== "string" || id.trim() === "")) return false;
+  return new Set(definition.stepIds).size === definition.stepIds.length;
+}
+
 function stepIndexOf(definition: GuidedWorkflowDefinition, stepId: string | null): number {
   return stepId === null ? -1 : definition.stepIds.indexOf(stepId);
 }
@@ -156,12 +176,16 @@ function withoutId(ids: readonly string[], stepId: string | null): readonly stri
 
 function startedState(definition: GuidedWorkflowDefinition): GuidedWorkflowState {
   const firstStepId = definition.stepIds[0];
-  if (firstStepId === undefined) {
+  if (!isValidWorkflowDefinition(definition) || firstStepId === undefined) {
+    // Fail closed rather than entering an active workflow that cannot
+    // progress: a malformed definition must be a visible failure, never a
+    // silent dead end the user has to abandon.
     return {
       ...initialGuidedWorkflowState,
       status: "failed",
       definition,
-      failureReason: "A guided workflow requires at least one step.",
+      failureReason:
+        "A guided workflow requires a positive version and at least one unique, non-blank step id.",
     };
   }
   return {
@@ -186,11 +210,25 @@ export function canResumeSnapshot(
   definition: GuidedWorkflowDefinition,
   snapshot: OnboardingWorkflowSnapshot,
 ): boolean {
+  if (!isValidWorkflowDefinition(definition)) return false;
   if (snapshot.goal !== definition.goal) return false;
   if (snapshot.definitionVersion !== definition.definitionVersion) return false;
-  if (!definition.stepIds.includes(snapshot.currentStepId)) return false;
-  const known = (id: string): boolean => definition.stepIds.includes(id);
-  return snapshot.completedStepIds.every(known) && snapshot.skippedStepIds.every(known);
+
+  const currentIndex = definition.stepIds.indexOf(snapshot.currentStepId);
+  if (currentIndex < 0) return false;
+
+  const { completedStepIds, skippedStepIds } = snapshot;
+  const progressIds = [...completedStepIds, ...skippedStepIds];
+
+  // Every recorded id must be a real step of this definition.
+  if (progressIds.some((id) => !definition.stepIds.includes(id))) return false;
+  // A step is completed or skipped, never both, and never recorded twice --
+  // otherwise the summary shown after the journey would be untrue.
+  if (new Set(progressIds).size !== progressIds.length) return false;
+  // Progress can only exist *behind* the open step. A snapshot claiming the
+  // current step, or a step after it, is already finished describes a journey
+  // that cannot have happened, and resuming it would invent progress.
+  return progressIds.every((id) => definition.stepIds.indexOf(id) < currentIndex);
 }
 
 /**
@@ -283,9 +321,23 @@ export function reduceGuidedWorkflow(
       if (definition === null) return state;
       const index = stepIndexOf(definition, state.currentStepId);
       if (index <= 0) return state;
-      const previousStepId = definition.stepIds[index - 1];
+      const previousIndex = index - 1;
+      const previousStepId = definition.stepIds[previousIndex];
       if (previousStepId === undefined) return state;
-      return { ...state, currentStepId: previousStepId };
+
+      // Going back reopens the destination step and discards progress from
+      // that step forward. Leaving later steps marked complete would let an
+      // interrupted journey resume claiming work the user is currently
+      // redoing is already finished -- and if they change an earlier decision
+      // such as material or text, that later "completion" is simply false.
+      const stillBehind = (id: string): boolean =>
+        definition.stepIds.indexOf(id) < previousIndex;
+      return {
+        ...state,
+        currentStepId: previousStepId,
+        completedStepIds: state.completedStepIds.filter(stillBehind),
+        skippedStepIds: state.skippedStepIds.filter(stillBehind),
+      };
     }
 
     case "dismiss": {

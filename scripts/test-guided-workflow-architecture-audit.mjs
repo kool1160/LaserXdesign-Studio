@@ -46,15 +46,25 @@ await runCase("export const ua = navigator.userAgent;", /navigator global/u);
 await runCase("export const g = globalThis.crypto;", /ambient globals/u);
 await runCase("export const mode = process.env.NODE_ENV;", /ambient globals/u);
 
+// Bare references and typeof bypass any pattern anchored on property access,
+// yet are exactly the coupling being prevented.
+await runCase("export const root = document;", /document global/u);
+await runCase('export const hasDom = typeof window !== "undefined";', /window global/u);
+await runCase("export const storage = localStorage;", /browser storage/u);
+await runCase("export function f(target: EventTarget): void { void target; }", /DOM type/u);
+await runCase("export function f(el: HTMLElement): void { void el; }", /DOM type/u);
+await runCase("export let node: Node | null = null;", /DOM type/u);
+
 // Must NOT fire on ordinary identifiers that merely contain a global's name,
 // or on property accesses of the caller's own objects -- a guard that blocks
 // legitimate code gets disabled, which is worse than no guard.
 await runCase(
   [
-    "interface Options { windowSize: number; documentId: string; }",
+    "interface Options { windowSize: number; documentId: string; nodeCount: number; }",
     "export function read(options: Options, host: { document: { title: string } }): string {",
     "  void options.windowSize;",
     "  void options.documentId;",
+    "  void options.nodeCount;",
     "  return host.document.title;",
     "}",
   ].join("\n"),
