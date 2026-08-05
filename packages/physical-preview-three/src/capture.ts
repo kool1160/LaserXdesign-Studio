@@ -43,6 +43,20 @@ export interface PixelContentEvidence {
 export const DEFAULT_BACKGROUND_TOLERANCE = 8;
 
 /**
+ * The single source of truth for the preview background, shared by the scene
+ * that clears to it, the renderer that validates a capture against it, and
+ * the privileged main process that independently re-validates.
+ *
+ * Three copies of this value would be three chances to drift, and a drifted
+ * background silently turns the blank-capture check into a no-op: every pixel
+ * would compare as "content" against the wrong reference colour.
+ */
+export const PREVIEW_CAPTURE_BACKGROUND: BackgroundColor = { r: 0x2b, g: 0x2b, b: 0x2b };
+
+/** The same colour as a CSS hex string, for the scene clear colour. */
+export const PREVIEW_CAPTURE_BACKGROUND_HEX = "#2b2b2b";
+
+/**
  * Proves at least one meaningful non-background pixel exists.
  *
  * Pure and renderer-independent: it takes raw RGBA bytes, so G4 can supply them
@@ -376,6 +390,32 @@ export interface CaptureFilenameInput {
   projectName: string;
   view: PreviewView;
   mode: AssemblyMode;
+  /** Drawing-buffer dimensions of the captured frame. */
+  widthPx: number;
+  heightPx: number;
+  /** The captured PNG bytes, hashed into a stable content token. */
+  pngBytes: Uint8Array;
+}
+
+/**
+ * Stable, bounded content token for a captured image.
+ *
+ * Uses the same dependency-free FNV-1a technique as the rest of LaserX's
+ * fingerprints rather than a crypto hash: this names files, it does not
+ * authenticate them, and the pure package must not depend on `node:crypto`.
+ *
+ * Hashing the encoded bytes — rather than the view/mode inputs — is what
+ * makes the name bind to what was actually rendered, including manual orbit,
+ * pan, zoom, and per-layer visibility, none of which appear in any input the
+ * caller could pass instead.
+ */
+export function captureContentToken(pngBytes: Uint8Array): string {
+  let hash = 2_166_136_261 >>> 0;
+  for (let index = 0; index < pngBytes.length; index += 1) {
+    hash ^= pngBytes[index] ?? 0;
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
 }
 
 /** Same slugging approach as `@laserx/production-export`'s `safeFilePart`. */
@@ -398,6 +438,159 @@ export function buildCaptureFilename({
   projectName,
   view,
   mode,
+  widthPx,
+  heightPx,
+  pngBytes,
 }: CaptureFilenameInput): string {
-  return `laserx-preview-${slug(projectName)}-${view}-${mode}.png`;
+  // Readable parts first so the file is still identifiable at a glance, then
+  // the exact pixel dimensions and a content token. Identical bytes at
+  // identical dimensions always produce the identical name (so a repeat
+  // capture of the same thing overwrites rather than accumulating copies),
+  // while any change in what was rendered produces a different one.
+  const dimensions = `${String(widthPx)}x${String(heightPx)}`;
+  const token = captureContentToken(pngBytes);
+  return `laserx-preview-${slug(projectName)}-${view}-${mode}-${dimensions}-${token}.png`;
+}
+
+/**
+ * Why `readPngHeader` is not sufficient on its own: it proves the signature,
+ * the `IHDR` marker, and non-zero dimensions. A payload with a plausible
+ * header but missing, truncated, or corrupt chunk framing — no `IDAT`, a bad
+ * CRC, no terminal `IEND` — still passes it. A privileged writer must not
+ * treat that as a real image, so this walks the entire chunk stream and
+ * verifies it end to end.
+ *
+ * Pure and dependency-free (CRC-32 computed inline) so it stays inside this
+ * renderer-safe package and can be shared verbatim by the privileged main
+ * process — one definition of "valid PNG", not two that can drift.
+ */
+export type PngStructureFailure =
+  | "bad-signature"
+  | "truncated"
+  | "bad-chunk-crc"
+  | "missing-ihdr"
+  | "bad-ihdr-length"
+  | "duplicate-ihdr"
+  | "missing-idat"
+  | "non-consecutive-idat"
+  | "missing-iend"
+  | "bad-iend-length"
+  | "trailing-bytes";
+
+/**
+ * `IHDR` carries exactly width, height, bit depth, colour type, compression,
+ * filter, and interlace — 13 bytes, never more or fewer. Checking this is not
+ * pedantry: `readPngHeader` reads dimensions from the first eight data bytes,
+ * so a CRC-correct chunk merely *named* `IHDR` with a wrong length would
+ * otherwise yield dimensions read out of unrelated bytes.
+ */
+const IHDR_DATA_BYTES = 13;
+
+const CRC_TABLE: number[] = (() => {
+  const table: number[] = [];
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    crc = (CRC_TABLE[(crc ^ (bytes[index] ?? 0)) & 0xff] ?? 0) ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function chunkType(bytes: Uint8Array, offset: number): string {
+  return String.fromCharCode(
+    bytes[offset] ?? 0,
+    bytes[offset + 1] ?? 0,
+    bytes[offset + 2] ?? 0,
+    bytes[offset + 3] ?? 0,
+  );
+}
+
+/**
+ * Returns `null` when the bytes are a structurally complete PNG, or the first
+ * structural defect found.
+ */
+export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | null {
+  if (bytes.length < IHDR_MINIMUM_BYTES) return "truncated";
+  for (let index = 0; index < PNG_SIGNATURE.length; index += 1) {
+    if (bytes[index] !== PNG_SIGNATURE[index]) return "bad-signature";
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  let ihdrCount = 0;
+  let idatCount = 0;
+  let sawNonIdatAfterIdat = false;
+  let sawIend = false;
+  let isFirstChunk = true;
+
+  while (offset < bytes.length) {
+    // length(4) + type(4) + data(length) + crc(4)
+    if (offset + 8 > bytes.length) return "truncated";
+    const length = readUint32BigEndian(bytes, offset);
+    const type = chunkType(bytes, offset + 4);
+    const dataStart = offset + 8;
+    const crcStart = dataStart + length;
+    if (crcStart + 4 > bytes.length) return "truncated";
+
+    // The CRC covers the type and data, not the length field.
+    if (crc32(bytes, offset + 4, crcStart) !== readUint32BigEndian(bytes, crcStart)) {
+      return "bad-chunk-crc";
+    }
+
+    if (isFirstChunk) {
+      if (type !== "IHDR") return "missing-ihdr";
+      isFirstChunk = false;
+    }
+
+    if (type === "IHDR") {
+      ihdrCount += 1;
+      if (ihdrCount > 1) return "duplicate-ihdr";
+      // A CRC-correct chunk named IHDR with the wrong length would still let
+      // readPngHeader read "dimensions" out of bytes that are not dimensions.
+      if (length !== IHDR_DATA_BYTES) return "bad-ihdr-length";
+    }
+
+    // Two ordering invariants are enforced structurally rather than by
+    // explicit branches, which would be unreachable: an IDAT can never
+    // precede IHDR because a non-IHDR first chunk already returned
+    // `missing-ihdr`, and nothing can follow IEND because IEND must end the
+    // stream exactly (any remaining byte is `trailing-bytes`), which also
+    // makes a duplicate IEND impossible to reach.
+    //
+    // IDAT consecutiveness is *not* structural and must be checked: the PNG
+    // specification requires every IDAT chunk to be consecutive, so a stream
+    // like `IHDR, IDAT, tEXt, IDAT, IEND` is malformed even though each
+    // chunk is individually well-framed and CRC-correct.
+    if (type === "IDAT") {
+      if (sawNonIdatAfterIdat) return "non-consecutive-idat";
+      idatCount += 1;
+    } else if (idatCount > 0) {
+      sawNonIdatAfterIdat = true;
+    }
+
+    if (type === "IEND") {
+      if (length !== 0) return "bad-iend-length";
+      sawIend = true;
+      offset = crcStart + 4;
+      // IEND must terminate the stream; anything after it is unaccounted for.
+      if (offset !== bytes.length) return "trailing-bytes";
+      break;
+    }
+
+    offset = crcStart + 4;
+  }
+
+  if (ihdrCount === 0) return "missing-ihdr";
+  if (idatCount === 0) return "missing-idat";
+  if (!sawIend) return "missing-iend";
+  return null;
 }

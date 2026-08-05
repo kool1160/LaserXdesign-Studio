@@ -13,6 +13,11 @@ import type { FontCatalogEntry, TextLayoutRequest } from "@laserx/fonts";
 import type { SignToolRequest } from "@laserx/sign-tools";
 import { z } from "zod";
 
+import {
+  isWithinCapturePixelBudget,
+  MAX_CAPTURE_BASE64_LENGTH,
+} from "./capture-limits.js";
+
 export const IPC_CHANNELS = {
   getState: "laserx:state:get",
   newProject: "laserx:project:new",
@@ -70,6 +75,7 @@ export const IPC_CHANNELS = {
   resolveRecovery: "laserx:recovery:resolve",
   runPhysicalPreview: "laserx:physical-preview:build",
   cancelPhysicalPreview: "laserx:physical-preview:cancel",
+  savePhysicalPreviewCapture: "laserx:physical-preview:save-capture",
   stateChanged: "laserx:state:changed",
 } as const;
 
@@ -479,6 +485,42 @@ export const runPhysicalPreviewRequestSchema = z.strictObject({
 export const cancelPhysicalPreviewRequestSchema = z.strictObject({
   operationId: z.uuid(),
 });
+
+/**
+ * Privileged capture save (G5). The renderer supplies only already-validated
+ * bytes and a flat filename; it never supplies a directory or full path, so
+ * it cannot steer the write anywhere the user has not chosen through the
+ * main-process save dialog.
+ *
+ * `filename` is constrained here to the same flat, portable `.png` shape the
+ * privileged writer enforces, so a malformed name is rejected at the IPC
+ * boundary rather than deeper in the filesystem layer.
+ */
+export const savePhysicalPreviewCaptureRequestSchema = z.strictObject({
+  filename: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._-]{0,199}\.png$/u),
+  // Derived from the writer's own byte ceiling so the two cannot drift.
+  pngBase64: z.string().min(1).max(MAX_CAPTURE_BASE64_LENGTH),
+  overwrite: z.boolean(),
+  /**
+   * The renderer's claimed capture dimensions. The privileged side decodes
+   * the PNG's own IHDR and requires exact agreement, so these are a claim to
+   * be checked against the bytes -- never a value the main process trusts.
+   */
+  widthPx: z.number().int().positive().max(65_535),
+  heightPx: z.number().int().positive().max(65_535),
+  /**
+   * Fingerprint of the assembly this capture was taken from. Main rejects a
+   * request that is not bound to the currently accepted preview assembly, so
+   * a stale or fabricated capture cannot be written as if it depicted the
+   * current document.
+   */
+  assemblyFingerprint: z.string().min(1).max(256),
+}).refine(
+  (request) => isWithinCapturePixelBudget(request.widthPx, request.heightPx),
+  // Per-axis bounds alone still permit ~4.3 billion pixels; the product is
+  // what determines the decoder allocation, so it is bounded explicitly.
+  { message: "Capture dimensions exceed the supported decoded-pixel budget." },
+);
 
 export const focusCutabilityIssueRequestSchema = z.strictObject({
   issueId: z.string().min(1).nullable(),
@@ -1334,6 +1376,24 @@ export const desktopStateSchema = z.strictObject({
       })
       .nullable(),
     assembly: physicalPreviewAssemblySchema.nullable(),
+    /**
+     * Result of the most recent privileged capture save. Reports success and
+     * failure with equal explicitness -- a silent failure here would let a
+     * user believe an image was written when it was not.
+     */
+    capture: z
+      .strictObject({
+        status: z.enum(["saved", "canceled", "failed"]),
+        targetPath: z.string().nullable(),
+        byteLength: z.number().int().nonnegative().nullable(),
+        error: z.string().nullable(),
+        // The physical-content fingerprint this status describes -- read on
+        // the main-process side to hide a stale result once the assembly is
+        // rebuilt against different content, but still part of the wire
+        // shape since the whole state object crosses the IPC boundary.
+        assemblyFingerprint: z.string().nullable(),
+      })
+      .nullable(),
   }),
 });
 
@@ -1378,6 +1438,9 @@ export type CancelCutabilityAnalysisRequest = z.infer<
 >;
 export type RunPhysicalPreviewRequest = z.infer<
   typeof runPhysicalPreviewRequestSchema
+>;
+export type SavePhysicalPreviewCaptureRequest = z.infer<
+  typeof savePhysicalPreviewCaptureRequestSchema
 >;
 export type CancelPhysicalPreviewRequest = z.infer<
   typeof cancelPhysicalPreviewRequestSchema
@@ -1506,6 +1569,9 @@ export interface LaserxDesktopApi {
   runPhysicalPreview(request: RunPhysicalPreviewRequest): Promise<CommandResult>;
   cancelPhysicalPreview(
     request: CancelPhysicalPreviewRequest,
+  ): Promise<CommandResult>;
+  savePhysicalPreviewCapture(
+    request: SavePhysicalPreviewCaptureRequest,
   ): Promise<CommandResult>;
   onStateChanged(listener: (state: DesktopState) => void): () => void;
 }

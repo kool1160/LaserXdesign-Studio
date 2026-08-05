@@ -87,9 +87,17 @@ import type {
   ConfigureVectorImportRequest,
   FocusVectorImportFindingRequest,
   ProductionExportRequest,
+  SavePhysicalPreviewCaptureRequest,
 } from "./ipc-contract.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
+import {
+  analyzePixelContent,
+  PREVIEW_CAPTURE_BACKGROUND,
+  readPngHeader,
+  validatePngStructure,
+  type PixelContentEvidence,
+} from "../../../packages/physical-preview-three/src/capture.js";
 import {
   CredentialAcquisitionCancelledError,
   CredentialAcquisitionTimeoutError,
@@ -145,6 +153,21 @@ import {
   ProductionStorage,
   type ProductionPackageFileService,
 } from "./production-storage.js";
+import {
+  isWithinCapturePixelBudget,
+  MAX_CAPTURE_BYTES,
+} from "./capture-limits.js";
+import {
+  unavailablePreviewCaptureDecoder,
+  type PreviewCaptureDecoderPort,
+} from "./preview-capture-decoder.js";
+import {
+  PreviewCaptureStorage,
+  type PreviewCaptureFileService,
+} from "./preview-capture-storage.js";
+
+/** Matches the accepted capture validator: below this nothing is a real PNG. */
+const MINIMUM_CAPTURE_PNG_BYTES = 64;
 
 const UNTITLED_PROJECT_NAME = "Untitled";
 const MAX_PROJECT_NAME_LENGTH = 200;
@@ -172,6 +195,7 @@ export interface DesktopDialogs {
     suggestedName: string,
   ): Promise<string | null>;
   chooseProductionDirectory?(suggestedName: string): Promise<string | null>;
+  choosePreviewCapturePath?(suggestedName: string): Promise<string | null>;
 }
 
 export interface DesktopControllerOptions {
@@ -186,6 +210,8 @@ export interface DesktopControllerOptions {
   geometryWorker?: GeometryWorkerPort;
   vectorStorage?: VectorFileService;
   productionStorage?: ProductionPackageFileService;
+  previewCaptureStorage?: PreviewCaptureFileService;
+  previewCaptureDecoder?: PreviewCaptureDecoderPort;
   rasterStorage?: RasterFileService;
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
@@ -331,6 +357,8 @@ export class DesktopController {
   readonly #geometryWorker: GeometryWorkerPort;
   readonly #vectorStorage: VectorFileService;
   readonly #productionStorage: ProductionPackageFileService;
+  readonly #previewCaptureStorage: PreviewCaptureFileService;
+  readonly #previewCaptureDecoder: PreviewCaptureDecoderPort;
   readonly #rasterStorage: RasterFileService;
   readonly #rasterCodec: RasterCodecPort | null;
   readonly #rasterWorker: RasterWorkerPort;
@@ -384,6 +412,20 @@ export class DesktopController {
     stage: "preparing" | "building";
   } | null = null;
   #physicalPreviewAssembly: PhysicalPreviewAssembly | null = null;
+  #physicalPreviewCapture: {
+    status: "saved" | "canceled" | "failed";
+    targetPath: string | null;
+    byteLength: number | null;
+    error: string | null;
+    /**
+     * The physical-content fingerprint in effect when this status was
+     * recorded. Read alongside it (never independently) so a save/cancel/
+     * failure result is only ever exposed while it still describes the
+     * *current* document's physical content -- see the staleness check in
+     * the `state` getter, mirroring `#physicalPreviewAssemblyFingerprint`.
+     */
+    assemblyFingerprint: string | null;
+  } | null = null;
   /**
    * The physical-content fingerprint `#physicalPreviewAssembly` was built
    * from. Read alongside it (never independently) so a last-valid assembly
@@ -421,6 +463,12 @@ export class DesktopController {
       options.geometryWorker ?? new NodeGeometryWorkerService();
     this.#vectorStorage = options.vectorStorage ?? new VectorStorage();
     this.#productionStorage = options.productionStorage ?? new ProductionStorage();
+    this.#previewCaptureStorage =
+      options.previewCaptureStorage ?? new PreviewCaptureStorage();
+    // Fail closed: without a wired decoder every capture is rejected, rather
+    // than silently skipping the decode check.
+    this.#previewCaptureDecoder =
+      options.previewCaptureDecoder ?? unavailablePreviewCaptureDecoder;
     this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
     this.#rasterCodec = options.rasterCodec ?? null;
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
@@ -563,20 +611,35 @@ export class DesktopController {
             ? null
             : structuredClone(this.#cutabilityProjection.cutability),
       },
-      physicalPreview: {
-        job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
-        // A last-valid assembly is only ever exposed while it still matches
-        // the current document's physical content. A physical edit, or a
-        // build that failed/canceled after one, must not leave a now-stale
-        // assembly on display -- this check runs on every read rather than
-        // depending on every mutation site remembering to invalidate it.
-        assembly:
-          this.#physicalPreviewAssembly === null ||
-          this.#physicalPreviewAssemblyFingerprint !==
-            fingerprintPhysicalPreviewInput(session.project)
-            ? null
-            : structuredClone(this.#physicalPreviewAssembly),
-      },
+      physicalPreview: (() => {
+        const currentInputFingerprint = fingerprintPhysicalPreviewInput(session.project);
+        return {
+          job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
+          // A last-valid assembly is only ever exposed while it still matches
+          // the current document's physical content. A physical edit, or a
+          // build that failed/canceled after one, must not leave a now-stale
+          // assembly on display -- this check runs on every read rather than
+          // depending on every mutation site remembering to invalidate it.
+          assembly:
+            this.#physicalPreviewAssembly === null ||
+            this.#physicalPreviewAssemblyFingerprint !== currentInputFingerprint
+              ? null
+              : structuredClone(this.#physicalPreviewAssembly),
+          // Same reasoning applies to a capture result: it describes an
+          // attempt against a specific physical content fingerprint, and a
+          // later rebuild or physical edit must not leave the old "Saved"
+          // (or failure) status attached to content that was never actually
+          // captured. Gating on live equality here -- rather than clearing it
+          // at every mutation site that changes physical content -- is the
+          // same pattern the assembly field already uses, and for the same
+          // reason: it cannot be forgotten at a future call site.
+          capture:
+            this.#physicalPreviewCapture === null ||
+            this.#physicalPreviewCapture.assemblyFingerprint !== currentInputFingerprint
+              ? null
+              : { ...this.#physicalPreviewCapture },
+        };
+      })(),
     };
   }
 
@@ -1522,6 +1585,209 @@ export class DesktopController {
     });
   }
 
+  /**
+   * Saves an already-validated preview capture through the privileged
+   * filesystem boundary (G5).
+   *
+   * The renderer supplies only bytes and a flat filename; the *destination*
+   * always comes from the main-process save dialog the user confirms here,
+   * so the renderer can never steer the write. Reports success, user
+   * cancellation, and failure with equal explicitness, and never touches the
+   * project: capture is a read-only side effect of a derived view.
+   */
+  public async savePhysicalPreviewCapture(
+    request: SavePhysicalPreviewCaptureRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      const dialogs = this.#dialogs;
+      if (dialogs.choosePreviewCapturePath === undefined) {
+        throw new RangeError("Saving a preview capture is unavailable in this window.");
+      }
+
+      // Every rejection below happens BEFORE the save dialog opens and before
+      // any filesystem work: an invalid or stale capture must not even prompt
+      // the user, let alone reach disk. The privileged side never trusts the
+      // renderer's claims -- it re-derives them from the bytes themselves.
+      const reject = (error: string): void => {
+        this.#physicalPreviewCapture = {
+          status: "failed",
+          targetPath: null,
+          byteLength: null,
+          error,
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
+        };
+      };
+
+      const currentAssembly = this.state.physicalPreview.assembly;
+      if (currentAssembly === null) {
+        reject("There is no current physical preview to capture, so nothing was written.");
+        return;
+      }
+      if (currentAssembly.fingerprint !== request.assemblyFingerprint) {
+        reject(
+          "The capture no longer matches the current physical preview, so nothing was written.",
+        );
+        return;
+      }
+
+      const pngBytes = Buffer.from(request.pngBase64, "base64");
+      // Round-trips the decode: base64 that silently drops invalid characters
+      // would otherwise write a corrupt PNG that still looked plausible.
+      if (pngBytes.byteLength === 0 || pngBytes.toString("base64") !== request.pngBase64) {
+        reject("The capture image data was malformed, so nothing was written.");
+        return;
+      }
+      if (pngBytes.byteLength < MINIMUM_CAPTURE_PNG_BYTES) {
+        reject("The capture image was too small to be a real PNG, so nothing was written.");
+        return;
+      }
+      // Checked here, before the dialog, against the same constant the writer
+      // enforces: a payload the writer would reject must never prompt the
+      // user for a destination first.
+      if (pngBytes.byteLength > MAX_CAPTURE_BYTES) {
+        reject("The capture exceeds the 64 MB safety limit, so nothing was written.");
+        return;
+      }
+      // Bounds the *decoded* cost before any native decode is attempted.
+      // MAX_CAPTURE_BYTES caps only the compressed payload, so a few kilobytes
+      // advertising enormous dimensions would otherwise ask the decoder for a
+      // multi-gigabyte allocation inside the privileged process. Repeated here
+      // independently of the schema, because main must not trust preload.
+      if (!isWithinCapturePixelBudget(request.widthPx, request.heightPx)) {
+        reject(
+          "The capture dimensions exceed the supported preview size, so nothing was written.",
+        );
+        return;
+      }
+
+      // Reuses the accepted pure PNG validation rather than a second decoder,
+      // so main and renderer agree on what a valid PNG is by construction.
+      // The header alone is not sufficient -- it proves only the signature,
+      // IHDR marker, and dimensions, so a truncated or CRC-corrupt chunk
+      // stream behind a plausible header would still pass. The full structure
+      // walk additionally proves chunk framing, every CRC, a real IDAT, and a
+      // terminal IEND with no trailing bytes.
+      const captureBytes = new Uint8Array(pngBytes);
+      const structureFailure = validatePngStructure(captureBytes);
+      if (structureFailure !== null) {
+        reject(
+          `The capture was not a complete, valid PNG image (${structureFailure}), so nothing was written.`,
+        );
+        return;
+      }
+      const header = readPngHeader(captureBytes);
+      if (header === null) {
+        reject("The capture was not a valid PNG image, so nothing was written.");
+        return;
+      }
+      if (header.widthPx !== request.widthPx || header.heightPx !== request.heightPx) {
+        reject(
+          "The capture dimensions did not match the encoded image, so nothing was written.",
+        );
+        return;
+      }
+
+      // Structure validation proves framing, CRCs, chunk shape, and ordering,
+      // but not that the compressed image data actually decompresses. A real
+      // decoder is the only thing that can prove the bytes are a usable
+      // image, so it runs here -- still before any dialog or filesystem work.
+      const decoded = this.#previewCaptureDecoder.decode(captureBytes);
+      if (decoded === null) {
+        reject(
+          "The capture could not be decoded as an image, so nothing was written.",
+        );
+        return;
+      }
+      // The decoder is a third independent opinion on the dimensions; all of
+      // the encoded IHDR, the typed request, and the decode must agree.
+      if (
+        decoded.widthPx !== header.widthPx ||
+        decoded.heightPx !== header.heightPx ||
+        decoded.widthPx !== request.widthPx ||
+        decoded.heightPx !== request.heightPx
+      ) {
+        reject(
+          "The decoded capture dimensions did not match the encoded image, so nothing was written.",
+        );
+        return;
+      }
+
+      // Independently proves the decoded image is not blank. The renderer runs
+      // the same check, but main cannot rely on that: a trusted-main-frame IPC
+      // payload could still carry a perfectly decodable all-transparent or
+      // all-background PNG, and saving it as a customer capture would be a
+      // silent failure. Uses the shared background/tolerance contract so the
+      // two sides cannot drift into disagreeing about what "blank" means, and
+      // derives the answer from the pixels rather than any renderer-supplied
+      // flag.
+      let decodedContent: PixelContentEvidence;
+      try {
+        decodedContent = analyzePixelContent(
+          decoded.rgba,
+          decoded.widthPx,
+          decoded.heightPx,
+          PREVIEW_CAPTURE_BACKGROUND,
+        );
+      } catch {
+        reject("The decoded capture pixels were unusable, so nothing was written.");
+        return;
+      }
+      if (decodedContent.nonBackgroundPixels === 0) {
+        reject(
+          "The capture contains only background pixels, so nothing was rendered and nothing was written.",
+        );
+        return;
+      }
+
+      const chosenPath = await dialogs.choosePreviewCapturePath(request.filename);
+      if (chosenPath === null) {
+        this.#physicalPreviewCapture = {
+          status: "canceled",
+          targetPath: null,
+          byteLength: null,
+          error: null,
+          // Fingerprint match against request.assemblyFingerprint was already
+          // proven above, so currentAssembly.fingerprint is the live value.
+          // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
+        };
+        return;
+      }
+
+      const result = await this.#previewCaptureStorage.write(
+        chosenPath,
+        new Uint8Array(pngBytes),
+        request.overwrite ? "replace" : "fail",
+      );
+      this.#physicalPreviewCapture = result.ok
+        ? {
+            status: "saved",
+            targetPath: result.targetPath,
+            byteLength: result.byteLength,
+            error: null,
+            // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
+          }
+        : {
+            status: "failed",
+            targetPath: result.targetPath,
+            byteLength: null,
+            error: result.error,
+            // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
+          };
+    });
+  }
+
   public async focusCutabilityIssue(
     issueId: string | null,
   ): Promise<CommandResult> {
@@ -2260,6 +2526,7 @@ export class DesktopController {
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
     this.#physicalPreviewAssemblyFingerprint = null;
+    this.#physicalPreviewCapture = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;

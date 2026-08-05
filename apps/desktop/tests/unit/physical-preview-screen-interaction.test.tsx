@@ -59,13 +59,20 @@ function twoLayerAssembly(): PhysicalPreviewAssembly {
 // console.error, so it cannot be suppressed with a spy). That notice is
 // expected and harmless -- interaction with the toolbar, keyboard, and
 // layer list does not require a real canvas at all.
+/** New required G5 props; capture behavior has its own dedicated tests. */
+const captureProps = {
+  onCapture: () => undefined,
+  captureStatus: null,
+  projectName: "Fixture project",
+};
+
 afterEach(() => {
   cleanup();
 });
 
 describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () => {
   it("selects a view by keyboard the same way the button does", () => {
-    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
     const container = screen.getByTestId("physical-preview-screen");
 
     expect(screen.getByTestId("physical-preview-view-perspective")).toHaveAttribute(
@@ -85,7 +92,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
   });
 
   it("resets the view by keyboard the same way the button does", () => {
-    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
     const container = screen.getByTestId("physical-preview-screen");
 
     fireEvent.keyDown(container, { key: "2" });
@@ -99,7 +106,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
   });
 
   it("toggles assembled/exploded mode by keyboard the same way the button does", () => {
-    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
     const container = screen.getByTestId("physical-preview-screen");
 
     expect(screen.getByTestId("physical-preview-mode-assembled")).toHaveAttribute(
@@ -124,7 +131,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
     const windowListener = vi.fn();
     window.addEventListener("keydown", windowListener);
     try {
-      render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+      render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
       const container = screen.getByTestId("physical-preview-screen");
 
       for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "+", "-", "1", "0", "m"]) {
@@ -145,7 +152,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
     const windowListener = vi.fn();
     window.addEventListener("keydown", windowListener);
     try {
-      render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+      render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
       const container = screen.getByTestId("physical-preview-screen");
 
       fireEvent.keyDown(container, { key: "Tab", bubbles: true });
@@ -157,7 +164,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
   });
 
   it("toggles per-layer visibility without any IPC call or project mutation", () => {
-    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} />);
+    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={() => undefined} {...captureProps} />);
 
     const faceCheckbox = screen.getByTestId(
       `physical-preview-layer-visibility-${FACE_LAYER_ID}`,
@@ -173,7 +180,7 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
 
   it("closes on the close button", () => {
     const onClose = vi.fn();
-    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={onClose} />);
+    render(<PhysicalPreviewScreen assembly={twoLayerAssembly()} onClose={onClose} {...captureProps} />);
 
     fireEvent.click(screen.getByTestId("physical-preview-close"));
 

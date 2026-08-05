@@ -2214,6 +2214,15 @@ button:disabled {
   margin-left: 8px;
 }
 
+.physical-preview-status-banner {
+  padding: 8px 12px;
+  border-bottom: 1px solid #2c5c46;
+  background: #16291f;
+  color: var(--success);
+  font-size: 11px;
+  word-break: break-all;
+}
+
 .physical-preview-warning-banner {
   padding: 8px 12px;
   border-bottom: 1px solid #5b4529;

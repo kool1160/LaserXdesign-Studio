@@ -313,7 +313,7 @@ describe("typed IPC validation", () => {
         bridgeProposal: null,
         cutability: null,
       },
-      physicalPreview: { job: null, assembly: null },
+      physicalPreview: { job: null, assembly: null, capture: null },
     });
     expect(result.success).toBe(true);
   });

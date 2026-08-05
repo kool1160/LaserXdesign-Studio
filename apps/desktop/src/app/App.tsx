@@ -334,6 +334,37 @@ export function App() {
     }
   }, []);
 
+  const savePhysicalPreviewCapture = useCallback(
+    (capture: {
+      filename: string;
+      pngBase64: string;
+      widthPx: number;
+      heightPx: number;
+      assemblyFingerprint: string;
+    }) => {
+      void (async () => {
+        setError(null);
+        try {
+          // The destination is chosen in the main process, so this call
+          // deliberately carries no path -- only bytes and a flat filename.
+          const result = await window.laserx.savePhysicalPreviewCapture({
+            filename: capture.filename,
+            pngBase64: capture.pngBase64,
+            overwrite: true,
+            widthPx: capture.widthPx,
+            heightPx: capture.heightPx,
+            assemblyFingerprint: capture.assemblyFingerprint,
+          });
+          setState(result.state);
+          if (!result.ok) setError(result.error);
+        } catch {
+          setError("The preview capture could not be saved.");
+        }
+      })();
+    },
+    [],
+  );
+
   const closePhysicalPreview = useCallback(() => {
     setPhysicalPreviewOpen(false);
     const operationId =
@@ -1956,6 +1987,9 @@ export function App() {
                     <PhysicalPreviewScreenLazy
                       assembly={state.physicalPreview.assembly}
                       onClose={closePhysicalPreview}
+                      onCapture={savePhysicalPreviewCapture}
+                      captureStatus={state.physicalPreview.capture}
+                      projectName={state.project.name}
                     />
                   </Suspense>
                 </PhysicalPreviewErrorBoundary>

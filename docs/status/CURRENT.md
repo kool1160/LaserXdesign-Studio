@@ -10,8 +10,7 @@
 - Independent planning, orchestration, exact-head audit, and acceptance authority: ChatGPT
 - Owner authority: product direction and milestone advancement
 - Codex: held unless explicitly assigned independent review, repair, comparison, or specialist work
-- Current slice: **G4 — lazy desktop integration**
-- Current implementation sub-slice: **G4A — renderer-safe integration foundation**
+- Current slice: **G5 — privileged PNG capture**
 
 On 2026-08-04 the owner briefly reassigned implementation responsibility to ChatGPT under ADR 0025, then clarified the same day that the intended durable model is Claude implementation with ChatGPT orchestration and audit authority. ADR 0026 records this correction and supersedes ADR 0025, which is retained, marked superseded, for history.
 
@@ -87,34 +86,51 @@ G2 promoted the renderer-independent physical scene and assembly contract with e
 
 G3 delivered exact-thickness Three geometry with genuine holes and nested islands, authoritative placement, solved camera fitting, presentation-only materials, content-bound capture validation helpers, source-attributed exception safety, deterministic output, and bounded resource cleanup. It stayed outside React desktop UI, Electron IPC, G5 save behavior, the M16 material catalog, and M15.
 
-## Active G4A scope
+### G4A — renderer-safe integration foundation — complete
 
-G4A establishes the renderer-safe and responsive integration foundation before a full production preview screen is wired.
+- PR #61
+- Final reviewed head: `3d21510cbbe540420df185f09405917f17313d96`
+- Review verdict: `READY`
+- Exact-head workflows: 13/13 green
+- Merge: `9ca320fe3cb7d82ad2d9c3a458790b7defbfded3`
+
+G4A delivered the renderer-safe Three adapter, the serializable worker task/progress/result contract, a physical-content-keyed assembly cache separate from requesting-snapshot identity, coalescing of identical in-flight requests with independent per-caller cancellation, and stale-result rejection.
+
+### G4B — lazy open-document preview screen — complete
+
+- PR #63
+- Final reviewed head: `d115ec5d873c67087925eb9b9bb7dac03a3df843`
+- Review verdict: `READY`
+- Exact-head workflows: 13/13 green
+- Merge: `cba0fbba3385f47cf59f4a026823256f91560639`
+
+G4B wired the open document to a lazily loaded preview screen through typed IPC, kept Three.js out of the main editor chunk under a mechanical post-build audit, bound results to the requesting snapshot, and contained lazy-chunk failure in a feature-local error boundary.
+
+### G4C — interaction, fallback, and cleanup — complete
+
+- PR #64
+- Final reviewed head: `c20a2bb851cf3b1781f95f5195ba8038ee5ad4c6`
+- Review verdict: `READY`
+- Exact-head workflows: 13/13 green
+- Merge: `c79f4b1ccce0b54fce26d0cdf1687cc79818f5bb`
+
+G4C completed mouse and keyboard interaction, per-layer presentation-only visibility, WebGL unavailable/context-loss/restoration-failure handling, and repeated open/close cleanup with packaged evidence.
+
+## Active G5 scope
+
+G5 owns the complete privileged PNG capture transaction and is the only active implementation gate.
 
 Required implementation:
 
-- remove Node-only production fallback and Node global typing from renderer-bound `packages/physical-preview-three/src`;
-- keep Node-only PNG test utilities in tests only;
-- expose readonly resource collections while retaining private internal disposal ownership;
-- define typed worker request, progress, success, failure, and cancellation contracts for physical scene construction from immutable project snapshots;
-- execute measured expensive scene analysis outside the renderer/UI thread;
-- cache completed scene results by deterministic physical-scene fingerprint;
-- reject stale results after project changes or superseding requests;
-- preserve bounded progress and cancellation;
-- prove front/back/edge/perspective, camera, assembled/exploded mode, and presentation-only visibility changes do not trigger topology recomputation;
-- prove worker or analysis failure does not mutate the project or block editing and saving;
-- add focused coordination, boundary, and regression tests.
+- same-frame RGBA readback from the accepted physical-preview renderer;
+- deterministic PNG encoding and naming bound to the exact preview content and dimensions;
+- typed preload/main IPC with sender validation;
+- explicit path, overwrite, and cancellation handling;
+- atomic filesystem save with clear success/failure results;
+- regression coverage proving capture never mutates the project, dirty state, history, analysis, SVG/DXF, or production packages;
+- packaged Windows evidence for successful save and controlled failure paths.
 
-Allowed paths are the smallest necessary set under:
-
-- `packages/physical-preview-three/`;
-- `packages/physical-preview-3d/` only if a pure serializable worker contract requires a backward-compatible export;
-- `apps/desktop/src/features/physical-preview/`;
-- `apps/desktop/src/workers/` or the existing reviewed worker location;
-- `apps/desktop/tests/`;
-- narrowly required build, audit, and documentation files.
-
-G4A does not include the complete production preview screen, capture saving, Electron filesystem IPC, material-catalog promotion, M15 onboarding, or later-milestone work.
+G5 does not include G6 packaged milestone evidence, M15, material-catalog work, export expansion, CAD/CAM, or machine control.
 
 ## Locked G4/G5 ownership boundary
 
@@ -145,11 +161,11 @@ Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production
 2. **G1 — text-heavy scaling evidence** — complete
 3. **G2 — pure physical scene package** — complete
 4. **G3 — Three renderer adapter** — complete
-5. **G4 — lazy desktop integration** — active
-   - G4A renderer-safe integration foundation — active
-   - G4B lazy open-document preview screen — held
-   - G4C interaction, fallback, and cleanup — held
-6. **G5 — privileged PNG capture** — held
+5. **G4 — lazy desktop integration** — complete
+   - G4A renderer-safe integration foundation — complete
+   - G4B lazy open-document preview screen — complete
+   - G4C interaction, fallback, and cleanup — complete
+6. **G5 — privileged PNG capture** — active
 7. **G6 — exact-head Windows evidence and owner retest** — held
 
 Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0026.

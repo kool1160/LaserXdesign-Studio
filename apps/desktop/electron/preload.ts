@@ -41,6 +41,7 @@ import {
   focusVectorImportFindingRequestSchema,
   runPhysicalPreviewRequestSchema,
   cancelPhysicalPreviewRequestSchema,
+  savePhysicalPreviewCaptureRequestSchema,
   type CreateDocumentRequest,
   type AiGenerateRequest,
   type AttachAiReferenceRequest,
@@ -76,6 +77,7 @@ import {
   type FocusVectorImportFindingRequest,
   type RunPhysicalPreviewRequest,
   type CancelPhysicalPreviewRequest,
+  type SavePhysicalPreviewCaptureRequest,
 } from "./ipc-contract.js";
 
 const api: LaserxDesktopApi = Object.freeze({
@@ -332,6 +334,12 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = cancelPhysicalPreviewRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.cancelPhysicalPreview, validated),
+    );
+  },
+  async savePhysicalPreviewCapture(request: SavePhysicalPreviewCaptureRequest) {
+    const validated = savePhysicalPreviewCaptureRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.savePhysicalPreviewCapture, validated),
     );
   },
   async previewBridge(request: BridgeProposalRequestDto) {

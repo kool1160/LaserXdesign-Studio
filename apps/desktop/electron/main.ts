@@ -10,6 +10,7 @@ import {
   nativeImage,
   safeStorage,
   shell,
+  type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from "electron";
 import {
@@ -71,8 +72,11 @@ import {
   focusVectorImportFindingRequestSchema,
   runPhysicalPreviewRequestSchema,
   cancelPhysicalPreviewRequestSchema,
+  savePhysicalPreviewCaptureRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
+import { createElectronPreviewCaptureDecoder } from "./preview-capture-decoder.js";
+import { classifyPrivilegedSender } from "./privileged-sender.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
 
 app.setName("LaserX Design Studio");
@@ -297,7 +301,40 @@ const dialogs: DesktopDialogs = {
       ? null
       : join(parent, suggestedName);
   },
+  async choosePreviewCapturePath(suggestedName) {
+    const configured = process.env.LASERX_TEST_CAPTURE_PATH;
+    if (configured !== undefined) return resolve(configured);
+    const result = await dialog.showSaveDialog(requireMainWindow(), {
+      title: "Save physical preview capture",
+      defaultPath: suggestedName,
+      filters: [{ name: "PNG image", extensions: ["png"] }],
+    });
+    return result.canceled ? null : result.filePath;
+  },
 };
+
+/**
+ * Rejects any privileged request that did not originate from this
+ * application's own main window, main frame, and allowlisted renderer URL.
+ *
+ * `ipcMain.handle` fires for *any* frame that can reach the channel, and
+ * every subframe shares its parent's `WebContents` -- so checking
+ * `event.sender` alone identifies the window, not the frame. The decision
+ * lives in `privileged-sender.ts` so it is unit-testable without launching a
+ * browser window (ADR 0024 section 6).
+ */
+function assertTrustedSender(event: IpcMainInvokeEvent): void {
+  const rejection = classifyPrivilegedSender(
+    { sender: event.sender, senderFrame: event.senderFrame },
+    mainWindow,
+    process.env.VITE_DEV_SERVER_URL,
+  );
+  if (rejection !== null) {
+    throw new Error(
+      `Rejected a privileged request from an untrusted sender (${rejection}).`,
+    );
+  }
+}
 
 function requireController(): DesktopController {
   if (controller === null) {
@@ -490,6 +527,13 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.cancelPhysicalPreview, (_event, request: unknown) => {
     const validated = cancelPhysicalPreviewRequestSchema.parse(request);
     return requireController().cancelPhysicalPreview(validated.operationId);
+  });
+  ipcMain.handle(IPC_CHANNELS.savePhysicalPreviewCapture, (event, request: unknown) => {
+    // Sender is checked before the payload is even parsed: an untrusted frame
+    // must not reach the privileged filesystem path at all.
+    assertTrustedSender(event);
+    const validated = savePhysicalPreviewCaptureRequestSchema.parse(request);
+    return requireController().savePhysicalPreviewCapture(validated);
   });
   ipcMain.handle(IPC_CHANNELS.previewBridge, (_event, request: unknown) => {
     const validated = bridgeProposalRequestSchema.parse(request);
@@ -732,6 +776,11 @@ async function createWindow(): Promise<void> {
     userDataPath: app.getPath("userData"),
     dialogs,
     onStateChanged: emitState,
+    // Privileged capture saves are gated on Electron's own image decoder, so
+    // undecodable bytes are rejected before any dialog or filesystem write.
+    previewCaptureDecoder: createElectronPreviewCaptureDecoder((buffer) =>
+      nativeImage.createFromBuffer(buffer),
+    ),
     autosaveIntervalMs: Number(
       process.env.LASERX_AUTOSAVE_INTERVAL_MS ?? 30_000,
     ),

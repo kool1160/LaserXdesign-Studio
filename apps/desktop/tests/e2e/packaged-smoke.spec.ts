@@ -79,6 +79,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "runCutabilityAnalysis",
       "runManufacturingLayerAnalysis",
       "runPhysicalPreview",
+      "savePhysicalPreviewCapture",
       "saveProject",
       "saveProjectAs",
       "saveSignTemplate",
