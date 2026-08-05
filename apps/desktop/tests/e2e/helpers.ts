@@ -77,6 +77,7 @@ export interface LaunchEnvironment {
   exportPath?: string;
   rasterPath?: string;
   productionPath?: string;
+  capturePath?: string;
   useDefaultUserData?: boolean;
 }
 
@@ -165,6 +166,9 @@ async function launchLaserxExecutable(
       ...(launchEnvironment.productionPath === undefined
         ? {}
         : { LASERX_TEST_PRODUCTION_PATH: launchEnvironment.productionPath }),
+      ...(launchEnvironment.capturePath === undefined
+        ? {}
+        : { LASERX_TEST_CAPTURE_PATH: launchEnvironment.capturePath }),
     },
   });
   const userDataPath = launchEnvironment.useDefaultUserData === true

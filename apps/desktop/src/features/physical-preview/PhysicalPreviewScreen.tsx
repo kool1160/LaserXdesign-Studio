@@ -1,11 +1,13 @@
 import type { PhysicalPreviewAssembly } from "@laserx/physical-preview-3d";
 import {
   buildAssemblyGeometries,
+  buildCaptureFilename,
   computeCameraFit,
   disposeAssemblyGeometries,
   layerAppearance,
   PREVIEW_VIEWS,
   PreviewConversionError,
+  validatePngCapture,
   type AssemblyLayerGeometry,
   type AssemblyMode,
   type PreviewView,
@@ -22,6 +24,8 @@ import {
 } from "react";
 
 import { CameraRig, type CameraRigHandle } from "./CameraRig.js";
+import { CaptureRig, type CaptureRigHandle } from "./CaptureRig.js";
+import type { SameFrameCapture } from "./sameFrameCapture.js";
 import { useWebglContextLossState } from "./useWebglContextLossState.js";
 import { isWebglAvailable } from "./webgl.js";
 
@@ -35,6 +39,9 @@ const VIEW_LABELS: Record<PreviewView, string> = {
 /** Bounded to [1, 2]: crisp on standard/retina displays without paying full
  * native resolution on very-high-DPR devices. */
 const DPR_RANGE: [number, number] = [1, 2];
+
+/** Matches the scene background below; content detection compares against it. */
+const PREVIEW_BACKGROUND_RGB = { r: 0x2b, g: 0x2b, b: 0x2b };
 
 const KEYBOARD_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
 const KEYBOARD_PAN_STEP_PX = 20;
@@ -53,6 +60,19 @@ export const KEYBOARD_ZOOM_SCALE = 0.9;
 export interface PhysicalPreviewScreenProps {
   assembly: PhysicalPreviewAssembly;
   onClose: () => void;
+  /**
+   * Hands validated capture bytes to the privileged save path (G5). The
+   * screen itself never writes a file and never learns the destination.
+   */
+  onCapture: (capture: { filename: string; pngBase64: string }) => void;
+  captureStatus: PhysicalPreviewCaptureStatus | null;
+  projectName: string;
+}
+
+export interface PhysicalPreviewCaptureStatus {
+  status: "saved" | "canceled" | "failed";
+  targetPath: string | null;
+  error: string | null;
 }
 
 function formatMm(valueMm: number): string {
@@ -65,6 +85,17 @@ function formatMm(valueMm: number): string {
  */
 function depthLabel(depthStatus: PhysicalPreviewAssembly["depthStatus"]): string {
   return depthStatus === "verified" ? "total assembled depth" : "declared stack depth — incomplete";
+}
+
+function captureMessage(status: PhysicalPreviewCaptureStatus | null): string {
+  if (status === null) return "";
+  if (status.status === "saved") {
+    return `Saved ${status.targetPath ?? "the capture"}`;
+  }
+  if (status.status === "canceled") {
+    return "Capture canceled. Nothing was written.";
+  }
+  return status.error ?? "The capture could not be saved.";
 }
 
 function WebglUnavailable() {
@@ -111,6 +142,7 @@ interface SceneContentProps {
   visibleLayerIds: ReadonlySet<string>;
   geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
   cameraRigRef: Ref<CameraRigHandle>;
+  captureRigRef: Ref<CaptureRigHandle>;
 }
 
 /** Lives inside `<Canvas>` so `computeCameraFit` can use the real pixel viewport. */
@@ -122,6 +154,7 @@ function SceneContent({
   visibleLayerIds,
   geometriesByLayer,
   cameraRigRef,
+  captureRigRef,
 }: SceneContentProps) {
   const { size } = useThree();
   const fit = useMemo(
@@ -174,6 +207,7 @@ function SceneContent({
         far={fit.far}
         resetToken={resetToken}
       />
+      <CaptureRig ref={captureRigRef} />
     </>
   );
 }
@@ -189,7 +223,13 @@ function SceneContent({
  *
  * Deliberately excluded from this slice: PNG capture (G5, privileged IPC).
  */
-export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPreviewScreenProps) {
+export default function PhysicalPreviewScreen({
+  assembly,
+  onClose,
+  onCapture,
+  captureStatus,
+  projectName,
+}: PhysicalPreviewScreenProps) {
   const [webglAvailable] = useState(() => isWebglAvailable());
   const [view, setView] = useState<PreviewView>("perspective");
   const [mode, setMode] = useState<AssemblyMode>("assembled");
@@ -197,6 +237,8 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
   const [hiddenLayerIds, setHiddenLayerIds] = useState<ReadonlySet<string>>(() => new Set());
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
   const cameraRigRef = useRef<CameraRigHandle>(null);
+  const captureRigRef = useRef<CaptureRigHandle>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const { lost: contextLost, failedToRestore } = useWebglContextLossState(canvasElement);
@@ -254,6 +296,60 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
       return next;
     });
   }, []);
+
+  /**
+   * Captures the current frame and hands the validated bytes to the
+   * privileged save path. Everything here is derived and read-only: the
+   * project is never touched, and a rejected capture surfaces an explicit
+   * message rather than silently producing a blank or corrupt image.
+   */
+  const handleCapture = useCallback(() => {
+    setCaptureError(null);
+    const rig = captureRigRef.current;
+    if (rig === null) {
+      setCaptureError("The preview canvas is not ready to capture yet.");
+      return;
+    }
+
+    let frame: SameFrameCapture;
+    try {
+      frame = rig.capture();
+    } catch (error) {
+      setCaptureError(
+        error instanceof Error ? error.message : "The preview capture failed.",
+      );
+      return;
+    }
+
+    const filename = buildCaptureFilename({ projectName, view, mode });
+    // Validated against the SAME frame the pixels came from, so a blank or
+    // wrong-sized readback is rejected before anything reaches the disk.
+    const result = validatePngCapture(
+      {
+        width: frame.widthPx,
+        height: frame.heightPx,
+        toDataURL: () => frame.dataUrl,
+      },
+      filename,
+      {
+        rgba: frame.rgba,
+        widthPx: frame.widthPx,
+        heightPx: frame.heightPx,
+        background: PREVIEW_BACKGROUND_RGB,
+      },
+    );
+    if (!result.ok) {
+      setCaptureError(result.errorMessage);
+      return;
+    }
+
+    const pngBase64 = result.dataUrl.split(",")[1];
+    if (pngBase64 === undefined || pngBase64.length === 0) {
+      setCaptureError("The preview capture produced no image data.");
+      return;
+    }
+    onCapture({ filename, pngBase64 });
+  }, [projectName, view, mode, onCapture]);
 
   const handleReset = useCallback(() => {
     setView("perspective");
@@ -381,10 +477,26 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
         <span className="physical-preview-shortcuts-hint" data-testid="physical-preview-shortcuts-hint">
           Keyboard: arrows orbit &middot; shift+arrows pan &middot; +/- zoom &middot; 1–4 views &middot; 0 reset &middot; M mode
         </span>
+        <button type="button" data-testid="physical-preview-capture" onClick={handleCapture}>
+          Capture PNG
+        </button>
         <button type="button" data-testid="physical-preview-close" onClick={onClose}>
           Close preview
         </button>
       </div>
+      {(captureError !== null || captureStatus !== null) && (
+        <div
+          className={
+            captureError === null && captureStatus?.status === "saved"
+              ? "physical-preview-status-banner"
+              : "physical-preview-warning-banner"
+          }
+          role="status"
+          data-testid="physical-preview-capture-status"
+        >
+          {captureError ?? captureMessage(captureStatus)}
+        </div>
+      )}
       {assembly.status === "partial" && (
         <div className="physical-preview-warning-banner" role="alert" data-testid="physical-preview-findings-banner">
           {assembly.findings.length} preview finding(s) — at least one declared physical layer has
@@ -425,7 +537,11 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
         ) : (
           <Canvas
             camera={{ fov: 45, near: 1, far: 10_000 }}
-            gl={{ antialias: true }}
+            // preserveDrawingBuffer is required for reliable capture readback
+            // and is a deliberate, documented cost (ADR 0024 section 6): without
+            // it the buffer may be cleared right after compositing, so the
+            // encoded PNG could not come from the same frame as the pixels.
+            gl={{ antialias: true, preserveDrawingBuffer: true }}
             dpr={DPR_RANGE}
             data-testid="physical-preview-canvas"
             onCreated={(state) => {
@@ -440,6 +556,7 @@ export default function PhysicalPreviewScreen({ assembly, onClose }: PhysicalPre
               visibleLayerIds={visibleLayerIds}
               geometriesByLayer={geometriesByLayer}
               cameraRigRef={cameraRigRef}
+              captureRigRef={captureRigRef}
             />
           </Canvas>
         )}
