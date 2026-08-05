@@ -10,11 +10,11 @@
 - Independent planning, orchestration, exact-head audit, and acceptance authority: ChatGPT
 - Owner authority: product direction and milestone advancement
 - Codex: held unless explicitly assigned independent review, repair, comparison, or specialist work
-- Current slice: **G5 — privileged PNG capture**
+- Current slice: **G6 — exact-head Windows evidence and owner retest**
 
-On 2026-08-04 the owner briefly reassigned implementation responsibility to ChatGPT under ADR 0025, then clarified the same day that the intended durable model is Claude implementation with ChatGPT orchestration and audit authority. ADR 0026 records this correction and supersedes ADR 0025, which is retained, marked superseded, for history.
+The owner explicitly advanced G6 on 2026-08-05 after PR #65 merged. G6 is validation and closure evidence, not permission to begin M15 or broaden M14.
 
-`Continue LaserX` authorizes Claude to inspect and implement only the next bounded active sub-slice. It does not authorize Issue #30 closure, M15 activation, wholesale experiment merge, or later-milestone scope. `Advance LaserX` still requires an exact-head `READY` verdict from ChatGPT and explicit owner authorization.
+`Continue LaserX` authorizes Claude to perform only the bounded G6 evidence and repair work recorded below. `Advance LaserX` is still required before Issue #30 closure or M15 activation.
 
 ## Mandatory product interpretation
 
@@ -40,112 +40,48 @@ M13 — Windows Installer, Packaging, and Private Beta Hardening — is complete
 
 ## M14 completed slice record
 
-### G0 — governance and architecture lock — complete
+- **G0 — governance and architecture lock** — PR #54, merge `a3481541a7dd246a7c3d8074f6516de09bd5af75`
+- **G1 — text-heavy scaling evidence** — PR #55, merge `0a9dd63e31fdc7e15918c8c4651492d9d1ee44ec`
+- **G2 — pure physical scene package** — PR #56, merge `e8b10c67d61decd310ccf1d5a7ad76100047babb`
+- **G3 — Three renderer adapter** — PR #57, merge `f0769507abfac2c7a999f509fad8ae348de8b86b`
+- **G4A — renderer-safe integration foundation** — PR #61, merge `9ca320fe3cb7d82ad2d9c3a458790b7defbfded3`
+- **G4B — lazy open-document preview screen** — PR #63, merge `cba0fbba3385f47cf59f4a026823256f91560639`
+- **G4C — interaction, fallback, and cleanup** — PR #64, merge `c79f4b1ccce0b54fce26d0cdf1687cc79818f5bb`
 
-- PR #54
-- Final reviewed head: `350214a70b3c9e5c1fe0a9855d703135f57c9959`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 green
-- Squash merge: `a3481541a7dd246a7c3d8074f6516de09bd5af75`
-- ADR: `docs/decisions/0024-production-physical-3d-preview-boundary.md`
+### G5 — privileged PNG capture — complete
 
-G0 locked the authoritative 2D boundary, pure scene package, Three adapter package, no-CAD-kernel and no-drei decisions, lazy-loading boundary, privileged PNG capture boundary, component-by-component promotion, and production exclusion of research fixtures and hooks.
-
-### G1 — text-heavy scaling and topology-cost evidence — complete
-
-- PR #55
-- Final reviewed head: `1adbfbacd872f4a24e3947b5b4d18eba40d9123a`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 green
-- Squash merge: `0a9dd63e31fdc7e15918c8c4651492d9d1ee44ec`
-- Evidence: `docs/experiments/m14-physical-3d-preview/G1_SCALING_EVIDENCE.md`
-
-G1 proved that realistic outlined-text cost is dominated by cutability analysis. Worker offload, fingerprint-keyed caching, progress, cancellation, and stale-result rejection are mandatory before arbitrary-document desktop wiring. View, mode, camera, and presentation-only visibility changes must not recompute topology.
-
-### G2 — pure physical scene package — complete
-
-- PR #56
-- Final reviewed head: `8ecf0fb002d712bd1110cade5b1d67e3ad34122e`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 green
-- Squash merge: `e8b10c67d61decd310ccf1d5a7ad76100047babb`
-- Production package: `packages/physical-preview-3d/`
-- Focused verification: 43 tests across four files
-
-G2 promoted the renderer-independent physical scene and assembly contract with exact thickness, authoritative layer order, holes, findings, deterministic fingerprints, source immutability, verified versus declared-incomplete depth, fail-closed invalid geometry, and renderer-safe boundaries.
-
-### G3 — Three renderer adapter — complete
-
-- PR #57
-- Final reviewed head: `9785216183535917d8ab0c7f51f37e75ed8e7503`
-- Review verdict: `READY`
-- Exact-head workflows: 12/12 green, no rerun
-- Focused verification: 162 tests across five files on Windows
-- Squash merge: `f0769507abfac2c7a999f509fad8ae348de8b86b`
-- Production package: `packages/physical-preview-three/`
-
-G3 delivered exact-thickness Three geometry with genuine holes and nested islands, authoritative placement, solved camera fitting, presentation-only materials, content-bound capture validation helpers, source-attributed exception safety, deterministic output, and bounded resource cleanup. It stayed outside React desktop UI, Electron IPC, G5 save behavior, the M16 material catalog, and M15.
-
-### G4A — renderer-safe integration foundation — complete
-
-- PR #61
-- Final reviewed head: `3d21510cbbe540420df185f09405917f17313d96`
-- Review verdict: `READY`
+- PR #65
+- Final accepted head: `d34c9cca2b7552551cfcd1efcd6fccd7baaa6a58`
 - Exact-head workflows: 13/13 green
-- Merge: `9ca320fe3cb7d82ad2d9c3a458790b7defbfded3`
+- Squash merge: `3f0d8dba70e0c218308d28d1917cd5584c928bd6`
+- Owner explicitly authorized merge after the final repair audit; G6 remained separately gated until the owner’s next command.
 
-G4A delivered the renderer-safe Three adapter, the serializable worker task/progress/result contract, a physical-content-keyed assembly cache separate from requesting-snapshot identity, coalescing of identical in-flight requests with independent per-caller cancellation, and stale-result rejection.
+G5 delivered same-frame RGBA/PNG capture, content- and dimension-bound deterministic naming, typed main-frame-validated Electron IPC, real PNG decoding, decoded-pixel and decompression-bomb limits, blank-image rejection, explicit cancellation/failure, atomic writes, and non-mutation evidence.
 
-### G4B — lazy open-document preview screen — complete
+## Active G5 scope — completed historical contract
 
-- PR #63
-- Final reviewed head: `d115ec5d873c67087925eb9b9bb7dac03a3df843`
-- Review verdict: `READY`
-- Exact-head workflows: 13/13 green
-- Merge: `cba0fbba3385f47cf59f4a026823256f91560639`
+G5 owned the complete privileged PNG capture transaction and is now merged. This heading is retained as a historical contract marker for repository-policy compatibility; it is not the active slice.
 
-G4B wired the open document to a lazily loaded preview screen through typed IPC, kept Three.js out of the main editor chunk under a mechanical post-build audit, bound results to the requesting snapshot, and contained lazy-chunk failure in a feature-local error boundary.
+G5 did not authorize G6, M15, material-catalog work, export expansion, CAD/CAM, or machine control.
 
-### G4C — interaction, fallback, and cleanup — complete
+## Active G6 scope
 
-- PR #64
-- Final reviewed head: `c20a2bb851cf3b1781f95f5195ba8038ee5ad4c6`
-- Review verdict: `READY`
-- Exact-head workflows: 13/13 green
-- Merge: `c79f4b1ccce0b54fce26d0cdf1687cc79818f5bb`
+G6 is the only active M14 slice.
 
-G4C completed mouse and keyboard interaction, per-layer presentation-only visibility, WebGL unavailable/context-loss/restoration-failure handling, and repeated open/close cleanup with packaged evidence.
+Required evidence and validation:
 
-## Active G5 scope
+- validate the exact merged `main` state, beginning from G5 merge `3f0d8dba70e0c218308d28d1917cd5584c928bd6` plus any explicitly reviewed G6 repair/evidence commits;
+- run the production package and complete packaged Windows E2E suite on the exact reviewed head;
+- prove preview code remains lazy-loaded, Three.js stays out of the main editor entry, and no research fixture, lab hook, or experiment payload ships;
+- exercise representative real projects, exact dimensions and thickness, front/back/edge/perspective views, assembled/exploded modes, orbit/pan/zoom/reset, keyboard operation, layer visibility, high DPI, WebGL/GPU fallback, context loss, and repeated resource cleanup;
+- verify preview and capture remain non-mutating across project geometry, dirty state, history, selection, analysis, save, SVG/DXF, and production-package output;
+- create a fresh private Windows installer from the exact accepted head and record provenance;
+- stop for owner hands-on validation of preview, manipulation, capture, save, reopen, export, and failure paths;
+- perform the exact-head milestone closure audit and record all evidence on Issue #30.
 
-G5 owns the complete privileged PNG capture transaction and is the only active implementation gate.
+G6 should not add product scope. A concrete defect found during validation receives the smallest bounded repair PR, exact-head regression evidence, and review before validation resumes.
 
-Required implementation:
-
-- same-frame RGBA readback from the accepted physical-preview renderer;
-- deterministic PNG encoding and naming bound to the exact preview content and dimensions;
-- typed preload/main IPC with sender validation;
-- explicit path, overwrite, and cancellation handling;
-- atomic filesystem save with clear success/failure results;
-- regression coverage proving capture never mutates the project, dirty state, history, analysis, SVG/DXF, or production packages;
-- packaged Windows evidence for successful save and controlled failure paths.
-
-G5 does not include G6 packaged milestone evidence, M15, material-catalog work, export expansion, CAD/CAM, or machine control.
-
-## Locked G4/G5 ownership boundary
-
-G4 owns rendering, lazy loading, open-document integration, progress, controls, visibility, WebGL fallback, context recovery, and renderer cleanup.
-
-G5 owns the complete capture transaction:
-
-- same-frame RGBA readback and PNG encoding;
-- content and dimension binding;
-- deterministic naming;
-- typed sender-checked preload/main IPC;
-- path and overwrite validation;
-- atomic filesystem save and explicit error handling.
-
-G4 may expose renderer capability needed by G5 but does not save files or independently claim capture success.
+Explicitly excluded: M15 onboarding, M16 material expansion and draft PR #40, process/export profiles, new AI capability, licensing, public beta, Version 1 publication, CAD/CAM, nesting, G-code, and machine control.
 
 ## M14 research basis
 
@@ -165,8 +101,8 @@ Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production
    - G4A renderer-safe integration foundation — complete
    - G4B lazy open-document preview screen — complete
    - G4C interaction, fallback, and cleanup — complete
-6. **G5 — privileged PNG capture** — active
-7. **G6 — exact-head Windows evidence and owner retest** — held
+6. **G5 — privileged PNG capture** — complete
+7. **G6 — exact-head Windows evidence and owner retest** — active
 
 Full execution rules: `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0026.
 
@@ -177,7 +113,7 @@ Do not advance to M15 until:
 - every M14 acceptance test passes;
 - required exact-head workflows are green;
 - no blocking finding remains;
-- the final private installer passes owner hands-on validation;
+- the fresh private installer passes owner hands-on validation;
 - Issue #30 is closed;
 - the exact merge and evidence are recorded;
 - the owner explicitly authorizes M15.
