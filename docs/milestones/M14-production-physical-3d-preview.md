@@ -20,8 +20,8 @@ Claude is the implementation agent. ChatGPT is the senior software engineer, pro
 - Issue #42 — accepted material-aware rendering research;
 - accepted integration recommendation at experiment head `9a4a90c6fa891ed0d9baf9bc8c99d41b04d54136`;
 - ADR 0024 — production physical-preview architecture boundary;
-- ADR 0026 — implementation and orchestration ownership (supersedes ADR 0025);
-- `docs/CLAUDE_EXECUTION_PLAN.md` — legacy path containing the active implementation plan.
+- ADR 0026 — implementation and orchestration ownership;
+- `docs/CLAUDE_EXECUTION_PLAN.md` — active implementation and validation plan.
 
 The experiment branch is never merged wholesale.
 
@@ -58,66 +58,74 @@ The experiment branch is never merged wholesale.
 2. **G1 — text-heavy scaling and topology-cost evidence — complete.**
 3. **G2 — pure physical scene package promotion — complete.**
 4. **G3 — Three renderer adapter package — complete.**
-5. **G4 — lazy desktop integration — active.**
-6. **G5 — privileged PNG capture.**
-7. **G6 — exact-head Windows validation and owner retest.**
+5. **G4 — lazy desktop integration — complete.**
+6. **G5 — privileged PNG capture — complete.** PR #65 accepted at `d34c9cca2b7552551cfcd1efcd6fccd7baaa6a58`, merge `3f0d8dba70e0c218308d28d1917cd5584c928bd6`.
+7. **G6 — exact-head Windows validation and owner retest — active.**
 
-Each gate is a bounded reviewable PR or explicitly reviewed slice. G4 is split into G4A, G4B, and G4C to prevent a single oversized desktop rewrite.
+Each gate is a bounded reviewable PR or explicitly reviewed evidence slice. G6 is validation and closure evidence, not feature expansion.
 
 ## G4A — renderer-safe integration foundation
 
-Required outcome:
+Required outcome, completed:
 
-- remove production `Buffer`/Node fallback and Node-global typing from renderer-bound adapter source while keeping Node-only test utilities in tests;
-- make externally exposed resource collections readonly while retaining private disposal ownership;
-- define a typed worker request/progress/result/error protocol for physical scene construction from an immutable project snapshot;
-- cache by deterministic physical-scene fingerprint;
-- support cancellation and reject stale results after project changes or superseding requests;
-- reuse cached scene/geometry for view, assembled/exploded mode, camera, and presentation-only visibility changes;
-- prove expensive topology/scene work never blocks the renderer/UI thread;
-- add focused coordination and boundary tests.
-
-No full production screen, capture save, Electron IPC, or G5 behavior belongs in G4A beyond the smallest harness needed to prove the integration contract.
+- renderer-safe adapter source;
+- typed worker request/progress/result/error protocol;
+- deterministic physical-content caching;
+- cancellation and stale-result rejection;
+- reuse of cached topology/geometry for view, mode, camera, and presentation-only visibility changes;
+- proof that expensive topology/scene work does not block the renderer thread.
 
 ## G4B — lazy open-document preview screen
 
-Required outcome:
+Required outcome, completed:
 
-- lazy-load the complete preview feature, Three.js, and React Three Fiber only when the user opens physical preview;
+- lazy-load the complete preview feature and Three/R3F chunk only when opened;
 - consume the current open document through a stable immutable snapshot;
-- show bounded loading and progress;
-- show truthful empty, partial, failed, analysis-limit, WebGL-unavailable, and chunk-load-failure states;
-- render exact thickness, holes, material layers, order, assembled/exploded Z, and exact dimension readouts;
-- keep editing, saving, analysis, SVG/DXF, and production export available when preview fails;
-- prove opening, closing, and regenerating preview does not dirty or mutate the project.
+- show bounded loading, progress, empty, partial, failed, and unavailable states;
+- render exact thickness, holes, layer order, assembled/exploded placement, and exact readouts;
+- preserve editing, saving, analysis, SVG/DXF, and production export when preview fails;
+- prove preview does not dirty or mutate the project.
 
 ## G4C — interaction, fallback, and cleanup
 
-Required outcome:
+Required outcome, completed:
 
 - front, back, edge, perspective view presets;
 - assembled and exploded modes;
 - orbit, pan, zoom, reset;
 - presentation-only layer visibility;
 - keyboard operation, focus behavior, accessible labels, high DPI, and bounded DPR;
-- WebGL unavailable startup behavior;
-- runtime context-loss reporting and automatic recovery where supported;
+- WebGL unavailable and runtime context-loss behavior;
 - bounded cleanup of geometry, materials, renderers, controls, listeners, workers, and caches;
-- desktop screenshots and packaged evidence;
-- representative text-heavy behavior documented against measured reference bounds without universal performance claims.
+- packaged desktop evidence.
 
 ## G5 — capture ownership
 
-G5 owns the complete capture transaction:
+G5 is complete and owns the merged capture transaction:
 
 - obtain RGBA evidence and encoded PNG from the same rendered frame and readback transaction;
-- validate signature, IHDR dimensions, canvas/evidence dimensions, non-background content, and deterministic filename;
+- validate signature, complete chunk structure, real decode, dimensions, content, and deterministic filename;
+- enforce compressed-byte and decoded-pixel resource limits before privileged decode/write;
 - cross only a typed, sender-checked Electron preload/main IPC boundary;
 - validate destination path and overwrite policy;
 - write atomically and report cancellation or failure explicitly;
+- prevent stale capture status from describing later preview content;
 - prove capture does not dirty or mutate the project and does not block normal editing.
 
-G4 may expose the renderer capability needed by G5, but G4 does not save files or independently claim validated capture success.
+## G6 — validation and closure ownership
+
+G6 must:
+
+- validate the exact merged `main` head and record the SHA;
+- run production packaging and the complete packaged Windows E2E suite;
+- prove lazy loading and absence of lab/research payloads;
+- exercise representative real projects, exact dimensions and thickness, every view and mode, mouse and keyboard controls, visibility, high DPI, GPU/WebGL fallback, context loss, and repeated resource cleanup;
+- verify preview/capture remain non-mutating across editor state and manufacturing outputs;
+- generate a fresh private Windows installer with exact provenance;
+- stop for owner hands-on validation of preview, manipulation, capture, save, reopen, export, and controlled failures;
+- complete the exact-head milestone closure audit.
+
+A defect found during G6 receives the smallest bounded repair with regression coverage and exact-head review. G6 does not authorize redesign or new product scope.
 
 ## Acceptance tests
 
@@ -140,16 +148,13 @@ G4 may expose the renderer capability needed by G5, but G4 does not save files o
 
 ## Exit checklist
 
-- [ ] G0–G6 are reviewed and merged.
+- [x] G0–G5 are reviewed and merged.
 - [x] Production ADR is accepted.
 - [x] Pure scene and Three adapter packages pass focused and root tests.
-- [ ] Desktop preview is lazy-loaded, responsive, and non-mutating.
-- [ ] Expensive analysis uses worker/cache/cancellation/progress/stale-result controls.
-- [ ] Capture uses one-frame evidence and typed Electron IPC.
-- [ ] Accessibility, high-DPI, GPU fallback, context loss, performance, and cleanup evidence pass.
-- [ ] Exact-head CI is green.
+- [ ] G6 exact-head machine evidence passes.
 - [ ] Fresh private installer passes owner hands-on validation.
-- [ ] Issue #30 is closed only after exact-head audit and owner advancement.
+- [ ] Final exact-head closure audit finds no blocker.
+- [ ] Issue #30 is closed after owner advancement.
 - [ ] Status advances to M15 only after explicit owner approval.
 
 ## Explicitly excluded
