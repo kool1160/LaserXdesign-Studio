@@ -152,6 +152,10 @@ import {
 } from "./production-storage.js";
 import { MAX_CAPTURE_BYTES } from "./capture-limits.js";
 import {
+  unavailablePreviewCaptureDecoder,
+  type PreviewCaptureDecoderPort,
+} from "./preview-capture-decoder.js";
+import {
   PreviewCaptureStorage,
   type PreviewCaptureFileService,
 } from "./preview-capture-storage.js";
@@ -201,6 +205,7 @@ export interface DesktopControllerOptions {
   vectorStorage?: VectorFileService;
   productionStorage?: ProductionPackageFileService;
   previewCaptureStorage?: PreviewCaptureFileService;
+  previewCaptureDecoder?: PreviewCaptureDecoderPort;
   rasterStorage?: RasterFileService;
   rasterCodec?: RasterCodecPort;
   rasterWorker?: RasterWorkerPort;
@@ -347,6 +352,7 @@ export class DesktopController {
   readonly #vectorStorage: VectorFileService;
   readonly #productionStorage: ProductionPackageFileService;
   readonly #previewCaptureStorage: PreviewCaptureFileService;
+  readonly #previewCaptureDecoder: PreviewCaptureDecoderPort;
   readonly #rasterStorage: RasterFileService;
   readonly #rasterCodec: RasterCodecPort | null;
   readonly #rasterWorker: RasterWorkerPort;
@@ -445,6 +451,10 @@ export class DesktopController {
     this.#productionStorage = options.productionStorage ?? new ProductionStorage();
     this.#previewCaptureStorage =
       options.previewCaptureStorage ?? new PreviewCaptureStorage();
+    // Fail closed: without a wired decoder every capture is rejected, rather
+    // than silently skipping the decode check.
+    this.#previewCaptureDecoder =
+      options.previewCaptureDecoder ?? unavailablePreviewCaptureDecoder;
     this.#rasterStorage = options.rasterStorage ?? new RasterStorage();
     this.#rasterCodec = options.rasterCodec ?? null;
     this.#rasterWorker = options.rasterWorker ?? new NodeRasterWorkerService();
@@ -1636,6 +1646,31 @@ export class DesktopController {
       if (header.widthPx !== request.widthPx || header.heightPx !== request.heightPx) {
         reject(
           "The capture dimensions did not match the encoded image, so nothing was written.",
+        );
+        return;
+      }
+
+      // Structure validation proves framing, CRCs, chunk shape, and ordering,
+      // but not that the compressed image data actually decompresses. A real
+      // decoder is the only thing that can prove the bytes are a usable
+      // image, so it runs here -- still before any dialog or filesystem work.
+      const decoded = this.#previewCaptureDecoder.decode(captureBytes);
+      if (decoded === null) {
+        reject(
+          "The capture could not be decoded as an image, so nothing was written.",
+        );
+        return;
+      }
+      // The decoder is a third independent opinion on the dimensions; all of
+      // the encoded IHDR, the typed request, and the decode must agree.
+      if (
+        decoded.widthPx !== header.widthPx ||
+        decoded.heightPx !== header.heightPx ||
+        decoded.widthPx !== request.widthPx ||
+        decoded.heightPx !== request.heightPx
+      ) {
+        reject(
+          "The decoded capture dimensions did not match the encoded image, so nothing was written.",
         );
         return;
       }

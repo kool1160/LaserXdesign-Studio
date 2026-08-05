@@ -75,6 +75,7 @@ import {
   savePhysicalPreviewCaptureRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
+import { createElectronPreviewCaptureDecoder } from "./preview-capture-decoder.js";
 import { classifyPrivilegedSender } from "./privileged-sender.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
 
@@ -775,6 +776,11 @@ async function createWindow(): Promise<void> {
     userDataPath: app.getPath("userData"),
     dialogs,
     onStateChanged: emitState,
+    // Privileged capture saves are gated on Electron's own image decoder, so
+    // undecodable bytes are rejected before any dialog or filesystem write.
+    previewCaptureDecoder: createElectronPreviewCaptureDecoder((buffer) =>
+      nativeImage.createFromBuffer(buffer),
+    ),
     autosaveIntervalMs: Number(
       process.env.LASERX_AUTOSAVE_INTERVAL_MS ?? 30_000,
     ),
