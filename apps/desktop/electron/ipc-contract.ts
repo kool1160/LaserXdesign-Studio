@@ -1387,6 +1387,11 @@ export const desktopStateSchema = z.strictObject({
         targetPath: z.string().nullable(),
         byteLength: z.number().int().nonnegative().nullable(),
         error: z.string().nullable(),
+        // The physical-content fingerprint this status describes -- read on
+        // the main-process side to hide a stale result once the assembly is
+        // rebuilt against different content, but still part of the wire
+        // shape since the whole state object crosses the IPC boundary.
+        assemblyFingerprint: z.string().nullable(),
       })
       .nullable(),
   }),

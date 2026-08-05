@@ -417,6 +417,14 @@ export class DesktopController {
     targetPath: string | null;
     byteLength: number | null;
     error: string | null;
+    /**
+     * The physical-content fingerprint in effect when this status was
+     * recorded. Read alongside it (never independently) so a save/cancel/
+     * failure result is only ever exposed while it still describes the
+     * *current* document's physical content -- see the staleness check in
+     * the `state` getter, mirroring `#physicalPreviewAssemblyFingerprint`.
+     */
+    assemblyFingerprint: string | null;
   } | null = null;
   /**
    * The physical-content fingerprint `#physicalPreviewAssembly` was built
@@ -603,24 +611,35 @@ export class DesktopController {
             ? null
             : structuredClone(this.#cutabilityProjection.cutability),
       },
-      physicalPreview: {
-        job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
-        // A last-valid assembly is only ever exposed while it still matches
-        // the current document's physical content. A physical edit, or a
-        // build that failed/canceled after one, must not leave a now-stale
-        // assembly on display -- this check runs on every read rather than
-        // depending on every mutation site remembering to invalidate it.
-        assembly:
-          this.#physicalPreviewAssembly === null ||
-          this.#physicalPreviewAssemblyFingerprint !==
-            fingerprintPhysicalPreviewInput(session.project)
-            ? null
-            : structuredClone(this.#physicalPreviewAssembly),
-        capture:
-          this.#physicalPreviewCapture === null
-            ? null
-            : { ...this.#physicalPreviewCapture },
-      },
+      physicalPreview: (() => {
+        const currentInputFingerprint = fingerprintPhysicalPreviewInput(session.project);
+        return {
+          job: this.#physicalPreviewJob === null ? null : { ...this.#physicalPreviewJob },
+          // A last-valid assembly is only ever exposed while it still matches
+          // the current document's physical content. A physical edit, or a
+          // build that failed/canceled after one, must not leave a now-stale
+          // assembly on display -- this check runs on every read rather than
+          // depending on every mutation site remembering to invalidate it.
+          assembly:
+            this.#physicalPreviewAssembly === null ||
+            this.#physicalPreviewAssemblyFingerprint !== currentInputFingerprint
+              ? null
+              : structuredClone(this.#physicalPreviewAssembly),
+          // Same reasoning applies to a capture result: it describes an
+          // attempt against a specific physical content fingerprint, and a
+          // later rebuild or physical edit must not leave the old "Saved"
+          // (or failure) status attached to content that was never actually
+          // captured. Gating on live equality here -- rather than clearing it
+          // at every mutation site that changes physical content -- is the
+          // same pattern the assembly field already uses, and for the same
+          // reason: it cannot be forgotten at a future call site.
+          capture:
+            this.#physicalPreviewCapture === null ||
+            this.#physicalPreviewCapture.assemblyFingerprint !== currentInputFingerprint
+              ? null
+              : { ...this.#physicalPreviewCapture },
+        };
+      })(),
     };
   }
 
@@ -1595,6 +1614,7 @@ export class DesktopController {
           targetPath: null,
           byteLength: null,
           error,
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
         };
       };
 
@@ -1726,6 +1746,13 @@ export class DesktopController {
           targetPath: null,
           byteLength: null,
           error: null,
+          // Fingerprint match against request.assemblyFingerprint was already
+          // proven above, so currentAssembly.fingerprint is the live value.
+          // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
         };
         return;
       }
@@ -1741,12 +1768,22 @@ export class DesktopController {
             targetPath: result.targetPath,
             byteLength: result.byteLength,
             error: null,
+            // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
           }
         : {
             status: "failed",
             targetPath: result.targetPath,
             byteLength: null,
             error: result.error,
+            // The state getter gates capture visibility against the physical
+          // *input* content fingerprint (matching the assembly staleness
+          // check), not the assembly's own output-scene fingerprint used
+          // above to validate the request -- those are different hashes.
+          assemblyFingerprint: fingerprintPhysicalPreviewInput(this.#session.state.project),
           };
     });
   }

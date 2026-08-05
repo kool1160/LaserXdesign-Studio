@@ -406,6 +406,62 @@ describe("privileged physical preview capture save", () => {
     );
   });
 
+  it("clears a saved capture status once the physical content is rebuilt after an edit", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(request(harness));
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("saved");
+
+    // A real physical edit followed by a rebuild is exactly the scenario the
+    // review flagged: the assembly is replaced, but nothing had explicitly
+    // cleared or rebound the old capture status, so a "Saved ..." banner for
+    // content that was never actually captured could still be on screen.
+    await harness.controller.editorAction({
+      type: "objects.move",
+      objectIds: [RECT_ID],
+      deltaXmm: 15,
+      deltaYmm: 0,
+    });
+    await harness.controller.runPhysicalPreview("a0000000-0000-4000-8000-000000000002");
+
+    expect(harness.controller.state.physicalPreview.assembly).not.toBeNull();
+    expect(harness.controller.state.physicalPreview.capture).toBeNull();
+  });
+
+  it("keeps a saved capture status visible across a rebuild of unchanged physical content", async () => {
+    // The companion of the test above: rebuilding without any physical
+    // change must not clear a still-accurate capture status. Otherwise the
+    // fix would be gating on "was a build ever re-run" rather than on
+    // whether the captured content actually changed.
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(request(harness));
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("saved");
+
+    await harness.controller.runPhysicalPreview("a0000000-0000-4000-8000-000000000003");
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("saved");
+  });
+
+  it("clears a failed capture status once the physical content is rebuilt after an edit", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: signatureOnlyBase64() }),
+    );
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+
+    await harness.controller.editorAction({
+      type: "objects.move",
+      objectIds: [RECT_ID],
+      deltaXmm: 15,
+      deltaYmm: 0,
+    });
+    await harness.controller.runPhysicalPreview("a0000000-0000-4000-8000-000000000004");
+
+    expect(harness.controller.state.physicalPreview.capture).toBeNull();
+  });
+
   it("rejects a signature-only payload without prompting or writing", async () => {
     const harness = await desktop((directory, suggested) => join(directory, suggested));
 
