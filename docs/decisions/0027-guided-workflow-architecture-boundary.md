@@ -82,11 +82,24 @@ current `main`) establishes the starting point precisely:
 ### 1. The guided-workflow state machine is a new, pure module
 
 `apps/desktop/src/features/onboarding/guidedWorkflowState.ts` owns guided
-first-run state: the active goal, the current step, visited/completed steps,
-and status (`active | skipped | completed | canceled | failed`). It is a pure
-TypeScript module — no React, no DOM, no Electron, no `node:` import — proven
-by mechanical audit (§5), the same way `packages/physical-preview-3d` is proven
-free of a renderer dependency.
+first-run state: the active goal and step definition, the current step, the
+completed and skipped step ids, and status
+(`idle | active | completed | dismissed | failed`). It is a pure TypeScript
+module — no React, no DOM, no Electron, no `node:` import, and no browser
+global — proven by mechanical audit (§7), the same way
+`packages/physical-preview-3d` is proven free of a renderer dependency.
+
+There is deliberately **no `canceled` status**: `cancel` restores the
+pre-guided state, which is exactly `idle`. A status the reducer can never
+produce would be a state every consumer must handle and none can observe.
+Every status in the union is reachable, and the tests prove reachability by
+walking the graph from the initial state rather than by constructing states
+by hand.
+
+Progress is tracked by **stable step id, never by array index**. An index is
+only meaningful against one exact step set; an id survives a definition
+gaining or reordering steps, and makes a stale persisted snapshot detectable
+instead of silently pointing at a different step.
 
 The module reads relevant signals from existing state (e.g.
 `workspaceIsEmpty`, `ai.connection.status`) but **never mutates** authoritative
@@ -125,32 +138,74 @@ Implementing this hiding/highlighting in `App.tsx` is G1+; G0 locks the matrix
 so later slices implement one already-agreed contract instead of inventing
 per-panel rules ad hoc.
 
-### 4. Skip, back, resume, replay, cancel, failure, and recovery
+### 4. Skipping a step is not leaving the workflow
 
-Every state the guided-workflow reducer can reach has at least one action that
-leads to a non-trapped exit — proven by exhaustively walking the reachable
-state graph in tests, not asserted by convention. `cancel` is available from
-every non-terminal state and always returns to the pre-guided state
-unmodified. `skip` always advances or completes rather than erroring.
+These are two different user intentions and are two different actions:
 
-`resume` is keyed off a persisted preference. G0 locks its **shape** only:
+- **`skip-step`** advances past the current step (recording it as skipped, not
+  completed) and keeps the workflow `active`; on the final step it completes
+  the workflow. Skipping one explanation must never end the journey.
+- **`dismiss`** leaves the workflow deliberately and is terminal.
+
+A step is recorded as completed or skipped but never both, so the summary the
+user is shown afterwards is truthful even if they went back and redid a step
+they had skipped.
+
+### 5. Every action declares its allowed source states
+
+`ALLOWED_SOURCE_STATUSES` is part of the contract, not an implementation
+detail. An action arriving from a status it does not list is a **no-op that
+returns the same state reference**. This is what makes a stale or
+out-of-sequence UI event safe: a late `start` cannot reset a journey in
+progress, and a late `resume` cannot overwrite a terminal record. Restarting
+or leaving a journey must be an explicit `replay`, `dismiss`, or `cancel`
+decision.
+
+`cancel` is the one action allowed from every status, and always returns
+exactly the pre-guided state. Two separate properties are proven in tests
+over the **reachable** state graph: every reachable non-terminal state can
+move forward on its own, and every reachable state can reach `idle` via
+`cancel`. Unreachable states are never synthesized to pad the matrix.
+
+### 6. Resumable persistence
+
+`resume` is keyed off a persisted snapshot that can truthfully reconstruct an
+interrupted workflow. G0 locks the **shape** only:
 
 ```ts
+interface OnboardingWorkflowSnapshot {
+  goal: GuidedGoal;
+  definitionVersion: number;
+  currentStepId: string;
+  completedStepIds: string[];
+  skippedStepIds: string[];
+}
+
 interface OnboardingPreferences {
   schemaVersion: 1;
-  lastGoal: GuidedGoal | null;
   completedGoals: GuidedGoal[];
   dismissed: boolean;
+  activeWorkflow: OnboardingWorkflowSnapshot | null;
 }
 ```
 
-versioned the same way `RecentProjectsStore`/`RecoveryStore` are, written
-atomically, and stored alongside `recent-projects.json` in `userData`. The
-store implementation, its IPC surface, and its wiring into
+`definitionVersion` is what makes a stale snapshot detectable: step ids are
+stable, but their meaning and ordering belong to one specific step set.
+
+Resume is **fail-closed**. A snapshot from a different goal, a different
+definition version, or naming a step the current definition no longer contains
+is refused outright and the state returns to `idle`, because there is no way to
+repair it into "probably this step" without claiming progress the user never
+made. `canResumeSnapshot` exposes that decision so a caller can offer a clean
+restart instead.
+
+Persistence is versioned the same way `RecentProjectsStore`/`RecoveryStore`
+are, written atomically, and stored alongside `recent-projects.json` in
+`userData`. The store implementation, its IPC surface, and its wiring into
 `DesktopController`/`DesktopState` are **G1 work**. G0 does not add a new IPC
 channel or touch `apps/desktop/electron/persistence.ts`.
 
-### 5. Mechanical enforcement
+### 7. Mechanical enforcement
 
 `scripts/guided-workflow-architecture-audit.mjs` reads
 `guidedWorkflowState.ts` as text and rejects a `node:` import, a `require(`
@@ -163,7 +218,7 @@ to Electron privilege or to React internals. A companion
 a real violation and does not false-positive on the clean module, matching
 `scripts/test-renderer-source-boundary-audit.mjs`.
 
-### 6. Owner-observed ten-minute fixture set
+### 8. Owner-observed ten-minute fixture set
 
 G0 defines, without producing, the fixture the owner-observed usability
 session (G6) will use: a real multi-layer `.laserx` project capable of
@@ -172,7 +227,7 @@ provenance-recording convention the M14 G6 owner retest already established
 (exact byte size and SHA-256 recorded alongside the fixture). Producing this
 fixture is G1/G6 work.
 
-### 7. Accessibility lock
+### 9. Accessibility lock
 
 Guided-workflow UI (once built) must, at minimum: remain fully keyboard
 operable; move focus deliberately when a guided overlay opens or closes and
@@ -183,7 +238,7 @@ progress or severity. These close the specific gaps already flagged as open
 during M14's physical-preview accessibility research rather than leaving them
 unaddressed a second time.
 
-### 8. Boundary and non-goals
+### 10. Boundary and non-goals
 
 Guided-workflow state never touches `packages/domain`, `packages/geometry`,
 `packages/cutability`, `packages/project-format`, `packages/production-export`,

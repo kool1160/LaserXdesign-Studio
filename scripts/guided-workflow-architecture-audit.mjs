@@ -35,6 +35,30 @@ const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
     pattern: /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'`]react/u,
     message: "guided-workflow state must not import react",
   },
+  // Import checks alone would let `window.localStorage` or `document.body`
+  // through, so the advertised no-DOM guarantee is enforced directly rather
+  // than implied. Matched as whole-word reads/calls so ordinary identifiers
+  // that merely contain these names (`windowSize`, `documentId`) still pass.
+  {
+    pattern: /(?<![.\w$])window\s*(?:\.|\[)/u,
+    message: "guided-workflow state must not touch the window global",
+  },
+  {
+    pattern: /(?<![.\w$])document\s*(?:\.|\[)/u,
+    message: "guided-workflow state must not touch the document global",
+  },
+  {
+    pattern: /(?<![.\w$])(?:localStorage|sessionStorage)\s*(?:\.|\[)/u,
+    message: "guided-workflow state must not touch browser storage",
+  },
+  {
+    pattern: /(?<![.\w$])navigator\s*(?:\.|\[)/u,
+    message: "guided-workflow state must not touch the navigator global",
+  },
+  {
+    pattern: /(?<![.\w$])(?:globalThis|process)\s*(?:\.|\[)/u,
+    message: "guided-workflow state must not reach for ambient globals",
+  },
 ];
 
 export async function auditGuidedWorkflowArchitecture(root) {
@@ -68,6 +92,6 @@ if (invokedDirectly) {
     throw new Error(`Guided-workflow architecture audit failed:\n- ${failures.join("\n- ")}`);
   }
   console.log(
-    "Guided-workflow architecture audit passed: the guided-workflow state module stays free of React, Electron, and Node dependencies.",
+    "Guided-workflow architecture audit passed: the guided-workflow state module stays free of React, Electron, Node, and DOM/browser-global dependencies.",
   );
 }

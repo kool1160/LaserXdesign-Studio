@@ -36,6 +36,31 @@ await runCase('export const id = require("node:crypto");', /CommonJS require/u);
 await runCase('import { BrowserWindow } from "electron";\nvoid BrowserWindow;', /must not import electron/u);
 await runCase('import { useState } from "react";\nvoid useState;', /must not import react/u);
 
+// DOM and ambient globals: reachable without any import, so the no-DOM
+// guarantee has to be checked directly rather than inferred from imports.
+await runCase("export const w = window.innerWidth;", /window global/u);
+await runCase('export const el = document.getElementById("x");', /document global/u);
+await runCase('export const v = localStorage.getItem("k");', /browser storage/u);
+await runCase('export const v = sessionStorage["k"];', /browser storage/u);
+await runCase("export const ua = navigator.userAgent;", /navigator global/u);
+await runCase("export const g = globalThis.crypto;", /ambient globals/u);
+await runCase("export const mode = process.env.NODE_ENV;", /ambient globals/u);
+
+// Must NOT fire on ordinary identifiers that merely contain a global's name,
+// or on property accesses of the caller's own objects -- a guard that blocks
+// legitimate code gets disabled, which is worse than no guard.
+await runCase(
+  [
+    "interface Options { windowSize: number; documentId: string; }",
+    "export function read(options: Options, host: { document: { title: string } }): string {",
+    "  void options.windowSize;",
+    "  void options.documentId;",
+    "  return host.document.title;",
+    "}",
+  ].join("\n"),
+  null,
+);
+
 // The real production module must itself pass -- proves the audit doesn't
 // false-positive on the actual guided-workflow state machine, not just on a
 // synthetic clean fixture.
@@ -43,5 +68,5 @@ const realFailures = await auditGuidedWorkflowArchitecture(resolve(import.meta.d
 assert.deepEqual(realFailures, []);
 
 console.log(
-  "Guided-workflow architecture regression tests passed: forbidden React/Electron/Node dependencies are rejected, and the real production module passes cleanly.",
+  "Guided-workflow architecture regression tests passed: forbidden React/Electron/Node imports and DOM/ambient globals are rejected, ordinary identifiers that merely contain a global's name are allowed, and the real production module passes cleanly.",
 );
