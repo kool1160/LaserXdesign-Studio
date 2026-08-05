@@ -32,7 +32,11 @@ test("physical preview opens, supports mouse and keyboard interaction and layer 
     });
 
     await page.getByTestId("open-physical-preview").click();
-    await expect(page.getByTestId("physical-preview-progress")).toBeVisible();
+    // Deliberately does not assert the transient progress indicator: it is
+    // only present while a build is in flight, so a fast build legitimately
+    // never shows it. Asserting it made a *faster* success fail, which is
+    // why this spec was intermittent on CI. The meaningful guarantee is the
+    // end state -- the canvas renders -- so that is what is asserted.
     await expect(page.getByTestId("physical-preview-canvas")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("physical-preview-view-perspective")).toHaveAttribute(
       "aria-pressed",
