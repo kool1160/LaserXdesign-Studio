@@ -346,15 +346,51 @@ describe("PNG capture validation", () => {
 });
 
 describe("capture filenames", () => {
-  it("is deterministic for the same project, view, and mode", () => {
-    const input = { projectName: "Riverside Welding", view: "front", mode: "assembled" } as const;
-    expect(buildCaptureFilename(input)).toBe(buildCaptureFilename(input));
-    expect(buildCaptureFilename(input)).toBe("laserx-preview-riverside-welding-front-assembled.png");
+  const pixels = (seed: number): Uint8Array =>
+    Uint8Array.from({ length: 64 }, (_value, index) => (index * 31 + seed) % 251);
+  const base = {
+    projectName: "Riverside Welding",
+    view: "front",
+    mode: "assembled",
+    widthPx: 800,
+    heightPx: 600,
+    pngBytes: pixels(1),
+  } as const;
+
+  it("is identical for identical bytes at identical dimensions", () => {
+    expect(buildCaptureFilename(base)).toBe(buildCaptureFilename(base));
+    // A separate array with the same contents must still hash the same: the
+    // token binds to the bytes, not to object identity.
+    expect(buildCaptureFilename({ ...base, pngBytes: pixels(1) })).toBe(
+      buildCaptureFilename(base),
+    );
+    expect(buildCaptureFilename(base)).toMatch(
+      /^laserx-preview-riverside-welding-front-assembled-800x600-[0-9a-f]{8}.png$/u,
+    );
+  });
+
+  it("changes when the captured bytes change, even at the same view, mode, and size", () => {
+    // This is the case a project/view/mode-only name could not distinguish:
+    // manual orbit, pan, zoom, or a layer-visibility change alters the pixels
+    // while every textual input stays identical.
+    expect(buildCaptureFilename({ ...base, pngBytes: pixels(2) })).not.toBe(
+      buildCaptureFilename(base),
+    );
+  });
+
+  it("changes when the pixel dimensions change", () => {
+    expect(buildCaptureFilename({ ...base, widthPx: 801 })).not.toBe(
+      buildCaptureFilename(base),
+    );
+    expect(buildCaptureFilename({ ...base, heightPx: 601 })).not.toBe(
+      buildCaptureFilename(base),
+    );
   });
 
   it("varies with view and mode", () => {
-    const base = { projectName: "Sign", view: "front", mode: "assembled" } as const;
-    expect(buildCaptureFilename({ ...base, view: "edge" })).not.toBe(buildCaptureFilename(base));
+    expect(buildCaptureFilename({ ...base, view: "edge" })).not.toBe(
+      buildCaptureFilename(base),
+    );
     expect(buildCaptureFilename({ ...base, mode: "exploded" })).not.toBe(
       buildCaptureFilename(base),
     );
@@ -362,11 +398,11 @@ describe("capture filenames", () => {
 
   it("produces a safe name for hostile project names", () => {
     expect(
-      buildCaptureFilename({ projectName: "../../etc/passwd", view: "front", mode: "assembled" }),
-    ).toBe("laserx-preview-etc-passwd-front-assembled.png");
-    expect(
-      buildCaptureFilename({ projectName: "   ", view: "front", mode: "assembled" }),
-    ).toBe("laserx-preview-project-front-assembled.png");
+      buildCaptureFilename({ ...base, projectName: "../../etc/passwd" }),
+    ).toMatch(/^laserx-preview-etc-passwd-front-assembled-800x600-[0-9a-f]{8}.png$/u);
+    expect(buildCaptureFilename({ ...base, projectName: "   " })).toMatch(
+      /^laserx-preview-project-front-assembled-800x600-[0-9a-f]{8}.png$/u,
+    );
   });
 });
 

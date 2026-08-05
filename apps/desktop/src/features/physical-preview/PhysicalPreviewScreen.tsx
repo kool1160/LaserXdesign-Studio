@@ -25,7 +25,7 @@ import {
 
 import { CameraRig, type CameraRigHandle } from "./CameraRig.js";
 import { CaptureRig, type CaptureRigHandle } from "./CaptureRig.js";
-import type { SameFrameCapture } from "./sameFrameCapture.js";
+import { decodeCaptureDataUrl, type SameFrameCapture } from "./sameFrameCapture.js";
 import { useWebglContextLossState } from "./useWebglContextLossState.js";
 import { isWebglAvailable } from "./webgl.js";
 
@@ -327,7 +327,26 @@ export default function PhysicalPreviewScreen({
       return;
     }
 
-    const filename = buildCaptureFilename({ projectName, view, mode });
+    // Decoded here so the filename can bind to the exact bytes about to be
+    // written. Built only after the capture exists -- a name derived before
+    // the frame could not describe what was actually rendered.
+    let pngBytes: Uint8Array;
+    try {
+      pngBytes = decodeCaptureDataUrl(frame.dataUrl);
+    } catch (error) {
+      setCaptureError(
+        error instanceof Error ? error.message : "The preview capture produced no image data.",
+      );
+      return;
+    }
+    const filename = buildCaptureFilename({
+      projectName,
+      view,
+      mode,
+      widthPx: frame.widthPx,
+      heightPx: frame.heightPx,
+      pngBytes,
+    });
     // Validated against the SAME frame the pixels came from, so a blank or
     // wrong-sized readback is rejected before anything reaches the disk.
     const result = validatePngCapture(

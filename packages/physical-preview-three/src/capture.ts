@@ -376,6 +376,32 @@ export interface CaptureFilenameInput {
   projectName: string;
   view: PreviewView;
   mode: AssemblyMode;
+  /** Drawing-buffer dimensions of the captured frame. */
+  widthPx: number;
+  heightPx: number;
+  /** The captured PNG bytes, hashed into a stable content token. */
+  pngBytes: Uint8Array;
+}
+
+/**
+ * Stable, bounded content token for a captured image.
+ *
+ * Uses the same dependency-free FNV-1a technique as the rest of LaserX's
+ * fingerprints rather than a crypto hash: this names files, it does not
+ * authenticate them, and the pure package must not depend on `node:crypto`.
+ *
+ * Hashing the encoded bytes — rather than the view/mode inputs — is what
+ * makes the name bind to what was actually rendered, including manual orbit,
+ * pan, zoom, and per-layer visibility, none of which appear in any input the
+ * caller could pass instead.
+ */
+export function captureContentToken(pngBytes: Uint8Array): string {
+  let hash = 2_166_136_261 >>> 0;
+  for (let index = 0; index < pngBytes.length; index += 1) {
+    hash ^= pngBytes[index] ?? 0;
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
 }
 
 /** Same slugging approach as `@laserx/production-export`'s `safeFilePart`. */
@@ -398,8 +424,18 @@ export function buildCaptureFilename({
   projectName,
   view,
   mode,
+  widthPx,
+  heightPx,
+  pngBytes,
 }: CaptureFilenameInput): string {
-  return `laserx-preview-${slug(projectName)}-${view}-${mode}.png`;
+  // Readable parts first so the file is still identifiable at a glance, then
+  // the exact pixel dimensions and a content token. Identical bytes at
+  // identical dimensions always produce the identical name (so a repeat
+  // capture of the same thing overwrites rather than accumulating copies),
+  // while any change in what was rendered produces a different one.
+  const dimensions = `${String(widthPx)}x${String(heightPx)}`;
+  const token = captureContentToken(pngBytes);
+  return `laserx-preview-${slug(projectName)}-${view}-${mode}-${dimensions}-${token}.png`;
 }
 
 /**
@@ -419,9 +455,21 @@ export type PngStructureFailure =
   | "truncated"
   | "bad-chunk-crc"
   | "missing-ihdr"
+  | "bad-ihdr-length"
+  | "duplicate-ihdr"
   | "missing-idat"
   | "missing-iend"
+  | "bad-iend-length"
   | "trailing-bytes";
+
+/**
+ * `IHDR` carries exactly width, height, bit depth, colour type, compression,
+ * filter, and interlace — 13 bytes, never more or fewer. Checking this is not
+ * pedantry: `readPngHeader` reads dimensions from the first eight data bytes,
+ * so a CRC-correct chunk merely *named* `IHDR` with a wrong length would
+ * otherwise yield dimensions read out of unrelated bytes.
+ */
+const IHDR_DATA_BYTES = 13;
 
 const CRC_TABLE: number[] = (() => {
   const table: number[] = [];
@@ -463,8 +511,8 @@ export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | n
   }
 
   let offset = PNG_SIGNATURE.length;
-  let sawIhdrFirst = false;
-  let sawIdat = false;
+  let ihdrCount = 0;
+  let idatCount = 0;
   let sawIend = false;
   let isFirstChunk = true;
 
@@ -484,11 +532,27 @@ export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | n
 
     if (isFirstChunk) {
       if (type !== "IHDR") return "missing-ihdr";
-      sawIhdrFirst = true;
       isFirstChunk = false;
     }
-    if (type === "IDAT") sawIdat = true;
+
+    if (type === "IHDR") {
+      ihdrCount += 1;
+      if (ihdrCount > 1) return "duplicate-ihdr";
+      // A CRC-correct chunk named IHDR with the wrong length would still let
+      // readPngHeader read "dimensions" out of bytes that are not dimensions.
+      if (length !== IHDR_DATA_BYTES) return "bad-ihdr-length";
+    }
+
+    // Ordering invariants are enforced structurally rather than by explicit
+    // branches, which would be unreachable: an IDAT can never precede IHDR
+    // because a non-IHDR first chunk already returned `missing-ihdr`, and
+    // nothing can follow IEND because IEND must end the stream exactly (any
+    // remaining byte is `trailing-bytes`). That also makes a duplicate IEND
+    // impossible to reach.
+    if (type === "IDAT") idatCount += 1;
+
     if (type === "IEND") {
+      if (length !== 0) return "bad-iend-length";
       sawIend = true;
       offset = crcStart + 4;
       // IEND must terminate the stream; anything after it is unaccounted for.
@@ -499,8 +563,8 @@ export function validatePngStructure(bytes: Uint8Array): PngStructureFailure | n
     offset = crcStart + 4;
   }
 
-  if (!sawIhdrFirst) return "missing-ihdr";
-  if (!sawIdat) return "missing-idat";
+  if (ihdrCount === 0) return "missing-ihdr";
+  if (idatCount === 0) return "missing-idat";
   if (!sawIend) return "missing-iend";
   return null;
 }

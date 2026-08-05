@@ -104,6 +104,50 @@ function corruptedCrcBase64(): string {
   return full.toString("base64");
 }
 
+/** IHDR with a CRC-correct but wrong-length payload. readPngHeader would
+ * still read its first 8 data bytes as "dimensions". */
+function badIhdrLengthBase64(): string {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.alloc(20); // valid PNG requires exactly 13
+  ihdrData.writeUInt32BE(CAPTURE_WIDTH, 0);
+  ihdrData.writeUInt32BE(CAPTURE_HEIGHT, 4);
+  const raw = Buffer.alloc(CAPTURE_HEIGHT * (1 + CAPTURE_WIDTH * 4));
+  return Buffer.concat([
+    signature,
+    chunk("IHDR", ihdrData),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]).toString("base64");
+}
+
+/** A second, fully valid IHDR chunk inserted after the first. */
+function duplicateIhdrBase64(): string {
+  const full = Buffer.from(realPngBase64(), "base64");
+  const ihdrChunk = full.subarray(8, 8 + 25);
+  return Buffer.concat([
+    full.subarray(0, 8 + 25),
+    ihdrChunk,
+    full.subarray(8 + 25),
+  ]).toString("base64");
+}
+
+/** IEND carrying data, which a conforming terminator never does. */
+function nonEmptyIendBase64(): string {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.alloc(13);
+  ihdrData.writeUInt32BE(CAPTURE_WIDTH, 0);
+  ihdrData.writeUInt32BE(CAPTURE_HEIGHT, 4);
+  ihdrData[8] = 8;
+  ihdrData[9] = 6;
+  const raw = Buffer.alloc(CAPTURE_HEIGHT * (1 + CAPTURE_WIDTH * 4));
+  return Buffer.concat([
+    signature,
+    chunk("IHDR", ihdrData),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.from("nope", "ascii")),
+  ]).toString("base64");
+}
+
 /** Only the 8-byte signature plus padding: structurally not a PNG. */
 function signatureOnlyBase64(): string {
   const bytes = Buffer.alloc(128);
@@ -354,6 +398,46 @@ describe("privileged physical preview capture save", () => {
     expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
     expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
       /bad-chunk-crc/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects a CRC-correct IHDR whose length is not exactly 13 bytes", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: badIhdrLengthBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /bad-ihdr-length/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+    expect((await readdir(harness.directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
+  });
+
+  it("rejects a duplicate IHDR chunk", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: duplicateIhdrBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /duplicate-ihdr/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects an IEND chunk carrying data", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: nonEmptyIendBase64() }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /bad-iend-length/u,
     );
     expect(harness.chosenPaths).toEqual([]);
   });
