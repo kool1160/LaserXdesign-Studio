@@ -93,6 +93,32 @@ describe("PreviewCaptureStorage", () => {
     expect(await readdir(directory)).toEqual(["preview.png"]);
   });
 
+  it("lets exactly one concurrent fail-policy writer win, with the winner's bytes intact", async () => {
+    const directory = await temporaryDirectory();
+    const target = join(directory, "preview.png");
+    const storage = new PreviewCaptureStorage();
+    // Distinct payloads so the surviving file identifies its writer: a
+    // stat-then-rename publish would let a loser silently replace the winner.
+    const payloads = [10, 20, 30, 40].map((size) => pngBytes(128 + size));
+
+    const results = await Promise.all(
+      payloads.map((bytes) => storage.write(target, bytes, "fail")),
+    );
+
+    const winners = results.filter((result) => result.ok);
+    const losers = results.filter((result) => !result.ok);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(3);
+    for (const loser of losers) {
+      expect(loser.error).toMatch(/already exists/u);
+    }
+
+    const written = new Uint8Array(await readFile(target));
+    expect(written).toHaveLength(winners[0]?.byteLength ?? -1);
+    // No staging file may survive from any writer, winner or loser.
+    expect(await readdir(directory)).toEqual(["preview.png"]);
+  });
+
   it("rejects an empty capture without creating a file", async () => {
     const directory = await temporaryDirectory();
     const target = join(directory, "preview.png");

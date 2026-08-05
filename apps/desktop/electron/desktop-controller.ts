@@ -91,6 +91,7 @@ import type {
 } from "./ipc-contract.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
+import { readPngHeader } from "../../../packages/physical-preview-three/src/capture.js";
 import {
   CredentialAcquisitionCancelledError,
   CredentialAcquisitionTimeoutError,
@@ -150,6 +151,9 @@ import {
   PreviewCaptureStorage,
   type PreviewCaptureFileService,
 } from "./preview-capture-storage.js";
+
+/** Matches the accepted capture validator: below this nothing is a real PNG. */
+const MINIMUM_CAPTURE_PNG_BYTES = 64;
 
 const UNTITLED_PROJECT_NAME = "Untitled";
 const MAX_PROJECT_NAME_LENGTH = 200;
@@ -1561,16 +1565,54 @@ export class DesktopController {
         throw new RangeError("Saving a preview capture is unavailable in this window.");
       }
 
-      const pngBytes = Buffer.from(request.pngBase64, "base64");
-      // Round-trips the decode: base64 that silently drops invalid characters
-      // would otherwise write a corrupt PNG that still looked plausible.
-      if (pngBytes.byteLength === 0 || pngBytes.toString("base64") !== request.pngBase64) {
+      // Every rejection below happens BEFORE the save dialog opens and before
+      // any filesystem work: an invalid or stale capture must not even prompt
+      // the user, let alone reach disk. The privileged side never trusts the
+      // renderer's claims -- it re-derives them from the bytes themselves.
+      const reject = (error: string): void => {
         this.#physicalPreviewCapture = {
           status: "failed",
           targetPath: null,
           byteLength: null,
-          error: "The capture image data was malformed, so nothing was written.",
+          error,
         };
+      };
+
+      const currentAssembly = this.state.physicalPreview.assembly;
+      if (currentAssembly === null) {
+        reject("There is no current physical preview to capture, so nothing was written.");
+        return;
+      }
+      if (currentAssembly.fingerprint !== request.assemblyFingerprint) {
+        reject(
+          "The capture no longer matches the current physical preview, so nothing was written.",
+        );
+        return;
+      }
+
+      const pngBytes = Buffer.from(request.pngBase64, "base64");
+      // Round-trips the decode: base64 that silently drops invalid characters
+      // would otherwise write a corrupt PNG that still looked plausible.
+      if (pngBytes.byteLength === 0 || pngBytes.toString("base64") !== request.pngBase64) {
+        reject("The capture image data was malformed, so nothing was written.");
+        return;
+      }
+      if (pngBytes.byteLength < MINIMUM_CAPTURE_PNG_BYTES) {
+        reject("The capture image was too small to be a real PNG, so nothing was written.");
+        return;
+      }
+
+      // Reuses the accepted pure PNG validation rather than a second decoder,
+      // so main and renderer agree on what a valid PNG is by construction.
+      const header = readPngHeader(new Uint8Array(pngBytes));
+      if (header === null) {
+        reject("The capture was not a valid PNG image, so nothing was written.");
+        return;
+      }
+      if (header.widthPx !== request.widthPx || header.heightPx !== request.heightPx) {
+        reject(
+          "The capture dimensions did not match the encoded image, so nothing was written.",
+        );
         return;
       }
 

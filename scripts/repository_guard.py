@@ -228,7 +228,11 @@ def check_instruction_links(errors: list[str]) -> None:
         (
             "M14 — Production Physical 3D Preview Integration",
             "Implementation lead: Claude",
-            "Current implementation sub-slice: **G4A",
+            # G4's sub-slices (G4A/G4B/G4C) are all complete and merged, so the
+            # active gate is now a whole slice with no sub-slice. The
+            # `- Current slice: **G<0-6> ` line remains guarded by
+            # CURRENT_SLICE_PATTERN below.
+            "## Active G5 scope",
             "Issues #44 and #37",
         ),
         "docs/status/CURRENT.md",

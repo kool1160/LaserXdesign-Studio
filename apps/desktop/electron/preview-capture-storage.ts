@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rename, rm, stat, writeFile } from "node:fs/promises";
+import { link, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
 /**
@@ -55,13 +55,13 @@ export function safeCapturePath(targetPath: string): string {
   return normalized;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch {
-    return false;
-  }
+function isAlreadyExistsError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "EEXIST"
+  );
 }
 
 export class PreviewCaptureStorage implements PreviewCaptureFileService {
@@ -99,22 +99,44 @@ export class PreviewCaptureStorage implements PreviewCaptureFileService {
       };
     }
 
-    if ((await exists(normalized)) && conflictPolicy === "fail") {
-      return {
-        ok: false,
-        targetPath: normalized,
-        byteLength: pngBytes.byteLength,
-        error: "That file already exists. Choose Replace existing capture to overwrite it.",
-      };
-    }
-
-    // Staged in the destination directory so the final rename is a same-volume
-    // atomic move; a cross-volume temp directory could silently degrade to a
+    // Staged in the destination directory so publishing is a same-volume
+    // operation; a cross-volume temp directory could silently degrade to a
     // non-atomic copy and reintroduce the partial-write failure mode.
     const staging = join(dirname(normalized), `.${basename(normalized)}.${randomUUID()}.staging`);
     try {
       await writeFile(staging, pngBytes, { flag: "wx" });
-      await rename(staging, normalized);
+
+      if (conflictPolicy === "replace") {
+        // rename replaces an existing target atomically on both POSIX and
+        // Windows (MoveFileEx with MOVEFILE_REPLACE_EXISTING).
+        await rename(staging, normalized);
+      } else {
+        // No-clobber publish must be atomic, not a stat-then-rename: two
+        // concurrent writers can both observe an absent target, and the later
+        // rename would silently replace the first completed capture even
+        // though both asked to fail. `link` fails with EEXIST if the target
+        // exists, and that check-and-create is performed by the filesystem as
+        // a single operation, so exactly one concurrent writer can win.
+        try {
+          await link(staging, normalized);
+        } catch (error) {
+          if (isAlreadyExistsError(error)) {
+            await rm(staging, { force: true }).catch(() => undefined);
+            return {
+              ok: false,
+              targetPath: normalized,
+              byteLength: pngBytes.byteLength,
+              error:
+                "That file already exists. Choose Replace existing capture to overwrite it.",
+            };
+          }
+          throw error;
+        }
+        // The bytes are already published under the target name; the staging
+        // link is now redundant. Failing to remove it must not fail the save.
+        await unlink(staging).catch(() => undefined);
+      }
+
       return {
         ok: true,
         targetPath: normalized,

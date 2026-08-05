@@ -75,6 +75,7 @@ import {
   savePhysicalPreviewCaptureRequestSchema,
   type DesktopState,
 } from "./ipc-contract.js";
+import { classifyPrivilegedSender } from "./privileged-sender.js";
 import { ElectronRasterCodec } from "./raster-codec.js";
 
 app.setName("LaserX Design Studio");
@@ -313,22 +314,24 @@ const dialogs: DesktopDialogs = {
 
 /**
  * Rejects any privileged request that did not originate from this
- * application's own main window.
+ * application's own main window, main frame, and allowlisted renderer URL.
  *
- * `ipcMain.handle` fires for *any* frame in the process that can reach the
- * channel. The preview feature never loads remote or third-party content
- * today, but a privileged filesystem write must not depend on that staying
- * true -- this makes the trust boundary explicit at the handler rather than
- * implicit in the app's current navigation policy (ADR 0024 section 6).
+ * `ipcMain.handle` fires for *any* frame that can reach the channel, and
+ * every subframe shares its parent's `WebContents` -- so checking
+ * `event.sender` alone identifies the window, not the frame. The decision
+ * lives in `privileged-sender.ts` so it is unit-testable without launching a
+ * browser window (ADR 0024 section 6).
  */
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
-  const window = mainWindow;
-  if (
-    window === null ||
-    window.isDestroyed() ||
-    event.sender !== window.webContents
-  ) {
-    throw new Error("Rejected a privileged request from an untrusted sender.");
+  const rejection = classifyPrivilegedSender(
+    { sender: event.sender, senderFrame: event.senderFrame },
+    mainWindow,
+    process.env.VITE_DEV_SERVER_URL,
+  );
+  if (rejection !== null) {
+    throw new Error(
+      `Rejected a privileged request from an untrusted sender (${rejection}).`,
+    );
   }
 }
 

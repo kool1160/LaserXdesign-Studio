@@ -1,58 +1,179 @@
+import { deflateSync } from "node:zlib";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createBlankProject, type LaserxProject } from "@laserx/domain";
+import {
+  createBlankProject,
+  identityTransform,
+  type LaserxProject,
+  type Layer,
+} from "@laserx/domain";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   DesktopController,
   type DesktopDialogs,
 } from "../../electron/desktop-controller.js";
+import {
+  runPhysicalPreviewTask,
+  type PhysicalPreviewTaskRequest,
+  type PhysicalPreviewTaskResult,
+} from "../../../../packages/physical-preview-3d/src/task.js";
+import type { PhysicalPreviewWorkerPort } from "../../electron/physical-preview-worker-service.js";
+
+const OPERATION_ID = "a0000000-0000-4000-8000-000000000001";
+const FACE_LAYER_ID = "b0000000-0000-4000-8000-000000000001";
+const RECT_ID = "c0000000-0000-4000-8000-000000000001";
+const CAPTURE_WIDTH = 8;
+const CAPTURE_HEIGHT = 4;
 
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
 
-function pngBase64(): string {
-  const bytes = new Uint8Array(128);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  return Buffer.from(bytes).toString("base64");
+function crc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
-function project(): LaserxProject {
+function chunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const typeAndData = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(typeAndData), 0);
+  return Buffer.concat([length, typeAndData, crc]);
+}
+
+/** A genuinely well-formed PNG, so tests exercise real header validation. */
+function realPngBase64(widthPx = CAPTURE_WIDTH, heightPx = CAPTURE_HEIGHT): string {
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdrData = Buffer.alloc(13);
+  ihdrData.writeUInt32BE(widthPx, 0);
+  ihdrData.writeUInt32BE(heightPx, 4);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 6; // RGBA
+  const raw = Buffer.alloc(heightPx * (1 + widthPx * 4));
+  for (let row = 0; row < heightPx; row += 1) {
+    raw[row * (1 + widthPx * 4)] = 0; // filter: none
+  }
+  return Buffer.concat([
+    signature,
+    chunk("IHDR", ihdrData),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]).toString("base64");
+}
+
+/** Only the 8-byte signature plus padding: structurally not a PNG. */
+function signatureOnlyBase64(): string {
+  const bytes = Buffer.alloc(128);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0);
+  return bytes.toString("base64");
+}
+
+function physicalProject(): LaserxProject {
+  const layer: Layer = {
+    id: FACE_LAYER_ID,
+    name: "Face",
+    visible: true,
+    locked: false,
+    manufacturing: {
+      role: "face",
+      material: "mild-steel",
+      thicknessMm: 3,
+      stockThicknessDesignation: null,
+      process: "laser",
+      notes: "",
+      registrationGroup: null,
+      registrationHoleIds: [],
+    },
+  };
   return createBlankProject({
     id: "aaaaaaaa-0000-4000-8000-000000000001",
     documentId: "aaaaaaaa-0000-4000-8000-000000000002",
     now: "2026-08-05T12:00:00.000Z",
     width: 200,
     height: 100,
+    layers: [layer],
+    activeLayerId: FACE_LAYER_ID,
+    objects: [
+      {
+        id: RECT_ID,
+        type: "rectangle",
+        layerId: FACE_LAYER_ID,
+        transform: identityTransform(),
+        origin: { xMm: 10, yMm: 10 },
+        widthMm: 80,
+        heightMm: 40,
+      },
+    ],
   });
 }
 
+const immediateWorker: PhysicalPreviewWorkerPort = {
+  run: (request: PhysicalPreviewTaskRequest): Promise<PhysicalPreviewTaskResult> =>
+    Promise.resolve(runPhysicalPreviewTask(request)),
+};
+
+interface Harness {
+  controller: DesktopController;
+  directory: string;
+  chosenPaths: string[];
+  fingerprint: string;
+}
+
 async function desktop(
-  choosePreviewCapturePath: (suggested: string) => Promise<string | null>,
-): Promise<{ controller: DesktopController; directory: string }> {
+  choose: (directory: string, suggested: string) => string | null,
+): Promise<Harness> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-capture-ipc-"));
   temporaryDirectories.push(directory);
+  const chosenPaths: string[] = [];
   const dialogs: DesktopDialogs = {
     chooseOpenProject: () => Promise.resolve(join(directory, "p.laserx")),
     chooseSaveProject: () => Promise.resolve(null),
     confirmUnsavedChanges: () => Promise.resolve("discard"),
-    choosePreviewCapturePath,
+    choosePreviewCapturePath: (suggested) => {
+      const chosen = choose(directory, suggested);
+      if (chosen !== null) chosenPaths.push(chosen);
+      return Promise.resolve(chosen);
+    },
   };
   const controller = new DesktopController({
     userDataPath: directory,
     dialogs,
     onStateChanged: () => undefined,
     projectStorage: {
-      read: () => Promise.resolve(project()),
+      read: () => Promise.resolve(physicalProject()),
       write: () => Promise.resolve(),
     },
+    physicalPreviewWorker: immediateWorker,
   });
   controllers.push(controller);
   await controller.initialize();
   await controller.openProject();
-  return { controller, directory };
+  await controller.runPhysicalPreview(OPERATION_ID);
+  const fingerprint = controller.state.physicalPreview.assembly?.fingerprint;
+  if (fingerprint === undefined) throw new Error("Expected a built preview assembly.");
+  return { controller, directory, chosenPaths, fingerprint };
+}
+
+function request(harness: Harness, overrides: Record<string, unknown> = {}) {
+  return {
+    filename: "laserx-preview-fixture-front-assembled.png",
+    pngBase64: realPngBase64(),
+    overwrite: true,
+    widthPx: CAPTURE_WIDTH,
+    heightPx: CAPTURE_HEIGHT,
+    assemblyFingerprint: harness.fingerprint,
+    ...overrides,
+  } as Parameters<DesktopController["savePhysicalPreviewCapture"]>[0];
 }
 
 afterEach(async () => {
@@ -65,128 +186,154 @@ afterEach(async () => {
 });
 
 describe("privileged physical preview capture save", () => {
-  it("writes the capture to the chosen path and reports it as saved", async () => {
-    const { controller, directory } = await desktop((suggested) =>
-      Promise.resolve(join(directory, suggested)),
-    );
+  it("writes a valid capture to the chosen path and reports it saved", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
 
-    const result = await controller.savePhysicalPreviewCapture({
-      filename: "laserx-preview-fixture-front-assembled.png",
-      pngBase64: pngBase64(),
-      overwrite: true,
-    });
+    const result = await harness.controller.savePhysicalPreviewCapture(request(harness));
 
     expect(result).toMatchObject({ ok: true });
-    expect(controller.state.physicalPreview.capture).toMatchObject({
+    expect(harness.controller.state.physicalPreview.capture).toMatchObject({
       status: "saved",
-      byteLength: 128,
       error: null,
     });
     const written = await readFile(
-      join(directory, "laserx-preview-fixture-front-assembled.png"),
+      join(harness.directory, "laserx-preview-fixture-front-assembled.png"),
     );
     expect(written.subarray(0, 8)).toEqual(
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     );
   });
 
-  it("treats a canceled save dialog as a clean no-op that writes nothing", async () => {
-    const { controller, directory } = await desktop(() => Promise.resolve(null));
+  it("rejects a signature-only payload without prompting or writing", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
 
-    const result = await controller.savePhysicalPreviewCapture({
-      filename: "laserx-preview-fixture-front-assembled.png",
-      pngBase64: pngBase64(),
-      overwrite: true,
-    });
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: signatureOnlyBase64() }),
+    );
 
-    expect(result).toMatchObject({ ok: true });
-    expect(controller.state.physicalPreview.capture).toMatchObject({
-      status: "canceled",
+    expect(harness.controller.state.physicalPreview.capture).toMatchObject({
+      status: "failed",
       targetPath: null,
-      error: null,
     });
-    expect(await readdir(directory)).not.toContain(
+    // The save dialog must never have opened for invalid evidence.
+    expect(harness.chosenPaths).toEqual([]);
+    expect(await readdir(harness.directory)).not.toContain(
       "laserx-preview-fixture-front-assembled.png",
     );
   });
 
-  it("reports an explicit failure when the write is rejected, without claiming success", async () => {
-    const { controller, directory } = await desktop(() =>
-      // A directory that does not exist: the writer must fail loudly rather
-      // than inventing folders the user never confirmed.
-      Promise.resolve(join(directory, "missing", "capture.png")),
+  it("rejects a capture whose claimed dimensions disagree with its IHDR", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { widthPx: CAPTURE_WIDTH + 1 }),
     );
 
-    await controller.savePhysicalPreviewCapture({
-      filename: "capture.png",
-      pngBase64: pngBase64(),
-      overwrite: true,
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /dimensions did not match/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects a capture bound to a stale assembly fingerprint", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { assemblyFingerprint: "stale-fingerprint" }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /no longer matches the current physical preview/u,
+    );
+    expect(harness.chosenPaths).toEqual([]);
+  });
+
+  it("rejects a capture after the physical content changed underneath it", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+    const staleFingerprint = harness.fingerprint;
+
+    // A real physical edit invalidates the displayed assembly, so a capture
+    // taken before it no longer depicts the current document.
+    await harness.controller.editorAction({
+      type: "objects.move",
+      objectIds: [RECT_ID],
+      deltaXmm: 15,
+      deltaYmm: 0,
     });
 
-    const capture = controller.state.physicalPreview.capture;
-    expect(capture?.status).toBe("failed");
-    expect(capture?.error).toMatch(/could not be saved/u);
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { assemblyFingerprint: staleFingerprint }),
+    );
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.chosenPaths).toEqual([]);
   });
 
   it("rejects malformed base64 before anything reaches the filesystem", async () => {
-    const { controller, directory } = await desktop((suggested) =>
-      Promise.resolve(join(directory, suggested)),
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+
+    await harness.controller.savePhysicalPreviewCapture(
+      request(harness, { pngBase64: "!!!!not-base64!!!!" }),
     );
 
-    await controller.savePhysicalPreviewCapture({
-      filename: "capture.png",
-      // Not valid base64: a permissive decode would otherwise write a
-      // corrupt-but-plausible PNG.
-      pngBase64: "!!!!not-base64!!!!",
-      overwrite: true,
-    });
-
-    expect(controller.state.physicalPreview.capture).toMatchObject({
-      status: "failed",
-      targetPath: null,
-    });
-    expect(await readdir(directory)).not.toContain("capture.png");
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.chosenPaths).toEqual([]);
   });
 
-  it("never mutates the document, dirty flag, history, or selection", async () => {
-    const { controller, directory } = await desktop((suggested) =>
-      Promise.resolve(join(directory, suggested)),
-    );
-    const beforeDocument = JSON.stringify(controller.state.project.document);
-    const beforeDirty = controller.state.dirty;
-    const beforeUndoDepth = controller.state.editor.history.undoDepth;
-    const beforeSelection = controller.state.editor.selectionIds;
+  it("treats a canceled save dialog as a clean no-op that writes nothing", async () => {
+    const harness = await desktop(() => null);
 
-    await controller.savePhysicalPreviewCapture({
-      filename: "laserx-preview-fixture-front-assembled.png",
-      pngBase64: pngBase64(),
-      overwrite: true,
+    const result = await harness.controller.savePhysicalPreviewCapture(request(harness));
+
+    expect(result).toMatchObject({ ok: true });
+    expect(harness.controller.state.physicalPreview.capture).toMatchObject({
+      status: "canceled",
+      targetPath: null,
+      error: null,
     });
+    expect(await readdir(harness.directory)).not.toContain(
+      "laserx-preview-fixture-front-assembled.png",
+    );
+  });
 
-    expect(JSON.stringify(controller.state.project.document)).toBe(beforeDocument);
-    expect(controller.state.dirty).toBe(beforeDirty);
-    expect(controller.state.editor.history.undoDepth).toBe(beforeUndoDepth);
-    expect(controller.state.editor.selectionIds).toEqual(beforeSelection);
-    // Capture is a derived, read-only side effect: analysis and export
-    // surfaces must be untouched by it too.
-    expect(controller.state.analysis.cutability).toBeNull();
-    expect(controller.state.production.exportSummary).toBeNull();
-    expect(controller.state.interchange.exportSummary).toBeNull();
+  it("reports an explicit failure when the destination cannot be written", async () => {
+    const harness = await desktop((directory) => join(directory, "missing", "capture.png"));
+
+    await harness.controller.savePhysicalPreviewCapture(request(harness));
+
+    expect(harness.controller.state.physicalPreview.capture?.status).toBe("failed");
+    expect(harness.controller.state.physicalPreview.capture?.error).toMatch(
+      /could not be saved/u,
+    );
+  });
+
+  it("never mutates the document, dirty flag, history, selection, or export surfaces", async () => {
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+    const beforeDocument = JSON.stringify(harness.controller.state.project.document);
+    const beforeDirty = harness.controller.state.dirty;
+    const beforeUndoDepth = harness.controller.state.editor.history.undoDepth;
+    const beforeSelection = harness.controller.state.editor.selectionIds;
+
+    await harness.controller.savePhysicalPreviewCapture(request(harness));
+
+    expect(JSON.stringify(harness.controller.state.project.document)).toBe(beforeDocument);
+    expect(harness.controller.state.dirty).toBe(beforeDirty);
+    expect(harness.controller.state.editor.history.undoDepth).toBe(beforeUndoDepth);
+    expect(harness.controller.state.editor.selectionIds).toEqual(beforeSelection);
+    expect(harness.controller.state.analysis.cutability).toBeNull();
+    expect(harness.controller.state.production.exportSummary).toBeNull();
+    expect(harness.controller.state.interchange.exportSummary).toBeNull();
   });
 
   it("clears the capture result when a different project is opened", async () => {
-    const { controller, directory } = await desktop((suggested) =>
-      Promise.resolve(join(directory, suggested)),
-    );
-    await controller.savePhysicalPreviewCapture({
-      filename: "laserx-preview-fixture-front-assembled.png",
-      pngBase64: pngBase64(),
-      overwrite: true,
-    });
-    expect(controller.state.physicalPreview.capture).not.toBeNull();
+    const harness = await desktop((directory, suggested) => join(directory, suggested));
+    await harness.controller.savePhysicalPreviewCapture(request(harness));
+    expect(harness.controller.state.physicalPreview.capture).not.toBeNull();
 
-    await controller.newProject();
+    await harness.controller.newProject();
 
-    expect(controller.state.physicalPreview.capture).toBeNull();
+    expect(harness.controller.state.physicalPreview.capture).toBeNull();
   });
 });

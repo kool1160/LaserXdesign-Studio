@@ -335,7 +335,13 @@ export function App() {
   }, []);
 
   const savePhysicalPreviewCapture = useCallback(
-    (capture: { filename: string; pngBase64: string }) => {
+    (capture: {
+      filename: string;
+      pngBase64: string;
+      widthPx: number;
+      heightPx: number;
+      assemblyFingerprint: string;
+    }) => {
       void (async () => {
         setError(null);
         try {
@@ -345,6 +351,9 @@ export function App() {
             filename: capture.filename,
             pngBase64: capture.pngBase64,
             overwrite: true,
+            widthPx: capture.widthPx,
+            heightPx: capture.heightPx,
+            assemblyFingerprint: capture.assemblyFingerprint,
           });
           setState(result.state);
           if (!result.ok) setError(result.error);

@@ -64,7 +64,13 @@ export interface PhysicalPreviewScreenProps {
    * Hands validated capture bytes to the privileged save path (G5). The
    * screen itself never writes a file and never learns the destination.
    */
-  onCapture: (capture: { filename: string; pngBase64: string }) => void;
+  onCapture: (capture: {
+    filename: string;
+    pngBase64: string;
+    widthPx: number;
+    heightPx: number;
+    assemblyFingerprint: string;
+  }) => void;
   captureStatus: PhysicalPreviewCaptureStatus | null;
   projectName: string;
 }
@@ -348,8 +354,16 @@ export default function PhysicalPreviewScreen({
       setCaptureError("The preview capture produced no image data.");
       return;
     }
-    onCapture({ filename, pngBase64 });
-  }, [projectName, view, mode, onCapture, captureHandle]);
+    onCapture({
+      filename,
+      pngBase64,
+      // Taken from the validated capture itself, not from any separate
+      // source, so main can re-derive and cross-check them from the bytes.
+      widthPx: result.widthPx,
+      heightPx: result.heightPx,
+      assemblyFingerprint: assembly.fingerprint,
+    });
+  }, [projectName, view, mode, onCapture, captureHandle, assembly.fingerprint]);
 
   const handleReset = useCallback(() => {
     setView("perspective");

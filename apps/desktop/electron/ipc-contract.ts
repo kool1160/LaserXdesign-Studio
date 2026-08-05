@@ -496,6 +496,20 @@ export const savePhysicalPreviewCaptureRequestSchema = z.strictObject({
   // ~88 MB of base64 encodes ~64 MB of PNG, matching the writer's ceiling.
   pngBase64: z.string().min(1).max(88 * 1024 * 1024),
   overwrite: z.boolean(),
+  /**
+   * The renderer's claimed capture dimensions. The privileged side decodes
+   * the PNG's own IHDR and requires exact agreement, so these are a claim to
+   * be checked against the bytes -- never a value the main process trusts.
+   */
+  widthPx: z.number().int().positive().max(65_535),
+  heightPx: z.number().int().positive().max(65_535),
+  /**
+   * Fingerprint of the assembly this capture was taken from. Main rejects a
+   * request that is not bound to the currently accepted preview assembly, so
+   * a stale or fabricated capture cannot be written as if it depicted the
+   * current document.
+   */
+  assemblyFingerprint: z.string().min(1).max(256),
 });
 
 export const focusCutabilityIssueRequestSchema = z.strictObject({
