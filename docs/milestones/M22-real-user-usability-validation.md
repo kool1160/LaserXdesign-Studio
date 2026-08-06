@@ -12,6 +12,31 @@ The intended philosophy is Apple-like without copying Apple branding or operatin
 
 M22 remains blocked until M21 is complete, a controlled beta cohort exists, the major Version 1 feature surfaces are present, and the owner explicitly activates real-user validation and final interface polish.
 
+## M15 evidence carry-forward
+
+M15 establishes the workflow-first product pattern and records early observation evidence during create, import, raster trace, broken-file repair, Learn Mode, and packaged first-session validation.
+
+M22 must begin by reviewing:
+
+- `docs/milestones/M15-workflow-first-product-amendment.md`;
+- the accepted M15 G2, G3, G4, and G6 observation evidence;
+- unresolved or owner-accepted usability findings carried forward from M15;
+- the later changes introduced by M16-M21.
+
+M22 must prove that later milestones did not reintroduce:
+
+- a permanent wall of unrelated Create, Import, Trace, Analyze, Text, Sign, AI, 3D, and Export controls;
+- hidden, competing, or ambiguous primary actions;
+- guided export paths that bypass physical 3D without a truthful acknowledged unavailable route;
+- raw entity-level repair overload;
+- technical language that does not help the user decide;
+- AI dependency for normal sign creation;
+- inaccessible or high-DPI-broken guidance;
+- workflow drift between create, import, repair, 3D, save, and export;
+- loss of Advanced Workspace or Exit Guidance as clear manual escapes.
+
+M15 evidence is the baseline, not a historical curiosity. Any later regression against that baseline is an M22 usability defect.
+
 ## Included
 
 ### Real-user validation
@@ -72,10 +97,15 @@ M22 does not add unrelated product capability merely because a participant reque
 15. Every severity-1 and release-blocking usability defect is closed or explicitly accepted by the owner.
 16. Accessibility and high-DPI blockers found in the cohort are resolved.
 17. Owner packaged-screenshot review accepts the complete application as simple, clean, restrained, and premium enough to enter the Version 1 release gate.
+18. The M15 evidence baseline is reviewed and every later regression is closed or explicitly accepted.
+19. Guided export still follows a confirmed physical 3D checkpoint or a truthful acknowledged unavailable route.
+20. Advanced Workspace and Exit Guidance remain clear, tested escape paths while guided workflow remains the default task-oriented experience.
+21. M16-M21 features obey the same contextual-surface and one-primary-action rules established in M15.
 
 ## Exit checklist
 
 - [ ] Participant plan and consent process are approved.
+- [ ] M15 observation evidence and carried findings are reviewed before new sessions begin.
 - [ ] Session evidence and metrics are recorded.
 - [ ] Ten-minute success target is measured, not assumed.
 - [ ] Broken-file repair usability is observed with representative large finding sets.
@@ -83,6 +113,9 @@ M22 does not add unrelated product capability merely because a participant reque
 - [ ] Full app-wide interface consistency review is complete.
 - [ ] Workflow-specific contextual-control review passes.
 - [ ] Advanced-control discoverability review passes.
+- [ ] Physical 3D remains a guided checkpoint before export or a truthful unavailable route is recorded.
+- [ ] Advanced Workspace and Exit Guidance remain clear and tested.
+- [ ] M16-M21 introduce no accepted workflow-first regressions against M15 evidence.
 - [ ] Supported-resolution, high-DPI, accessibility, and packaged screenshot evidence passes.
 - [ ] Owner final visual review is accepted.
 - [ ] Known limitations are documented honestly.
