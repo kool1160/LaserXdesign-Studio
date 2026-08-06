@@ -4,15 +4,41 @@
 
 **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 
-- Active issue: #45
+- Active issue: **#45**
 - Active milestone specification: `docs/milestones/M15-guided-onboarding-learn-mode.md`
-- Implementation lead: Claude
-- Independent planning, orchestration, exact-head audit, and acceptance authority: ChatGPT
-- Owner authority: product direction and milestone advancement
-- Codex: held unless explicitly assigned independent review, repair, comparison, environment, or specialist work
 - Current slice: **G0 — guided-workflow architecture and first-run contract**
+- Implementation model: **SOL High** — owner-selected OpenAI coding model at High reasoning in the Codex coding workspace
+- Planning, orchestration, exact-head review, status, holds, and advancement: **planning/review ChatGPT**
+- Owner authority: product direction, model choice, hands-on acceptance, and advancement
+- Claude / Anthropic: **held; no paid Anthropic work without a new explicit owner authorization**
 
-The owner explicitly advanced LaserX to M15 on 2026-08-05 after accepting M14. `Continue LaserX` authorizes Claude to implement only the bounded M15 G0 contract below and stop for exact-head review. M16 and later work remain blocked.
+The owner restored the original operator-command workflow on **2026-08-06**:
+
+> Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence. The owner receives the verdict and next command.
+
+Only `Continue LaserX` goes to the SOL High implementation thread. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the planning/review chat.
+
+## Current PR state
+
+- Pull request: **#67 — M15 G0 guided-workflow architecture and first-run contract**
+- Exact head: `9cf4458bef5d8cc39814e6b9e94de221fa8228e0`
+- PR state: open, draft, mergeable, unmerged
+- Implementation state: **AWAITING_REVIEW**
+- Exact-head CI: **12 pull-request workflows completed successfully**
+- G1 work: not begun
+- Next valid command: **`Check LaserX`**
+
+No implementation agent should touch PR #67 merely because it is green. The planning/review chat must first issue an exact-head `READY`, `REPAIR`, or `BLOCKED` verdict.
+
+If the verdict is `REPAIR`, the owner sends `Continue LaserX` to SOL High. If the verdict is `READY`, the owner sends `Advance LaserX` to the planning/review chat.
+
+## One repo, one active gate, one next command
+
+- M15 G0 is the only active implementation gate.
+- G1 through G6 remain held.
+- M16 and later milestones remain blocked.
+- No background agent, heartbeat, scheduled polling, or self-waking implementation session is authorized.
+- No automatic routine merge is authorized. `Advance LaserX` is required after `READY`.
 
 ## Mandatory product interpretation
 
@@ -25,59 +51,36 @@ Locked interpretation:
 - first-time usability is central;
 - deterministic sign creation works without AI;
 - AI is optional and user-supplied;
-- physical 3D is a major feature but remains derived and non-mutating;
+- physical 3D is a major derived, non-mutating feature;
 - Inkscape and downstream machine software are companions;
-- premium experience and generous pricing are product requirements;
 - the interface is workflow-first and uses contextual controls with progressive disclosure;
-- large finding sets are grouped into repair decisions, with **Fix safe problems** as the primary repair action when deterministic eligible repairs exist;
-- research reduces uncertainty but does not authorize wholesale merges or set priority by itself.
+- large finding sets are grouped into repair decisions, with **Fix safe problems** primary when deterministic eligible repairs exist;
+- premium experience and generous pricing are product requirements;
+- research reduces uncertainty but does not authorize wholesale merges or establish priority by itself.
 
-## M14 — Production Physical 3D Preview Integration — complete
+## Active M15 G0 contract
 
-M14 completed G0 through G6. Issue #30 records the complete implementation, machine-verifiable evidence, private installer provenance, owner hands-on evidence, and final exact-head closure audit.
-
-Accepted production base:
-
-- **G0 — governance and architecture lock** — PR #54, merge `a3481541a7dd246a7c3d8074f6516de09bd5af75`
-- **G1 — text-heavy scaling evidence** — PR #55, merge `0a9dd63e31fdc7e15918c8c4651492d9d1ee44ec`
-- **G2 — pure physical scene package** — PR #56, merge `e8b10c67d61decd310ccf1d5a7ad76100047babb`
-- **G3 — Three renderer adapter** — PR #57, merge `f0769507abfac2c7a999f509fad8ae348de8b86b`
-- **G4A — renderer-safe integration foundation** — PR #61, merge `9ca320fe3cb7d82ad2d9c3a458790b7defbfded3`
-- **G4B — lazy open-document preview screen** — PR #63, merge `cba0fbba3385f47cf59f4a026823256f91560639`
-- **G4C — interaction, fallback, and cleanup** — PR #64, merge `c79f4b1ccce0b54fce26d0cdf1687cc79818f5bb`
-- **G5 — privileged PNG capture** — PR #65, accepted head `d34c9cca2b7552551cfcd1efcd6fccd7baaa6a58`, merge `3f0d8dba70e0c218308d28d1917cd5584c928bd6`
-- **G6 — exact-head Windows evidence and owner retest** — accepted on exact `main` `078d4637fe0660792ebe1513aebb31b6a8593c1f`
-
-The exact private installer was built from the short physical clone at `C:\dev\laserx` with Node `v24.18.1`, pnpm `11.18.0`, clean Git status, exit code `0`, byte size `113120438`, and SHA-256 `e98788e589c81255f8cab2dc1aa751e773429579f3958379fe00d2fbf097e689`.
-
-Owner hands-on result: M14 passed. The owner reported that everything worked very well and that the 3D experience was intuitive and simple. The submitted retest archive contained seven screenshots covering import, front, edge, perspective, exploded view, layer hide/show, and orbit/pan/zoom.
-
-## Active G5 scope — completed historical contract
-
-G5 owned the complete privileged PNG capture transaction and is retained here as a historical compatibility marker. It is not active M15 work.
-
-## Active M15 G0 scope
-
-G0 is architecture and contract lock only. It must make the later user-facing slices coherent without beginning a broad visual rewrite.
+G0 is architecture and contract lock only. It must make later user-facing slices coherent without beginning a broad visual rewrite.
 
 Required outcome:
 
-- inventory the current first-launch, empty-state, create, vector-import, raster-trace, repair, 3D, save, and export flows against the packaged application;
+- inventory the current first-launch, empty-state, create, vector-import, raster-trace, repair, 3D, save, and export flows;
 - record a guided-workflow state-machine boundary separated from feature logic and authoritative project state;
-- lock the three first-run goals: **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
-- define the contextual-control matrix so each workflow shows one clear primary action and only relevant default controls;
-- define skip, back, resume, replay, cancel, failure, and recovery behavior that cannot trap the user or mutate geometry invisibly;
+- lock **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
+- define a contextual-control matrix and one clear primary action per guided step whenever practical;
+- define skip, back, resume, replay, cancel, failure, and recovery behavior that cannot trap the user;
 - define local/privacy-respecting first-session evidence and the owner-observed ten-minute fixture set;
-- lock accessibility, keyboard, focus, high-DPI, reduced-motion, and non-color-only guidance requirements;
-- document the boundary between M15 onboarding work and existing authoritative geometry, cutability, save, export, security, and physical-preview contracts;
-- add an ADR and mechanical contract checks where they can prevent drift;
-- stop at `AWAITING_REVIEW` before implementing the full first-run shell or later M15 slices.
+- lock keyboard, focus, high-DPI, reduced-motion, screen-reader, and non-color-only guidance requirements;
+- document boundaries against authoritative geometry, cutability, save, export, security, and physical-preview systems;
+- add an ADR and mechanical checks where they genuinely prevent drift;
+- make only the smallest implementation or harness change needed to prove the architecture;
+- stop at `AWAITING_REVIEW` before visible G1 implementation.
 
-G0 may make only the smallest code or test harness change required to prove the architecture boundary. It must not become a UI redesign, geometry-engine rewrite, material expansion, process-profile system, export-profile system, licensing implementation, public beta, or M16 work.
+G0 does not authorize onboarding UI, the persistence store, grouped repair implementation, material expansion, process profiles, export profiles, new AI capability, licensing, public beta, CAD/CAM, or machine control.
 
-## M15 approved execution order
+## M15 gate order
 
-1. **G0 — guided-workflow architecture and first-run contract** — active
+1. **G0 — guided-workflow architecture and first-run contract** — active, awaiting review
 2. **G1 — first-launch goal chooser and resumable guidance shell** — held
 3. **G2 — Create My First Sign guided vertical slice** — held
 4. **G3 — vector import and raster trace contextual guidance** — held
@@ -85,13 +88,16 @@ G0 may make only the smallest code or test harness change required to prove the 
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held
 
-Each slice requires exact-head review before the next slice is activated. Full execution rules live in `docs/CLAUDE_EXECUTION_PLAN.md` and ADR 0026.
+Each gate requires `Check LaserX`, a `READY` verdict, and explicit owner `Advance LaserX` before the next gate is activated. Activation does not start implementation; a later `Continue LaserX` does.
 
-## Research and later-work boundary
+## Open planning and maintenance PRs
 
-Issue #34 and Issue #42 remain accepted historical research inputs. Issue #39 and draft PR #40 remain isolated inputs for M16 and are not production-merge-authorized during M15.
+- **PR #69** — workflow-first M15/M22 planning amendment — remains draft and held. It does not activate G1. Before merge, its execution-plan references must be migrated from the superseded Claude plan to `docs/SOL_EXECUTION_PLAN.md` and reviewed under the restored command workflow.
+- **PR #68** — grouped dependency update — remains held outside active M15 G0. Do not mix it into PR #67.
 
-M16 through M23 preserve the workflow-first product direction from Issues #44 and #37. M24 and M25 preserve the post-Version-1 machine-platform path behind explicit safety gates.
+## M14 completion record
+
+M14 is complete and accepted. Issue #30 contains the exact component merges, Windows build evidence, private installer provenance, owner screenshots, owner pass, and final closure audit. M15 must not reopen or broaden M14.
 
 ## Private-testing boundary
 
