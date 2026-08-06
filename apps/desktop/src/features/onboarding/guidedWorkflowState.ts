@@ -93,19 +93,28 @@ export interface GuidedWorkflowState {
    */
   readonly runToken: string | null;
   /**
-   * The opaque identity of the document this run is guiding work on, bound
+   * The opaque identity of the *project* this run is guiding work in, bound
    * at `start`/`resume` and never changed for the life of the run.
    *
    * A run token scopes events to a run, but nothing about it says which
-   * *document* the run is about. Without this, replacing the open project
+   * project the run is about. Without this, replacing the open project
    * mid-run (New Design / Open Project / a Recent-projects entry) leaves the
    * old run active with matching token and step id, so its events keep
    * mutating a progress record whose completed prefix belongs to the
-   * replaced document -- and a later snapshot could pair that progress with
-   * the new document's binding. `document-changed` (below) and the
+   * replaced project -- and a later snapshot could pair that progress with
+   * the new project's binding. `project-changed` (below) and the
    * `toWorkflowSnapshot` identity guard both key off this field.
+   *
+   * Deliberately the project identity, NOT the document identity: the
+   * shipped `project.create-document` command replaces the document -- with
+   * a freshly minted document id -- *inside the same project*, and that
+   * exact operation is the first real step Create My First Sign guides. A
+   * run keyed to the document id would end, or lose resumability, at the
+   * moment its first step succeeded. Document identity and content still
+   * matter for persistence, where they are captured per snapshot
+   * (`GuidedProjectBinding`), not per run.
    */
-  readonly documentId: string | null;
+  readonly projectId: string | null;
   /**
    * The stable id of the step in progress, not an array index. An index is
    * only meaningful against one exact step set; an id survives a definition
@@ -138,7 +147,7 @@ export const initialGuidedWorkflowState: GuidedWorkflowState = freezeState({
   status: "idle",
   definition: null,
   runToken: null,
-  documentId: null,
+  projectId: null,
   currentStepId: null,
   completedStepIds: [],
   skippedStepIds: [],
@@ -146,10 +155,11 @@ export const initialGuidedWorkflowState: GuidedWorkflowState = freezeState({
 });
 
 /**
- * The project/document a guided run's progress is actually *about*.
+ * The project and document a guided run's progress is actually *about*, as
+ * captured at one snapshot moment.
  *
- * Both values are opaque to this module and supplied by the app layer, which
- * already owns document identity and fingerprinting (the
+ * All values are opaque to this module and supplied by the app layer, which
+ * already owns project/document identity and fingerprinting (the
  * `documentFingerprint`/`projectFingerprint` idiom in `ProjectSession`). The
  * pure module compares them by exact string equality and nothing else, so it
  * stays independent of every project package.
@@ -158,9 +168,18 @@ export const initialGuidedWorkflowState: GuidedWorkflowState = freezeState({
  * open document: progress recorded against Project A -- "analysis passed",
  * "material assigned" -- would resume against Project B or an empty document
  * and claim work that was never done there.
+ *
+ * The three values have different lifetimes on purpose. `projectId` is the
+ * stable identity the *run* is bound to. `documentId` and `fingerprint`
+ * describe the exact current document at snapshot time -- the shipped
+ * `project.create-document` command legitimately replaces the document id
+ * inside the same project mid-run, so successive snapshots of one run may
+ * carry different document ids while the project id stays fixed.
  */
 export interface GuidedProjectBinding {
-  /** Opaque, stable identity of the bound project/document. */
+  /** Opaque, stable identity of the project the run is bound to. */
+  readonly projectId: string;
+  /** Opaque identity of the exact document open at snapshot time. */
   readonly documentId: string;
   /** Opaque content fingerprint captured at snapshot time. */
   readonly fingerprint: string;
@@ -223,11 +242,13 @@ export interface StepScopedAction {
 }
 
 export type GuidedWorkflowAction =
-  // `documentId` binds the run to the document it guides from its first
-  // moment -- identity only, deliberately not a fingerprint: a fingerprint is
-  // a point-in-time content value that goes stale with the first edit the
-  // guided run itself causes, while identity is stable for the run's life.
-  | { type: "start"; definition: GuidedWorkflowDefinition; runToken: string; documentId: string }
+  // `projectId` binds the run to the project it guides from its first
+  // moment -- identity only, deliberately not a fingerprint or document id:
+  // a fingerprint goes stale with the first edit the guided run itself
+  // causes, and the document id is legitimately replaced inside the same
+  // project by the shipped create-document step. The project identity is
+  // the one value stable for the run's life.
+  | { type: "start"; definition: GuidedWorkflowDefinition; runToken: string; projectId: string }
   | {
       type: "resume";
       definition: GuidedWorkflowDefinition;
@@ -260,14 +281,21 @@ export type GuidedWorkflowAction =
   // to identity could only ever make an escape hatch fail to work.
   | { type: "cancel" }
   // Reports an externally observed fact, not a user decision: the open
-  // document was replaced (New Design, Open Project, a Recent-projects
-  // entry). Carries the identity of the document now open. If it differs
+  // *project* was replaced (New Design, Open Project, a Recent-projects
+  // entry). Carries the identity of the project now open. If it differs
   // from the run's bound identity, the run -- active or terminal -- ends
   // atomically: the state returns to exactly the pre-guided initial state,
   // which clears the run token (so every in-flight event from the old run
   // becomes a no-op) and makes `toWorkflowSnapshot` return `null` (so the
   // ordinary persist-on-change write clears the resumable snapshot).
-  | { type: "document-changed"; documentId: string };
+  //
+  // Deliberately NOT dispatched for a document replacement inside the same
+  // project: the shipped `project.create-document` step replaces the
+  // document id while the project identity is preserved, and that operation
+  // is a guided step, not an exit. Same-identity deliveries are
+  // same-reference no-ops, so a caller wiring this to project identity
+  // changes gets exactly that behavior.
+  | { type: "project-changed"; projectId: string };
 
 export type GuidedWorkflowActionType = GuidedWorkflowAction["type"];
 
@@ -295,8 +323,8 @@ export const ALLOWED_SOURCE_STATUSES: Readonly<
   cancel: ["idle", "active", "completed", "dismissed", "failed"],
   fail: ["active"],
   // An external fact must always be deliverable: a run bound to a replaced
-  // document is invalid whether it is active or already terminal.
-  "document-changed": ["idle", "active", "completed", "dismissed", "failed"],
+  // project is invalid whether it is active or already terminal.
+  "project-changed": ["idle", "active", "completed", "dismissed", "failed"],
 };
 
 /**
@@ -315,13 +343,17 @@ export function isUsableToken(token: string): boolean {
 }
 
 /**
- * Whether a project binding can actually distinguish one document from
- * another. A blank identity or fingerprint would match anything, so the
- * wrong-project and changed-project checks would pass vacuously -- the same
- * reasoning that rejects a blank run token.
+ * Whether a project binding can actually distinguish one project and
+ * document from another. A blank identity or fingerprint would match
+ * anything, so the wrong-project, wrong-document, and changed-content checks
+ * would pass vacuously -- the same reasoning that rejects a blank run token.
  */
 export function isUsableProjectBinding(binding: GuidedProjectBinding): boolean {
-  return isUsableToken(binding.documentId) && isUsableToken(binding.fingerprint);
+  return (
+    isUsableToken(binding.projectId) &&
+    isUsableToken(binding.documentId) &&
+    isUsableToken(binding.fingerprint)
+  );
 }
 
 /**
@@ -388,6 +420,7 @@ function ownDefinition(definition: GuidedWorkflowDefinition): GuidedWorkflowDefi
 
 function ownBinding(binding: GuidedProjectBinding): GuidedProjectBinding {
   return Object.freeze({
+    projectId: binding.projectId,
     documentId: binding.documentId,
     fingerprint: binding.fingerprint,
   });
@@ -478,7 +511,7 @@ function matchesLiveStep(state: GuidedWorkflowState, action: StepScopedAction): 
 function startedState(
   supplied: GuidedWorkflowDefinition,
   runToken: string,
-  documentId: string,
+  projectId: string,
 ): GuidedWorkflowState {
   // Validate the caller value, then keep an owned copy: validating a value the
   // caller can still mutate would only prove it was valid at one instant.
@@ -492,16 +525,16 @@ function startedState(
       failureReason: "A guided workflow requires a non-blank run token.",
     };
   }
-  if (!isUsableToken(documentId)) {
+  if (!isUsableToken(projectId)) {
     // A blank identity could never match or mismatch anything, so the
-    // document-changed and snapshot-identity guards would be vacuous for the
+    // project-changed and snapshot-identity guards would be vacuous for the
     // whole run -- the same reasoning that rejects a blank run token.
     return {
       ...initialGuidedWorkflowState,
       status: "failed",
       definition,
       runToken,
-      failureReason: "A guided workflow requires a non-blank document identity.",
+      failureReason: "A guided workflow requires a non-blank project identity.",
     };
   }
   if (!isValidWorkflowDefinition(definition) || firstStepId === undefined) {
@@ -513,7 +546,7 @@ function startedState(
       status: "failed",
       definition,
       runToken,
-      documentId,
+      projectId,
       failureReason:
         "A guided workflow requires a positive version and at least one unique, non-blank step id.",
     };
@@ -522,7 +555,7 @@ function startedState(
     status: "active",
     definition,
     runToken,
-    documentId,
+    projectId,
     currentStepId: firstStepId,
     completedStepIds: [],
     skippedStepIds: [],
@@ -550,13 +583,15 @@ export function canResumeSnapshot(
   if (snapshot.goal !== definition.goal) return false;
   if (snapshot.definitionVersion !== definition.definitionVersion) return false;
 
-  // Progress belongs to one exact document. A different identity is the wrong
-  // project outright; the same identity with a different fingerprint means the
-  // document changed since the snapshot, so recorded progress ("analysis
-  // passed", "material assigned") may no longer describe it. Both refuse
-  // rather than resume against a document the progress is not about.
+  // Progress belongs to one exact project and document. A different project
+  // identity is the wrong project outright; a different document identity is
+  // the wrong document; the same document with a different fingerprint means
+  // its content changed since the snapshot, so recorded progress ("analysis
+  // passed", "material assigned") may no longer describe it. All three
+  // refuse rather than resume against a document the progress is not about.
   if (!isUsableProjectBinding(snapshot.projectBinding)) return false;
   if (!isUsableProjectBinding(liveBinding)) return false;
+  if (snapshot.projectBinding.projectId !== liveBinding.projectId) return false;
   if (snapshot.projectBinding.documentId !== liveBinding.documentId) return false;
   if (snapshot.projectBinding.fingerprint !== liveBinding.fingerprint) return false;
 
@@ -622,7 +657,7 @@ export function toWorkflowSnapshot(
     return null;
   }
   if (!isUsableProjectBinding(projectBinding)) return null;
-  if (state.documentId === null || projectBinding.documentId !== state.documentId) return null;
+  if (state.projectId === null || projectBinding.projectId !== state.projectId) return null;
   // Detached: a caller mutating the returned snapshot must not reach back
   // into live progress.
   return Object.freeze({
@@ -655,22 +690,26 @@ export function reduceGuidedWorkflow(
     }
 
     case "start": {
-      return startedState(action.definition, action.runToken, action.documentId);
+      return startedState(action.definition, action.runToken, action.projectId);
     }
 
-    case "document-changed": {
-      // Same document: not a replacement for this run, nothing to do.
-      if (state.documentId !== null && state.documentId === action.documentId) return state;
+    case "project-changed": {
+      // Same project: not a replacement for this run, nothing to do. This is
+      // also exactly how a guided create-document step stays harmless -- the
+      // document id changes inside the same project, the project identity
+      // does not, so a caller wiring this action to project identity never
+      // ends the run over it.
+      if (state.projectId !== null && state.projectId === action.projectId) return state;
       // No run to invalidate.
       if (state.status === "idle") return state;
-      // The bound document is gone, so the run -- active or terminal -- is
-      // about a document that is no longer open. End it atomically: the
+      // The bound project is gone, so the run -- active or terminal -- is
+      // about a project that is no longer open. End it atomically: the
       // token is cleared with the rest of the state, so in-flight events
       // from the old run no-op, and toWorkflowSnapshot now returns null, so
       // the ordinary persist-on-change write clears the resumable snapshot.
       // A blank replacement identity also lands here deliberately: a broken
       // identity signal fail-safes to ending the run, never to continuing
-      // against an unknown document.
+      // against an unknown project.
       return initialGuidedWorkflowState;
     }
 
@@ -696,7 +735,7 @@ export function reduceGuidedWorkflow(
         runToken: action.runToken,
         // canResumeSnapshot proved liveBinding matches the snapshot's
         // persisted binding, so this is the identity the progress is about.
-        documentId: action.liveBinding.documentId,
+        projectId: action.liveBinding.projectId,
         currentStepId: resumeStepId,
         completedStepIds: ownList(action.snapshot.completedStepIds.filter(stillBehind)),
         skippedStepIds: ownList(action.snapshot.skippedStepIds.filter(stillBehind)),
@@ -715,10 +754,10 @@ export function reduceGuidedWorkflow(
       if (!isUsableToken(action.nextRunToken) || action.nextRunToken === state.runToken) {
         return state;
       }
-      // The restarted run guides the same document as the run it replays; a
-      // replaced document would already have ended this terminal state via
-      // document-changed before replay could target it.
-      return startedState(state.definition, action.nextRunToken, state.documentId ?? "");
+      // The restarted run guides the same project as the run it replays; a
+      // replaced project would already have ended this terminal state via
+      // project-changed before replay could target it.
+      return startedState(state.definition, action.nextRunToken, state.projectId ?? "");
     }
 
     case "advance":

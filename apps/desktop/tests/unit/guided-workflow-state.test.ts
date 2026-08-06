@@ -29,8 +29,12 @@ import {
 
 const GOALS: readonly GuidedGoal[] = ["create-first-sign", "import-own-design", "describe-with-ai"];
 
-/** The document the guided run is bound to in most tests. */
-const BINDING: GuidedProjectBinding = { documentId: "doc-1", fingerprint: "fp-1" };
+/** The project/document the guided run is bound to in most tests. */
+const BINDING: GuidedProjectBinding = {
+  projectId: "project-1",
+  documentId: "doc-1",
+  fingerprint: "fp-1",
+};
 
 const DEFINITION: GuidedWorkflowDefinition = {
   goal: "create-first-sign",
@@ -117,13 +121,13 @@ function dispatch(
 function start(
   definition = DEFINITION,
   runToken = RUN,
-  documentId = BINDING.documentId,
+  projectId = BINDING.projectId,
 ): GuidedWorkflowState {
   return reduceGuidedWorkflow(initialGuidedWorkflowState, {
     type: "start",
     definition,
     runToken,
-    documentId,
+    projectId,
   });
 }
 
@@ -322,7 +326,7 @@ describe("guided workflow -- skip eligibility is locked in the definition", () =
       type: "start",
       definition: MIXED_SKIP_DEFINITION,
       runToken,
-      documentId: BINDING.documentId,
+      projectId: BINDING.projectId,
     });
   }
 
@@ -680,7 +684,7 @@ describe("guided workflow -- transition table", () => {
     };
     switch (type) {
       case "start":
-        return { type: "start", definition: DEFINITION, runToken: RUN, documentId: BINDING.documentId };
+        return { type: "start", definition: DEFINITION, runToken: RUN, projectId: BINDING.projectId };
       case "resume":
         return {
           type: "resume",
@@ -706,8 +710,8 @@ describe("guided workflow -- transition table", () => {
         return { type, runToken: state.runToken ?? RUN };
       case "cancel":
         return { type };
-      case "document-changed":
-        return { type, documentId: "some-other-document" };
+      case "project-changed":
+        return { type, projectId: "some-other-project" };
       case "fail":
         return { type: "fail", reason: "example", ...identity };
       default:
@@ -760,7 +764,7 @@ describe("guided workflow -- transition table", () => {
         type: "start",
         definition: DEFINITION,
         runToken: RUN,
-        documentId: BINDING.documentId,
+        projectId: BINDING.projectId,
       }),
     ).toBe(midway);
   });
@@ -982,7 +986,7 @@ describe("guided workflow -- input ownership", () => {
       type: "start",
       definition,
       runToken: RUN,
-      documentId: BINDING.documentId,
+      projectId: BINDING.projectId,
     });
     expect(state.status).toBe("active");
 
@@ -1051,7 +1055,7 @@ describe("guided workflow -- non-mutation", () => {
       runToken: sample.runToken ?? RUN,
     };
     const actions: GuidedWorkflowAction[] = [
-      { type: "start", definition: DEFINITION, runToken: RUN, documentId: BINDING.documentId },
+      { type: "start", definition: DEFINITION, runToken: RUN, projectId: BINDING.projectId },
       { type: "advance", ...identity },
       { type: "back", ...identity },
       { type: "skip-step", ...identity },
@@ -1073,7 +1077,7 @@ describe("guided workflow -- non-mutation", () => {
       { type: "replay", expectedRunToken: identity.runToken, nextRunToken: "run-token-next" },
       { type: "cancel" },
       { type: "fail", reason: "x", ...identity },
-      { type: "document-changed", documentId: "some-other-document" },
+      { type: "project-changed", projectId: "some-other-project" },
     ];
     for (const action of actions) {
       const input = deepFreeze(advanceTo("add-text"));
@@ -1107,7 +1111,7 @@ describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
       type: "start",
       definition: IMPORT_GOAL_DEFINITION,
       runToken,
-      documentId: BINDING.documentId,
+      projectId: BINDING.projectId,
     });
   }
 
@@ -1300,7 +1304,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
       type: "start",
       definition: IMPORT_GOAL_DEFINITION,
       runToken: RUN,
-      documentId: BINDING.documentId,
+      projectId: BINDING.projectId,
     });
     while (state.currentStepId !== stepId && state.status === "active") {
       state = dispatch(state, "advance");
@@ -1331,9 +1335,18 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
     expect(restored.completedStepIds).toEqual(["choose-file", "prepare-source"]);
   });
 
-  it("refuses a snapshot from a different project", () => {
+  it("refuses a snapshot from a different document in the same project", () => {
     const snapshot = snapshotOn("assign-physical");
-    const otherProject = { documentId: "doc-2", fingerprint: "fp-1" };
+    const otherDocument = { projectId: "project-1", documentId: "doc-2", fingerprint: "fp-1" };
+    expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, otherDocument)).toBe(false);
+    expect(resume(snapshot, otherDocument)).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("refuses a snapshot from a different project outright", () => {
+    // Same document id and fingerprint by coincidence must not be enough:
+    // progress can never cross projects.
+    const snapshot = snapshotOn("assign-physical");
+    const otherProject = { projectId: "project-2", documentId: "doc-1", fingerprint: "fp-1" };
     expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, otherProject)).toBe(false);
     expect(resume(snapshot, otherProject)).toEqual(initialGuidedWorkflowState);
   });
@@ -1342,15 +1355,15 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
     // Same identity, different content: "analysis passed" or "material
     // assigned" may no longer describe the document, so progress is stale.
     const snapshot = snapshotOn("assign-physical");
-    const edited = { documentId: "doc-1", fingerprint: "fp-2" };
+    const edited = { projectId: "project-1", documentId: "doc-1", fingerprint: "fp-2" };
     expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, edited)).toBe(false);
     expect(resume(snapshot, edited)).toEqual(initialGuidedWorkflowState);
   });
 
   it("a binding that cannot distinguish documents is rejected at both capture and resume", () => {
     for (const blank of [
-      { documentId: "", fingerprint: "fp-1" },
-      { documentId: "doc-1", fingerprint: "  " },
+      { projectId: "project-1", documentId: "", fingerprint: "fp-1" },
+      { projectId: "project-1", documentId: "doc-1", fingerprint: "  " },
     ]) {
       expect(isUsableProjectBinding(blank)).toBe(false);
       // No snapshot is even produced against a vacuous binding.
@@ -1358,7 +1371,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
         type: "start",
         definition: IMPORT_GOAL_DEFINITION,
         runToken: RUN,
-        documentId: BINDING.documentId,
+        projectId: BINDING.projectId,
       });
       state = dispatch(state, "advance");
       expect(toWorkflowSnapshot(state, blank)).toBeNull();
@@ -1446,7 +1459,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
         type: "start",
         definition: IMPORT_GOAL_DEFINITION,
         runToken: RUN,
-        documentId: BINDING.documentId,
+        projectId: BINDING.projectId,
       }),
     ];
     const stepTypes = ["advance", "skip-step", "back"] as const;
@@ -1471,58 +1484,105 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
   });
 });
 
-describe("guided workflow -- document replacement ends the run", () => {
-  const OTHER_BINDING: GuidedProjectBinding = { documentId: "doc-2", fingerprint: "fp-9" };
+describe("guided workflow -- project replacement ends the run", () => {
+  const OTHER_BINDING: GuidedProjectBinding = {
+    projectId: "project-2",
+    documentId: "doc-9",
+    fingerprint: "fp-9",
+  };
 
-  it("start binds the run to the document identity for its whole life", () => {
+  it("start binds the run to the project identity for its whole life", () => {
     const state = start();
-    expect(state.documentId).toBe(BINDING.documentId);
-    expect(dispatch(state, "advance").documentId).toBe(BINDING.documentId);
+    expect(state.projectId).toBe(BINDING.projectId);
+    expect(dispatch(state, "advance").projectId).toBe(BINDING.projectId);
   });
 
-  it("a blank document identity fails closed at start", () => {
+  it("a blank project identity fails closed at start", () => {
     for (const blank of ["", "   "]) {
       const state = start(DEFINITION, RUN, blank);
       expect(state.status).toBe("failed");
-      expect(state.failureReason).toMatch(/non-blank document identity/u);
+      expect(state.failureReason).toMatch(/non-blank project identity/u);
     }
   });
 
-  it("replacing the document atomically ends an active run with the exact pre-guided state", () => {
+  it("replacing the project atomically ends an active run with the exact pre-guided state", () => {
     const midway = dispatch(start(), "advance");
     expect(midway.status).toBe("active");
     const after = reduceGuidedWorkflow(midway, {
-      type: "document-changed",
-      documentId: OTHER_BINDING.documentId,
+      type: "project-changed",
+      projectId: OTHER_BINDING.projectId,
     });
     expect(after).toBe(initialGuidedWorkflowState);
   });
 
-  it("a document-changed for the run's own document is a same-reference no-op", () => {
+  it("a project-changed for the run's own project is a same-reference no-op", () => {
     const midway = dispatch(start(), "advance");
     expect(
       reduceGuidedWorkflow(midway, {
-        type: "document-changed",
-        documentId: BINDING.documentId,
+        type: "project-changed",
+        projectId: BINDING.projectId,
       }),
     ).toBe(midway);
   });
 
-  it("clears a terminal record bound to the replaced document, and no-ops on idle", () => {
+  it("the shipped create-document step -- a new document id inside the same project -- preserves the active run", () => {
+    // The exact sequence Create My First Sign guides: the size step runs
+    // project.create-document, which mints a NEW document id and installs it
+    // while the project identity is preserved. That is a guided step, not a
+    // replacement -- the run must survive it, which is why the run binds to
+    // the project identity and not the document identity.
+    const sizing = start();
+    const afterCreate = dispatch(sizing, "advance");
+    expect(afterCreate.status).toBe("active");
+
+    // The caller's project-changed wiring observes the same project id, so
+    // delivery is a same-reference no-op and the run continues untouched.
+    const delivered = reduceGuidedWorkflow(afterCreate, {
+      type: "project-changed",
+      projectId: BINDING.projectId,
+    });
+    expect(delivered).toBe(afterCreate);
+
+    // A later snapshot binds to the NEW current document inside the same
+    // project -- resumability is not lost for the rest of the run.
+    const newDocumentBinding: GuidedProjectBinding = {
+      projectId: BINDING.projectId,
+      documentId: "doc-created-2",
+      fingerprint: "fp-after-create",
+    };
+    const snapshot = toWorkflowSnapshot(delivered, newDocumentBinding);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.projectBinding).toEqual(newDocumentBinding);
+
+    // And that snapshot resumes truthfully against the new document binding.
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: DEFINITION,
+      snapshot: snapshot as OnboardingWorkflowSnapshot,
+      runToken: "run-after-restart",
+      liveBinding: newDocumentBinding,
+    });
+    expect(restored.status).toBe("active");
+    expect(restored.currentStepId).toBe(delivered.currentStepId);
+    expect(restored.completedStepIds).toEqual(delivered.completedStepIds);
+    expect(restored.projectId).toBe(BINDING.projectId);
+  });
+
+  it("clears a terminal record bound to the replaced project, and no-ops on idle", () => {
     let terminal = start();
     for (let i = 0; i < DEFINITION.stepIds.length; i += 1) terminal = dispatch(terminal, "advance");
     expect(terminal.status).toBe("completed");
     expect(
       reduceGuidedWorkflow(terminal, {
-        type: "document-changed",
-        documentId: OTHER_BINDING.documentId,
+        type: "project-changed",
+        projectId: OTHER_BINDING.projectId,
       }),
     ).toBe(initialGuidedWorkflowState);
 
     expect(
       reduceGuidedWorkflow(initialGuidedWorkflowState, {
-        type: "document-changed",
-        documentId: OTHER_BINDING.documentId,
+        type: "project-changed",
+        projectId: OTHER_BINDING.projectId,
       }),
     ).toBe(initialGuidedWorkflowState);
   });
@@ -1531,7 +1591,7 @@ describe("guided workflow -- document replacement ends the run", () => {
     // A broken identity signal must not leave guidance running against an
     // unknown document.
     const midway = dispatch(start(), "advance");
-    expect(reduceGuidedWorkflow(midway, { type: "document-changed", documentId: "" })).toBe(
+    expect(reduceGuidedWorkflow(midway, { type: "project-changed", projectId: "" })).toBe(
       initialGuidedWorkflowState,
     );
   });
@@ -1539,12 +1599,12 @@ describe("guided workflow -- document replacement ends the run", () => {
   it("an in-flight event from the replaced run cannot apply afterwards, even to a new run on the same step", () => {
     // The concrete failure path from the review: guidance on Project A,
     // project replaced by B, old Next still in flight.
-    const runOnA = start(DEFINITION, "run-A", BINDING.documentId);
+    const runOnA = start(DEFINITION, "run-A", BINDING.projectId);
     const inFlight = live(runOnA, "advance");
 
     const reset = reduceGuidedWorkflow(runOnA, {
-      type: "document-changed",
-      documentId: OTHER_BINDING.documentId,
+      type: "project-changed",
+      projectId: OTHER_BINDING.projectId,
     });
     expect(reset).toBe(initialGuidedWorkflowState);
     // The reset itself already refuses the old event (idle source status)...
@@ -1552,14 +1612,14 @@ describe("guided workflow -- document replacement ends the run", () => {
 
     // ...and a fresh run on Project B, sitting on the same step id, refuses
     // it too, because the run token changed with the run.
-    const runOnB = start(DEFINITION, "run-B", OTHER_BINDING.documentId);
+    const runOnB = start(DEFINITION, "run-B", OTHER_BINDING.projectId);
     expect(runOnB.currentStepId).toBe(inFlight.expectedStepId);
     const result = reduceGuidedWorkflow(runOnB, inFlight);
     expect(result).toBe(runOnB);
     expect(result.completedStepIds).toEqual([]);
   });
 
-  it("no snapshot can combine one document's progress with another document's binding", () => {
+  it("no snapshot can combine one project's progress with another project's binding", () => {
     const progressOnA = dispatch(start(), "advance");
     // The exact record the review describes -- A's progress under B's
     // binding -- is unconstructible through this module.
@@ -1570,13 +1630,13 @@ describe("guided workflow -- document replacement ends the run", () => {
     // all, so the caller's ordinary persist-on-change write clears the
     // stored snapshot.
     const reset = reduceGuidedWorkflow(progressOnA, {
-      type: "document-changed",
-      documentId: OTHER_BINDING.documentId,
+      type: "project-changed",
+      projectId: OTHER_BINDING.projectId,
     });
     expect(toWorkflowSnapshot(reset, OTHER_BINDING)).toBeNull();
   });
 
-  it("resume and replay keep the run bound to the document the progress is about", () => {
+  it("resume and replay keep the run bound to the project the progress is about", () => {
     const snapshot = toWorkflowSnapshot(
       dispatch(start(), "advance"),
       BINDING,
@@ -1588,7 +1648,7 @@ describe("guided workflow -- document replacement ends the run", () => {
       runToken: "run-resumed",
       liveBinding: BINDING,
     });
-    expect(resumed.documentId).toBe(BINDING.documentId);
+    expect(resumed.projectId).toBe(BINDING.projectId);
 
     let terminal = resumed;
     while (terminal.status === "active") terminal = dispatch(terminal, "advance");
@@ -1598,7 +1658,7 @@ describe("guided workflow -- document replacement ends the run", () => {
       nextRunToken: "run-replayed",
     });
     expect(replayed.status).toBe("active");
-    expect(replayed.documentId).toBe(BINDING.documentId);
+    expect(replayed.projectId).toBe(BINDING.projectId);
   });
 });
 
