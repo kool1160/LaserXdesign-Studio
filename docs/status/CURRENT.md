@@ -9,7 +9,7 @@
 - Current slice: **G1 — Codex-only governance reset and guided-shell activation**
 - Implementation surface: **Codex**
 - Implementation model: **selected by the owner inside Codex for each session; the repository does not choose or auto-route a model**
-- Planning, orchestration, exact-head review, status, holds, and advancement: **planning/review ChatGPT**
+- Planning, orchestration, exact-head review, status, holds, and advancement: **LaserX Design Studio primary operations chat only**
 - Owner authority: product direction, model choice, hands-on acceptance, and advancement
 - Claude, Anthropic, Fable, and other external paid implementation routes: **removed from active operation; no automatic or implied use**
 
@@ -17,7 +17,18 @@ The owner explicitly reset the operating model on **2026-08-06**:
 
 > Chat decides. GitHub remembers. Codex executes. The owner chooses the Codex model. Pull requests hold the evidence. External paid models do not self-start, continue, review, or repair LaserX.
 
-Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the planning/review chat.
+Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the **LaserX Design Studio primary operations chat**.
+
+## Chat-authority lock
+
+`docs/CHAT_AUTHORITY.md` is binding.
+
+- The LaserX Design Studio primary operations chat is the only planning/review conversation allowed to mutate LaserX GitHub state.
+- Every other ChatGPT conversation, ChatGPT Project, custom GPT, unrelated project chat, audit chat, Claude/Fable/Anthropic conversation, or general assistant chat is read-only for LaserX even if it recognizes a valid command and has GitHub access.
+- A command such as `Advance LaserX`, `Lock that into LaserX`, or `yes, do it` is not sufficient authorization outside the designated primary operations chat.
+- When chat identity is uncertain, fail closed and remain read-only.
+- An unauthorized chat must direct the owner back to the LaserX Design Studio primary operations chat rather than merging, advancing, changing status, or posting governance mutations.
+- Codex remains separately authorized only for the one bounded `Continue LaserX` implementation task below and may not merge or advance.
 
 ## M15 G0 completion record
 
@@ -36,12 +47,13 @@ Before visible G1 onboarding implementation begins, Codex must perform one bound
 2. Remove fixed model names from active routing; the owner selects the model inside Codex.
 3. Remove Claude, Anthropic, and Fable from active implementation, review, continuation, and fallback paths. Historical ADRs may remain clearly superseded for audit history, but they carry no execution authority.
 4. Rename or replace model-specific active execution documents so the active contract is Codex-based rather than SOL-, Claude-, Anthropic-, or Fable-based.
-5. Update `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/WORKSTREAM_OWNERSHIP.md`, active execution-plan references, and repository-guard regression coverage to agree.
-6. Restore the intended CI rule: the active gate names its required checks. Completed historical milestone workflows are not permanent independent merge blockers on every later PR.
-7. Consolidate required PR verification around one policy/guard check and one canonical exact-head verification path, with focused packaged Windows checks only when the active gate or changed paths require them. Release/signing workflows remain release-gate checks.
-8. Preserve real regression coverage; do not weaken product, geometry, security, units, persistence, packaging, or accessibility tests.
-9. Do not begin visible onboarding UI, persistence-store implementation, IPC, grouped repair, or later G1 product work in this governance pass.
-10. Open one focused draft PR, record exact verification, and stop at `AWAITING_REVIEW`.
+5. Update `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/WORKSTREAM_OWNERSHIP.md`, active execution-plan references, `docs/CHAT_AUTHORITY.md`, and repository-guard regression coverage to agree.
+6. Mechanically require the cross-chat write prohibition: only the designated LaserX primary operations chat may perform planning/review-side mutations; all other chats are read-only and must fail closed when identity is uncertain.
+7. Restore the intended CI rule: the active gate names its required checks. Completed historical milestone workflows are not permanent independent merge blockers on every later PR.
+8. Consolidate required PR verification around one policy/guard check and one canonical exact-head verification path, with focused packaged Windows checks only when the active gate or changed paths require them. Release/signing workflows remain release-gate checks.
+9. Preserve real regression coverage; do not weaken product, geometry, security, units, persistence, packaging, or accessibility tests.
+10. Do not begin visible onboarding UI, persistence-store implementation, IPC, grouped repair, or later G1 product work in this governance pass.
+11. Open one focused draft PR, record exact verification, and stop at `AWAITING_REVIEW`.
 
 ## One repo, one active gate, one next command
 
@@ -83,7 +95,7 @@ Locked interpretation:
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held
 
-Each gate requires exact-head review and explicit owner advancement before the next gate becomes active. Activation does not authorize implementation beyond the one bounded task recorded here.
+Each gate requires exact-head review and explicit owner advancement from the designated LaserX primary operations chat before the next gate becomes active. Activation does not authorize implementation beyond the one bounded task recorded here.
 
 ## Open planning and maintenance PRs
 
