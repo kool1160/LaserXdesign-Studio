@@ -5,6 +5,7 @@ import {
   canResumeSnapshot,
   initialGuidedWorkflowState,
   initialOnboardingPreferences,
+  isStepSkippable,
   isTerminalStatus,
   isValidWorkflowDefinition,
   reduceGuidedWorkflow,
@@ -24,6 +25,25 @@ const DEFINITION: GuidedWorkflowDefinition = {
   goal: "create-first-sign",
   definitionVersion: 1,
   stepIds: ["choose-material", "add-text", "review-cutability"],
+  // Every step skippable here: this fixture drives the generic skip-step
+  // mechanics tests (recording, ordering, non-mutation, staleness, ...),
+  // which are unrelated to eligibility. Skip-eligibility gating itself is
+  // covered by MIXED_SKIP_DEFINITION below.
+  skippableStepIds: ["choose-material", "add-text", "review-cutability"],
+};
+
+/**
+ * Models a repair/decision-shaped goal: one genuinely optional explanation
+ * step, plus required analysis, physical-3D, and export-precondition steps
+ * -- exactly the shape the locked M15 product direction requires (physical
+ * 3D is a required checkpoint before export; analysis/repair stages must not
+ * be bypassable). Only "learn-about-scale" is skippable.
+ */
+const MIXED_SKIP_DEFINITION: GuidedWorkflowDefinition = {
+  goal: "import-own-design",
+  definitionVersion: 1,
+  stepIds: ["choose-file", "learn-about-scale", "analyze-cutability", "physical-3d", "export"],
+  skippableStepIds: ["learn-about-scale"],
 };
 
 function deepFreeze<T>(value: T): T {
@@ -240,6 +260,147 @@ describe("guided workflow -- skip a step versus leaving the workflow", () => {
     state = dispatch(state, "advance");
     expect(state.completedStepIds).toEqual(["choose-material"]);
     expect(state.skippedStepIds).toEqual([]);
+  });
+});
+
+describe("guided workflow -- skip eligibility is locked in the definition", () => {
+  function startMixed(runToken = RUN): GuidedWorkflowState {
+    return reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "start",
+      definition: MIXED_SKIP_DEFINITION,
+      runToken,
+    });
+  }
+
+  it("rejects a skippableStepIds entry that names no real step", () => {
+    const invalid = { ...MIXED_SKIP_DEFINITION, skippableStepIds: ["not-a-real-step"] };
+    expect(isValidWorkflowDefinition(invalid)).toBe(false);
+  });
+
+  it("rejects a duplicate entry within skippableStepIds", () => {
+    const invalid = {
+      ...MIXED_SKIP_DEFINITION,
+      skippableStepIds: ["learn-about-scale", "learn-about-scale"],
+    };
+    expect(isValidWorkflowDefinition(invalid)).toBe(false);
+  });
+
+  it("accepts an empty skippableStepIds -- a definition may require every step", () => {
+    expect(isValidWorkflowDefinition({ ...MIXED_SKIP_DEFINITION, skippableStepIds: [] })).toBe(
+      true,
+    );
+  });
+
+  it("isStepSkippable reflects exactly the locked set", () => {
+    expect(isStepSkippable(MIXED_SKIP_DEFINITION, "learn-about-scale")).toBe(true);
+    expect(isStepSkippable(MIXED_SKIP_DEFINITION, "analyze-cutability")).toBe(false);
+    expect(isStepSkippable(MIXED_SKIP_DEFINITION, "choose-file")).toBe(false);
+    expect(isStepSkippable(MIXED_SKIP_DEFINITION, null)).toBe(false);
+  });
+
+  it("a genuinely optional explanation step really can be skipped", () => {
+    let state = startMixed();
+    expect(state.currentStepId).toBe("choose-file");
+    state = dispatch(state, "advance");
+    expect(state.currentStepId).toBe("learn-about-scale");
+
+    state = dispatch(state, "skip-step");
+    expect(state.currentStepId).toBe("analyze-cutability");
+    expect(state.skippedStepIds).toEqual(["learn-about-scale"]);
+    expect(state.status).toBe("active");
+  });
+
+  it("skip-step is a same-reference no-op on the required cutability-analysis step", () => {
+    let state = startMixed();
+    state = dispatch(state, "advance"); // learn-about-scale
+    state = dispatch(state, "skip-step"); // skip the optional step
+    expect(state.currentStepId).toBe("analyze-cutability");
+
+    const before = state;
+    const after = dispatch(state, "skip-step");
+    expect(after).toBe(before);
+    expect(after.currentStepId).toBe("analyze-cutability");
+    expect(after.skippedStepIds).toEqual(["learn-about-scale"]);
+    expect(after.completedStepIds).toEqual(["choose-file"]);
+  });
+
+  it("skip-step is a same-reference no-op on the required physical-3D checkpoint", () => {
+    let state = startMixed();
+    state = dispatch(state, "advance"); // learn-about-scale
+    state = dispatch(state, "skip-step"); // skip the optional step
+    state = dispatch(state, "advance"); // complete analyze-cutability
+    expect(state.currentStepId).toBe("physical-3d");
+
+    const before = state;
+    const after = dispatch(state, "skip-step");
+    expect(after).toBe(before);
+    expect(after.currentStepId).toBe("physical-3d");
+  });
+
+  it("skip-step is a same-reference no-op on the required export-precondition step", () => {
+    let state = startMixed();
+    state = dispatch(state, "advance");
+    state = dispatch(state, "skip-step");
+    state = dispatch(state, "advance"); // physical-3d
+    state = dispatch(state, "advance"); // export
+    expect(state.currentStepId).toBe("export");
+
+    const before = state;
+    const after = dispatch(state, "skip-step");
+    expect(after).toBe(before);
+    expect(after.currentStepId).toBe("export");
+  });
+
+  it("cancel and advance remain unconditionally available on a required step even though skip is refused", () => {
+    // The guard must be specific to skip-step: cancel is still the
+    // unconditional global escape, and advance still works normally.
+    let state = startMixed();
+    state = dispatch(state, "advance");
+    state = dispatch(state, "skip-step");
+    expect(state.currentStepId).toBe("analyze-cutability");
+
+    expect(dispatch(state, "advance").currentStepId).toBe("physical-3d");
+    expect(reduceGuidedWorkflow(state, { type: "cancel" })).toBe(initialGuidedWorkflowState);
+  });
+
+  it("resume refuses a snapshot claiming a required step was skipped", () => {
+    const snapshot: OnboardingWorkflowSnapshot = {
+      goal: MIXED_SKIP_DEFINITION.goal,
+      definitionVersion: MIXED_SKIP_DEFINITION.definitionVersion,
+      currentStepId: "physical-3d",
+      completedStepIds: ["choose-file"],
+      // analyze-cutability is not in skippableStepIds -- the reducer could
+      // never have produced this snapshot.
+      skippedStepIds: ["learn-about-scale", "analyze-cutability"],
+    };
+    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot)).toBe(false);
+    expect(
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "resume",
+        definition: MIXED_SKIP_DEFINITION,
+        snapshot,
+        runToken: RUN,
+      }),
+    ).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("resume accepts a snapshot where only the truly skippable step was recorded as skipped", () => {
+    const snapshot: OnboardingWorkflowSnapshot = {
+      goal: MIXED_SKIP_DEFINITION.goal,
+      definitionVersion: MIXED_SKIP_DEFINITION.definitionVersion,
+      currentStepId: "physical-3d",
+      completedStepIds: ["choose-file", "analyze-cutability"],
+      skippedStepIds: ["learn-about-scale"],
+    };
+    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot)).toBe(true);
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: MIXED_SKIP_DEFINITION,
+      snapshot,
+      runToken: RUN,
+    });
+    expect(restored.status).toBe("active");
+    expect(restored.currentStepId).toBe("physical-3d");
   });
 });
 
@@ -737,6 +898,7 @@ describe("guided workflow -- input ownership", () => {
       goal: "create-first-sign" as const,
       definitionVersion: 1,
       stepIds,
+      skippableStepIds: [],
     };
     let state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
       type: "start",
@@ -852,5 +1014,45 @@ describe("guided workflow -- goals", () => {
       expect(state.status).toBe("completed");
       expect(reduceGuidedWorkflow(state, { type: "cancel" })).toEqual(initialGuidedWorkflowState);
     }
+  });
+});
+
+describe("guided workflow -- exported initial values are frozen", () => {
+  it("initialGuidedWorkflowState is frozen at the top level and in both owned lists", () => {
+    expect(Object.isFrozen(initialGuidedWorkflowState)).toBe(true);
+    expect(Object.isFrozen(initialGuidedWorkflowState.completedStepIds)).toBe(true);
+    expect(Object.isFrozen(initialGuidedWorkflowState.skippedStepIds)).toBe(true);
+
+    expect(() => {
+      (initialGuidedWorkflowState as { status: string }).status = "active";
+    }).toThrow();
+    expect(() =>
+      (initialGuidedWorkflowState.completedStepIds as string[]).push("intruder"),
+    ).toThrow();
+    expect(() =>
+      (initialGuidedWorkflowState.skippedStepIds as string[]).push("intruder"),
+    ).toThrow();
+
+    // The mutation attempts above must not have landed, and every later
+    // cancel must still hand back the same untouched object.
+    expect(initialGuidedWorkflowState.status).toBe("idle");
+    expect(initialGuidedWorkflowState.completedStepIds).toEqual([]);
+    const canceled = reduceGuidedWorkflow(advanceTo("add-text"), { type: "cancel" });
+    expect(canceled).toBe(initialGuidedWorkflowState);
+  });
+
+  it("initialOnboardingPreferences is frozen at the top level and in its owned list", () => {
+    expect(Object.isFrozen(initialOnboardingPreferences)).toBe(true);
+    expect(Object.isFrozen(initialOnboardingPreferences.completedGoals)).toBe(true);
+
+    expect(() => {
+      (initialOnboardingPreferences as { dismissed: boolean }).dismissed = true;
+    }).toThrow();
+    expect(() =>
+      (initialOnboardingPreferences.completedGoals as GuidedGoal[]).push("create-first-sign"),
+    ).toThrow();
+
+    expect(initialOnboardingPreferences.dismissed).toBe(false);
+    expect(initialOnboardingPreferences.completedGoals).toEqual([]);
   });
 });

@@ -167,6 +167,59 @@ Two rules hold in every row, and are the reason the matrix exists:
   away. It is not a promise that every panel stays visible;
 - **Save** is always *available* from any stage that has a document.
 
+#### Post-analysis repair-confidence routing (Create, Import, and AI)
+
+Analysis (Analyze, primary) does not lead to a single fixed next stage in any
+of the three goals. It is followed by exactly one of four routes, decided by
+the milestone's locked Safe to fix / Suggested fix / Needs your decision
+classification — never by assuming a repair action exists:
+
+1. **No actionable findings.** Guidance continues straight to the 3D stage;
+   no repair/decision stage is shown at all.
+2. **Deterministic safe repairs exist.** The repair/decision stage's primary
+   action is **Fix safe problems**.
+3. **No safe repairs, but decisions remain.** Every finding needs a
+   Suggested-fix or Needs-your-decision judgment call, so the deterministic
+   Fix-safe-problems action does not exist — presenting it as primary would
+   be a button with nothing to run. The stage's primary action is **Review
+   decisions** instead, walking findings by category and affected geometry,
+   exactly as the milestone already requires for ambiguous findings.
+4. **Blocking unresolved findings remain**, whether before any repair action
+   has run or after one has. Guidance stays in the repair/decision stage; 3D
+   and Export are not reachable from it as primary until findings are
+   resolved, or an explicitly-approved truthful acknowledgment path (G4 work,
+   not invented here) is taken.
+
+This routing applies identically to Create My First Sign, Import My Own
+Design, and Describe What I Want With AI — only Import previously had any
+repair/decision stage at all, which the milestone's shared three-tier
+classification does not justify: a Create or AI document can contain the same
+unsafe geometry as an imported one, and the milestone's grouping is a
+classification of *findings*, not of *how the document arrived*.
+
+The repair/decision stage's step id (once G1 names it) must never appear in a
+definition's `skippableStepIds` (§4) while route 4 can apply to it — `skip-step`
+is a same-reference no-op on a step outside `skippableStepIds` by construction
+(`isStepSkippable`, `guidedWorkflowState.ts`), which is what makes "stays in
+repair/decision flow until resolved" an enforced transition instead of a
+documented intention a UI could bypass. Route 1's *absence* of the stage, by
+contrast, is a G1 sequencing decision — the stage's step id is simply not
+present in that run's `stepIds` — not a skip, and needs no reducer change.
+
+The **Large-finding broken DXF** fixture (§8) exercises route 3: hundreds of
+findings, none safely auto-fixable, so **Review decisions** is primary and
+**Fix safe problems** is correctly never presented, since nothing qualifies
+for it. Its forward path is route 3 → resolving or truthfully acknowledging
+findings → route 4 clears → 3D. Its exit path is the same global **Exit
+guidance** action every other stage has — a large finding count must never
+become a trap with no way out short of finishing repairs.
+
+This routing fixes which primary action is shown, in what order, and which
+transitions the pure reducer must refuse (via §4's skippable/required
+mechanism). It does not implement finding grouping, the Fix-safe-problems
+engine, or the Review-decisions walkthrough — those remain G4 work, consistent
+with §10's non-goals.
+
 #### Create My First Sign
 
 | Stage | Primary action | Completion signal | primary | available | hidden |
@@ -174,6 +227,7 @@ Two rules hold in every row, and are the reason the matrix exists:
 | Choose size and material | Set stock size and material | Physical layer has material and thickness | Editing (layers) | Create, Text, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Add the sign content | Add text or a shape | Document has at least one object on a physical layer | Text | Create, Sign, Editing, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Text, Create, Save | Import, Trace, AI, 3D, Export |
+| Resolve what's found (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | No actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
@@ -193,7 +247,7 @@ actually selected.
 | *(branch: vector)* Vector import — review scale and findings | Accept the import | see below | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
 | *(branch: raster)* Raster import — trace settings | Accept the traced paths | see below | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
 | Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export, Analyze |
-| Repair what can be fixed | Fix safe problems | Fixed/skipped/remaining reported | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Repair what can be fixed (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | Fixed/skipped/remaining reported, no actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
@@ -226,6 +280,11 @@ action of that stage and Export never primary until the preview completion
 signal (rendered, or an explicit graceful-unavailable state) is recorded. No
 stage collapses 3D and Export together.
 
+The same rule extends one stage earlier for any goal in post-analysis routes
+2-4 (above): **a repair/decision stage under route 4 must clear — resolved or
+truthfully acknowledged — before 3D**. No stage collapses the repair/decision
+stage and 3D together either.
+
 #### Describe What I Want With AI — Optional
 
 Reachable only while `ai.connection.status === "connected"`; otherwise the goal
@@ -238,6 +297,7 @@ rather than a new one (§2).
 | Choose a concept | Accept one concept | Concept accepted into the document | AI | Editing, Text, Save | Import, Trace, Analyze, 3D, Export, Create, Sign |
 | Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Save | Import, Trace, AI, 3D, Export, Analyze |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | No actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
@@ -263,6 +323,31 @@ These are two different user intentions and are two different actions:
   completed) and keeps the workflow `active`; on the final step it completes
   the workflow. Skipping one explanation must never end the journey.
 - **`dismiss`** leaves the workflow deliberately and is terminal.
+
+Not every step is skippable, and eligibility is **locked in the step
+definition, not left to whichever caller happens to dispatch `skip-step`.**
+`GuidedWorkflowDefinition.skippableStepIds` names exactly which of `stepIds`
+may be bypassed this way; `isValidWorkflowDefinition` requires it to be a
+known, duplicate-free subset of `stepIds`, and `skip-step` for a step outside
+it is a **same-reference no-op** (`isStepSkippable`) — identical in shape to
+every other identity mismatch this reducer already treats as a stale or
+invalid event rather than a silent bypass. `canResumeSnapshot` (§6) enforces
+the same rule against persisted history: a snapshot recording a skipped step
+outside `skippableStepIds` describes a journey the reducer could never have
+produced, and resume refuses it exactly like a duplicated or out-of-order
+snapshot.
+
+This is what makes the locked M15 product direction enforceable rather than
+aspirational: physical 3D is a required guided checkpoint before export, and
+a repair/decision stage with unresolved blocking findings (§3's post-analysis
+routing) must stay in the flow — both are simply step ids a definition must
+never place in `skippableStepIds`. The 3D stage's own completion signal
+already covers the one legitimate way past it without a rendered preview —
+"Preview rendered, or an explicit unavailable state" (§3) — so a truthful
+unavailable acknowledgment reaches the next stage through an ordinary
+`advance` once that signal is satisfied, never through `skip-step`. A
+genuinely optional explanation step, by contrast, belongs in
+`skippableStepIds` and behaves exactly as described below.
 
 A step is recorded as completed or skipped but never both, so the summary the
 user is shown afterwards is truthful even if they went back and redid a step
@@ -434,7 +519,7 @@ provenance-recording convention the M14 G6 owner retest already established
 | Representative SVG | A real multi-object SVG with layers | Import commits with expected units/scale/findings | A deliberately malformed variant returns to *Choose the file* without committing | Import My Own Design (vector) |
 | Representative DXF | A real multi-entity DXF | Same as SVG | Same as SVG | Import My Own Design (vector) |
 | Raster image (PNG or JPEG) | A real photo/scan of sign artwork | Trace accepted, editable paths produced | A degenerate image (blank/solid) is rejected without producing empty paths | Import My Own Design (raster) |
-| Large-finding broken DXF | A file with a large finding count (hundreds+) | Findings are summarized into a small number of grouped categories, not a raw entity-level list | Findings remain grouped even when none are safely auto-fixable | Repair what can be fixed |
+| Large-finding broken DXF | A file with a large finding count (hundreds+), none safely auto-fixable | Findings are summarized into a small number of grouped categories, not a raw entity-level list; **Review decisions** is primary and **Fix safe problems** is correctly absent (post-analysis routing route 3, §3) | Forward: resolving or truthfully acknowledging findings clears route 4 and reaches 3D. Exit: the global **Exit guidance** action, reachable from the repair/decision stage like every other stage — a large finding count is never a trap with no way out short of finishing repairs | Repair what can be fixed |
 | Multi-layer preview/export project | A real multi-layer `.laserx` project (already used for M14 G6 owner retest) | 3D preview renders exact thickness/holes/layer order; export writes real SVG/DXF | An explicit graceful-unavailable state if WebGL is absent | See it in 3D, Export the result |
 | AI unavailable | `ai.connection.status !== "connected"` (no credential configured) | The AI goal is presented as unavailable, never as broken; manual paths remain fully usable | n/a | Describe What I Want With AI — Optional (disconnected) |
 | AI connected (deterministic/stubbed) | `ai.connection.status === "connected"` via the existing test-mock credential path (`LASERX_TEST_AI_MOCK`/`LASERX_TEST_AI_CREDENTIAL_MODE`, defined in `apps/desktop/tests/e2e/helpers.ts` and already exercised by `ai-generation.spec.ts`) | A concept is generated and accepted deterministically, without a live provider call | A stubbed failure response is shown as an explicit failure, not a hang | Describe What I Want With AI — Optional (connected) |

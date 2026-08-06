@@ -49,6 +49,19 @@ export interface GuidedWorkflowDefinition {
   readonly definitionVersion: number;
   /** Opaque, stable step identifiers in order. Content belongs to G1. */
   readonly stepIds: readonly string[];
+  /**
+   * Which of `stepIds` may be bypassed with `skip-step`.
+   *
+   * Skip eligibility is locked here, in the definition, rather than left to
+   * whichever caller happens to dispatch `skip-step` -- the locked M15
+   * product direction requires most guided stages (cutability analysis, the
+   * physical-3D checkpoint before export, any repair/decision stage with
+   * unresolved blocking findings) to be mandatory, with only genuinely
+   * optional explanations skippable. `isValidWorkflowDefinition` requires
+   * this to be a known, duplicate-free subset of `stepIds`; `skip-step` for
+   * a step outside it is a same-reference no-op (`isStepSkippable`).
+   */
+  readonly skippableStepIds: readonly string[];
 }
 
 export interface GuidedWorkflowState {
@@ -76,7 +89,23 @@ export interface GuidedWorkflowState {
   readonly failureReason: string | null;
 }
 
-export const initialGuidedWorkflowState: GuidedWorkflowState = {
+/**
+ * Freezes a state object and its two owned lists.
+ *
+ * `initialGuidedWorkflowState` is returned by reference from `cancel` for
+ * *every* run -- it is not copied per call. Leaving it mutable would mean one
+ * untyped write or bad cast anywhere in the app could corrupt the reset value
+ * every later cancel/replay relies on. Freezing it the same way `ownList`/
+ * `ownDefinition` freeze runtime-owned state closes that gap structurally
+ * instead of by convention.
+ */
+function freezeState(state: GuidedWorkflowState): GuidedWorkflowState {
+  Object.freeze(state.completedStepIds);
+  Object.freeze(state.skippedStepIds);
+  return Object.freeze(state);
+}
+
+export const initialGuidedWorkflowState: GuidedWorkflowState = freezeState({
   status: "idle",
   definition: null,
   runToken: null,
@@ -84,7 +113,7 @@ export const initialGuidedWorkflowState: GuidedWorkflowState = {
   completedStepIds: [],
   skippedStepIds: [],
   failureReason: null,
-};
+});
 
 /**
  * The persisted record of an interrupted workflow.
@@ -114,12 +143,18 @@ export interface OnboardingPreferences {
   readonly activeWorkflow: OnboardingWorkflowSnapshot | null;
 }
 
-export const initialOnboardingPreferences: OnboardingPreferences = {
+/** Freezes a preferences object and its owned list. See `freezeState`. */
+function freezePreferences(preferences: OnboardingPreferences): OnboardingPreferences {
+  Object.freeze(preferences.completedGoals);
+  return Object.freeze(preferences);
+}
+
+export const initialOnboardingPreferences: OnboardingPreferences = freezePreferences({
   schemaVersion: 1,
   completedGoals: [],
   dismissed: false,
   activeWorkflow: null,
-};
+});
 
 /**
  * Identity every step-scoped action must carry.
@@ -220,7 +255,21 @@ export function isValidWorkflowDefinition(definition: GuidedWorkflowDefinition):
   }
   if (definition.stepIds.length === 0) return false;
   if (definition.stepIds.some((id) => typeof id !== "string" || id.trim() === "")) return false;
-  return new Set(definition.stepIds).size === definition.stepIds.length;
+  if (new Set(definition.stepIds).size !== definition.stepIds.length) return false;
+
+  // skippableStepIds must itself be well-formed and describe only real steps:
+  // a blank/duplicate entry is meaningless, and an id absent from stepIds
+  // would silently claim skip eligibility for a step that does not exist.
+  if (
+    definition.skippableStepIds.some((id) => typeof id !== "string" || id.trim() === "")
+  ) {
+    return false;
+  }
+  if (new Set(definition.skippableStepIds).size !== definition.skippableStepIds.length) {
+    return false;
+  }
+  const stepIdSet = new Set(definition.stepIds);
+  return definition.skippableStepIds.every((id) => stepIdSet.has(id));
 }
 
 /**
@@ -244,7 +293,21 @@ function ownDefinition(definition: GuidedWorkflowDefinition): GuidedWorkflowDefi
     goal: definition.goal,
     definitionVersion: definition.definitionVersion,
     stepIds: ownList(definition.stepIds),
+    skippableStepIds: ownList(definition.skippableStepIds),
   });
+}
+
+/**
+ * Whether `skip-step` may bypass this step under this definition.
+ *
+ * Exported so a caller (G1) can decide whether to offer a Skip affordance at
+ * all, without duplicating the eligibility rule the reducer itself enforces.
+ */
+export function isStepSkippable(
+  definition: GuidedWorkflowDefinition,
+  stepId: string | null,
+): boolean {
+  return stepId !== null && definition.skippableStepIds.includes(stepId);
 }
 
 function stepIndexOf(definition: GuidedWorkflowDefinition, stepId: string | null): number {
@@ -356,7 +419,14 @@ export function canResumeSnapshot(
   if (progressIds.length !== prefix.length) return false;
   const progress = new Set(progressIds);
   if (progress.size !== progressIds.length) return false;
-  return prefix.every((id) => progress.has(id));
+  if (!prefix.every((id) => progress.has(id))) return false;
+
+  // A skipped id the reducer could never have produced: skip-step is a
+  // same-reference no-op on a step outside skippableStepIds, so a snapshot
+  // claiming a required step was skipped describes a journey the reducer
+  // cannot produce -- exactly the same reasoning as the prefix checks above,
+  // applied to skip eligibility instead of ordering.
+  return snapshot.skippedStepIds.every((id) => isStepSkippable(definition, id));
 }
 
 /**
@@ -438,10 +508,21 @@ export function reduceGuidedWorkflow(
       if (!matchesLiveStep(state, action)) return state;
       const definition = state.definition;
       if (definition === null) return state;
+
+      const skipping = action.type === "skip-step";
+      // Skip eligibility is locked in the definition (isStepSkippable), not
+      // left to whichever caller dispatches skip-step: a required stage --
+      // cutability analysis, the physical-3D checkpoint, a repair/decision
+      // stage with unresolved blocking findings -- must not become an
+      // allowed transition just because a UI happened to offer a Skip
+      // control on it. This is a same-reference no-op, identical in shape to
+      // every other identity mismatch this reducer already treats as a
+      // stale or invalid event.
+      if (skipping && !isStepSkippable(definition, state.currentStepId)) return state;
+
       const index = stepIndexOf(definition, state.currentStepId);
       if (index < 0) return state;
 
-      const skipping = action.type === "skip-step";
       // A step is either completed or skipped, never recorded as both -- the
       // summary a user is shown after the journey has to be truthful.
       const completedStepIds = ownList(
