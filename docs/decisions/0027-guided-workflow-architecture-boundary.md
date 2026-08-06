@@ -104,6 +104,17 @@ only meaningful against one exact step set; an id survives a definition
 gaining or reordering steps, and makes a stale persisted snapshot detectable
 instead of silently pointing at a different step.
 
+The machine is deliberately **linear**: one immutable `stepIds` list per run,
+moving forward and back by one step. Conditional experience — the
+vector/raster presentation split, the sometimes-invisible post-analysis
+checkpoint — is expressed as contextual variants and auto-completing
+checkpoints over that stable list (§3), never as a branch graph, a mid-run
+definition swap, or a skip. A definition also declares which steps are
+skippable (`skippableStepIds`, §4) and which depend on transient in-memory
+state (`transientStepIds`, §6); both sets are validated as known,
+duplicate-free subsets of `stepIds` and fail closed with the rest of the
+definition.
+
 Because step lookup resolves an id to its *first* occurrence, a definition is
 only usable if its ids are unique and non-blank, its step list is non-empty,
 and its version is a positive integer. `isValidWorkflowDefinition` enforces
@@ -167,58 +178,95 @@ Two rules hold in every row, and are the reason the matrix exists:
   away. It is not a promise that every panel stays visible;
 - **Save** is always *available* from any stage that has a document.
 
-#### Post-analysis repair-confidence routing (Create, Import, and AI)
+#### One stable step list per goal — variants and checkpoints, never branches
 
-Analysis (Analyze, primary) does not lead to a single fixed next stage in any
-of the three goals. It is followed by exactly one of four routes, decided by
-the milestone's locked Safe to fix / Suggested fix / Needs your decision
-classification — never by assuming a repair action exists:
+The reducer is deliberately **linear**: one immutable ordered `stepIds` list
+per run, forward and back by one step, no route action, no successor graph,
+no way to add or remove a step mid-run. Everything conditional in the three
+goals is therefore expressed inside that constraint, by exactly two devices —
+never by mutating or swapping a definition during an active run, never by
+cancel-and-restart with a different step list, and never by misusing
+`skip-step`:
 
-1. **No actionable findings.** Guidance continues straight to the 3D stage;
-   no repair/decision stage is shown at all.
-2. **Deterministic safe repairs exist.** The repair/decision stage's primary
-   action is **Fix safe problems**.
-3. **No safe repairs, but decisions remain.** Every finding needs a
-   Suggested-fix or Needs-your-decision judgment call, so the deterministic
-   Fix-safe-problems action does not exist — presenting it as primary would
-   be a button with nothing to run. The stage's primary action is **Review
-   decisions** instead, walking findings by category and affected geometry,
-   exactly as the milestone already requires for ambiguous findings.
-4. **Blocking unresolved findings remain**, whether before any repair action
-   has run or after one has. Guidance stays in the repair/decision stage; 3D
-   and Export are not reachable from it as primary until findings are
-   resolved, or an explicitly-approved truthful acknowledgment path (G4 work,
-   not invented here) is taken.
+- a **contextual variant**: one stable step whose *presentation* differs
+  according to live feature state the caller reads (a classified file type, a
+  connection status). The step id, position, completion signal, and recovery
+  route are identical across variants; which surface is shown is a rendering
+  decision over transient state, not workflow identity. The vector/raster
+  split in Import My Own Design is the canonical case (below).
+- an **auto-completing checkpoint**: a stable step that is *always present*
+  in `stepIds` and completes through an ordinary step-scoped `advance` —
+  immediately and without presenting a stage when there is nothing for it to
+  do, or after real work when there is. The post-analysis resolution
+  checkpoint is the canonical case (below).
 
-This routing applies identically to Create My First Sign, Import My Own
-Design, and Describe What I Want With AI — only Import previously had any
-repair/decision stage at all, which the milestone's shared three-tier
-classification does not justify: a Create or AI document can contain the same
-unsafe geometry as an imported one, and the milestone's grouping is a
-classification of *findings*, not of *how the document arrived*.
+This is what makes ADR-described conditionality representable by the locked
+state machine as it exists: every path through a goal traverses the same step
+ids in the same order, so Back, persistence, resume, run identity, and the
+reachability proofs all keep working unchanged. Promoting the reducer to a
+validated branch graph was considered and rejected as strictly more machine
+than the three locked goals need; reopening that choice requires amending
+this ADR, not a G1 improvisation.
 
-The repair/decision stage's step id (once G1 names it) must never appear in a
-definition's `skippableStepIds` (§4) while route 4 can apply to it — `skip-step`
-is a same-reference no-op on a step outside `skippableStepIds` by construction
-(`isStepSkippable`, `guidedWorkflowState.ts`), which is what makes "stays in
-repair/decision flow until resolved" an enforced transition instead of a
-documented intention a UI could bypass. Route 1's *absence* of the stage, by
-contrast, is a G1 sequencing decision — the stage's step id is simply not
-present in that run's `stepIds` — not a skip, and needs no reducer change.
+#### The post-analysis resolution checkpoint (Create, Import, and AI)
 
-The **Large-finding broken DXF** fixture (§8) exercises route 3: hundreds of
-findings, none safely auto-fixable, so **Review decisions** is primary and
-**Fix safe problems** is correctly never presented, since nothing qualifies
-for it. Its forward path is route 3 → resolving or truthfully acknowledging
-findings → route 4 clears → 3D. Its exit path is the same global **Exit
-guidance** action every other stage has — a large finding count must never
-become a trap with no way out short of finishing repairs.
+Every goal's `stepIds` contains one **resolution checkpoint** immediately
+after cutability analysis. It is never absent, never in `skippableStepIds`,
+and its behavior is fixed by two pure functions exported from
+`guidedWorkflowState.ts`, so all three goals share one deterministic rule
+instead of each UI inventing its own:
 
-This routing fixes which primary action is shown, in what order, and which
-transitions the pure reducer must refuse (via §4's skippable/required
-mechanism). It does not implement finding grouping, the Fix-safe-problems
-engine, or the Review-decisions walkthrough — those remain G4 work, consistent
-with §10's non-goals.
+- **`resolutionPrimaryAction(counts)`** decides the one primary action by
+  strict first-match precedence over the milestone's locked grouping —
+  `safeFixableCount` (Safe to fix), `needsDecisionCount` (Suggested fix or
+  Needs your decision), `blockingCount`:
+  1. eligible safe fixes exist → **Fix safe problems**;
+  2. otherwise anything still needs attention (a decision or a blocking
+     finding) → **Review decisions**;
+  3. otherwise → **Continue**.
+  Exactly one rule ever applies, so two compliant implementations cannot
+  choose different behavior — the overlap the earlier four-route wording left
+  open (safe fixes coexisting with blocking findings, decisions that are also
+  blocking) resolves to one answer by construction.
+- **`canCompleteResolution(counts)`** is the unlock rule: the checkpoint may
+  complete exactly when **no blocking findings remain**. Non-blocking
+  suggestions never trap the user — Review decisions stays primary while they
+  exist, but Continue remains available. An explicitly-approved truthful
+  acknowledgment path (G4 work, not invented here) may later widen this rule;
+  nothing here does. Malformed counts fail closed: a human reviews, and the
+  checkpoint never unlocks on a broken count.
+
+**When nothing is actionable, the checkpoint auto-completes.** If
+`canCompleteResolution` already holds at the moment the checkpoint opens (or
+re-opens via Back), the caller dispatches an ordinary step-scoped `advance`
+immediately: no stage is presented, the checkpoint is recorded completed —
+truthfully, since passing with nothing to fix is what happened — and nothing
+is recorded skipped. Producing the counts (grouping findings into the three
+tiers) is the grouped-repair engine's job and remains G4 work; this contract
+fixes only what the checkpoint does with them.
+
+**Enforcement is split the same way as run tokens (§5).** The reducer cannot
+see findings, so the checkpoint's guarantees come from two places: the
+definition keeps its step id out of `skippableStepIds`, making `skip-step` a
+same-reference no-op on it by construction (`isStepSkippable`), and the
+caller dispatches `advance` on it **only when `canCompleteResolution` returns
+true** — an explicit G1 caller obligation, tested at the layer that owns it,
+exactly like minting fresh run tokens. 3D therefore unlocks only through the
+checkpoint's completion.
+
+This applies identically to Create My First Sign, Import My Own Design, and
+Describe What I Want With AI — the milestone's grouping is a classification
+of *findings*, not of how the document arrived, and a Create or AI document
+can contain the same unsafe geometry as an imported one.
+
+The **Large-finding broken DXF** fixture (§8) exercises the no-safe-fixes
+case: hundreds of findings, none safely auto-fixable, so
+`resolutionPrimaryAction` returns **Review decisions** and **Fix safe
+problems** is correctly never presented, since nothing qualifies for it. Its
+forward path is resolving or truthfully acknowledging findings until
+`canCompleteResolution` holds, then 3D. Its exit path is the same global
+**Exit guidance** action every other stage has — a large finding count must
+never become a trap with no way out short of finishing repairs.
 
 #### Create My First Sign
 
@@ -227,36 +275,45 @@ with §10's non-goals.
 | Choose size and material | Set stock size and material | Physical layer has material and thickness | Editing (layers) | Create, Text, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Add the sign content | Add text or a shape | Document has at least one object on a physical layer | Text | Create, Sign, Editing, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Text, Create, Save | Import, Trace, AI, 3D, Export |
-| Resolve what's found (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | No actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
 #### Import My Own Design
 
-Source classification is a **branch, not a stage**: nothing about it is a
-choice the user makes deliberately, so it never itself becomes a numbered
-step with its own primary action. Before a file is chosen, its type is
-unknown, so neither Import's file-open affordance nor Trace's raster-specific
-preprocessing controls describe the file yet — only the generic "bring in a
-file" action is primary, and Trace stays hidden until a raster file is
-actually selected.
+Source classification is a **contextual variant of one stable step, not a
+branch**: nothing about it is a choice the user makes deliberately, so it
+never forks the step sequence. The *Prepare the source* step is one step id
+at one position with one completion signal — "the source is committed as
+editable geometry" — and which surface it presents is a rendering decision
+over the classified file type, which lives in the transient preview slot the
+caller already owns. Before a file is chosen, its type is unknown, so only
+the generic "bring in a file" action is primary and Trace stays hidden until
+a raster file is actually selected. The reducer walks the identical `stepIds`
+list for both variants; nothing branches, and no definition changes mid-run.
 
 | Stage | Primary action | Completion signal | primary | available | hidden |
 |---|---|---|---|---|---|
 | Choose the file | Pick a source file | A file is selected and classified as vector (SVG/DXF) or raster (PNG/JPEG) | Import | Save | AI, Analyze, 3D, Export, Create, Text, Sign, Editing, **Trace** |
-| *(branch: vector)* Vector import — review scale and findings | Accept the import | see below | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
-| *(branch: raster)* Raster import — trace settings | Accept the traced paths | see below | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| Prepare the source *(vector variant)* — review scale and findings | Accept the import | The source is committed as editable geometry | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| Prepare the source *(raster variant)* — trace settings | Accept the traced paths | The source is committed as editable geometry | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
 | Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export, Analyze |
-| Repair what can be fixed (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | Fixed/skipped/remaining reported, no actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
-The bolded cells are the anti-pattern Issue #45 names, stated as a rule rather
-than an example: **the vector-import stage hides Trace outright, and the
-raster stage hides Import outright**, and neither is presented until source
-classification actually resolves one way or the other. Today both panels are
-permanently mounted side by side, and physical 3D does not exist as a focused
-stage at all.
+The two *Prepare the source* rows are **one step** — same id, same position,
+same completion signal — shown here as two rows only because their surface
+states differ. The bolded cells are the anti-pattern Issue #45 names, stated
+as a rule rather than an example: **the vector variant hides Trace outright,
+and the raster variant hides Import outright**, and neither is presented
+until source classification actually resolves one way or the other. Today
+both panels are permanently mounted side by side, and physical 3D does not
+exist as a focused stage at all. Analysis is its own explicit stage here for
+the same reason it is in the other two goals: the resolution checkpoint's
+counts have to come from an analysis that actually ran, in every goal, not
+only in Create.
 
 **Import/trace completion is explicit, not implied.** "Import committed or
 cancelled" and "paths accepted or rejected" named two outcomes but left the
@@ -265,13 +322,13 @@ looped, or exited. It does neither on its own:
 
 - **Accept** (commit the vector import, or accept the traced paths) advances
   to *Assign physical information*.
-- **Cancel** (vector) or **Reject** (raster) returns to *Choose the file*,
-  clearing the pending preview so a different file can be tried. This is the
-  same nullable-preview-slot pattern already proven for import/raster/sign-
-  tools/AI previews (§1) — the reducer never marks a cancelled or rejected
-  preview as commit-complete.
+- **Cancel** (vector) or **Reject** (raster) returns to *Choose the file* —
+  dispatched as an ordinary step-scoped `back`, clearing the pending preview
+  so a different file can be tried. This is the same nullable-preview-slot
+  pattern already proven for import/raster/sign-tools/AI previews (§1) — the
+  reducer never marks a cancelled or rejected preview as commit-complete.
 - **Exit guidance** (the global action, §3 rule) is always the other option
-  from either stage, and never implied by cancel/reject.
+  from either variant, and never implied by cancel/reject.
 
 Required 3D before export, restated as a table rule rather than left to §3's
 prose alone: **every primary path that reaches Export must have passed through
@@ -280,10 +337,11 @@ action of that stage and Export never primary until the preview completion
 signal (rendered, or an explicit graceful-unavailable state) is recorded. No
 stage collapses 3D and Export together.
 
-The same rule extends one stage earlier for any goal in post-analysis routes
-2-4 (above): **a repair/decision stage under route 4 must clear — resolved or
-truthfully acknowledged — before 3D**. No stage collapses the repair/decision
-stage and 3D together either.
+The same rule extends one stage earlier in every goal: **the resolution
+checkpoint must complete — `canCompleteResolution`, meaning no blocking
+findings remain or a separately-approved acknowledgment (G4) is recorded —
+before 3D**. No stage collapses the resolution checkpoint and 3D together
+either.
 
 #### Describe What I Want With AI — Optional
 
@@ -297,12 +355,36 @@ rather than a new one (§2).
 | Choose a concept | Accept one concept | Concept accepted into the document | AI | Editing, Text, Save | Import, Trace, Analyze, 3D, Export, Create, Sign |
 | Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Save | Import, Trace, AI, 3D, Export, Analyze |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
-| Resolve what's found (routes 2-4 only; the stage is absent entirely under route 1 — see Post-analysis repair-confidence routing above) | Fix safe problems, or Review decisions — route-dependent | No actionable findings remain, or an explicitly-approved acknowledgment is recorded | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
 Accepted AI geometry passes the same import, editing, and cutability
 validation as manual geometry — guidance never routes around a check.
+
+#### Which stages are transient — the resume policy per goal
+
+A stage is **transient** (`transientStepIds`, §6) when its prerequisites live
+in in-memory feature state that does not survive an application restart — a
+nullable preview slot or current analysis results. Every other stage rests
+only on the document itself and resumes exactly. The designation is part of
+this contract, not a G1 guess:
+
+- **Create My First Sign** — only *Resolve what's found* is transient (its
+  grouped findings are current analysis results); it recovers to *Check it
+  can be cut*, which re-runs the deterministic analysis. Every other stage
+  reads and writes the document.
+- **Import My Own Design** — *Prepare the source* is transient (the pending
+  import/trace preview slot); it recovers to *Choose the file*. *Resolve
+  what's found* is transient exactly as in Create. *Choose the file* itself
+  is stable: it is the re-entry point, needing nothing but an open document.
+- **Describe What I Want With AI** — *Choose a concept* is transient
+  (generated concepts are deliberately never persisted, per the AI privacy
+  boundary); it recovers to *Describe the sign*. *Resolve what's found* is
+  transient exactly as in Create.
+
+3D and Export stages are stable in every goal: the physical preview and the
+exporters derive everything from the authoritative document on demand.
 
 #### What this matrix does and does not decide
 
@@ -339,9 +421,9 @@ snapshot.
 
 This is what makes the locked M15 product direction enforceable rather than
 aspirational: physical 3D is a required guided checkpoint before export, and
-a repair/decision stage with unresolved blocking findings (§3's post-analysis
-routing) must stay in the flow — both are simply step ids a definition must
-never place in `skippableStepIds`. The 3D stage's own completion signal
+the resolution checkpoint with unresolved blocking findings (§3) must stay in
+the flow — both are simply step ids a definition must never place in
+`skippableStepIds`. The 3D stage's own completion signal
 already covers the one legitimate way past it without a rendered preview —
 "Preview rendered, or an explicit unavailable state" (§3) — so a truthful
 unavailable acknowledgment reaches the next stage through an ordinary
@@ -422,12 +504,18 @@ replay, different from the run being restarted.
 interrupted workflow. G0 locks the **shape** only:
 
 ```ts
+interface GuidedProjectBinding {
+  documentId: string; // opaque, supplied by the app layer
+  fingerprint: string; // opaque, captured at snapshot time
+}
+
 interface OnboardingWorkflowSnapshot {
   goal: GuidedGoal;
   definitionVersion: number;
   currentStepId: string;
   completedStepIds: string[];
   skippedStepIds: string[];
+  projectBinding: GuidedProjectBinding;
 }
 
 interface OnboardingPreferences {
@@ -441,10 +529,38 @@ interface OnboardingPreferences {
 `definitionVersion` is what makes a stale snapshot detectable: step ids are
 stable, but their meaning and ordering belong to one specific step set.
 
-Resume is **fail-closed**, and validates the full semantic invariant rather
-than only checking that ids are recognizable. Recorded progress must be
-**exactly the prefix of steps before the open step, each accounted for exactly
-once** across completed and skipped.
+**Progress is bound to one exact document.** `projectBinding` carries an
+opaque identity and an opaque content fingerprint, both supplied by the app
+layer — which already owns document identity and fingerprinting via the
+`documentFingerprint`/`projectFingerprint` idiom in `ProjectSession` (§1) —
+and compared by exact string equality only, keeping the pure module
+independent of every project package. Resume refuses a snapshot whose
+binding does not match the live document: a different identity is the wrong
+project outright, and the same identity with a different fingerprint means
+the document changed since the snapshot, so recorded progress ("analysis
+passed", "material assigned") may no longer describe it. A binding that
+cannot distinguish documents — blank identity or fingerprint — is rejected
+at both capture (`toWorkflowSnapshot` returns `null` rather than persisting
+a record every later resume must refuse) and resume. Deriving the binding
+freshly at snapshot time and at resume time is a **G1 caller obligation** of
+the same kind as minting run tokens (§5): fingerprints are point-in-time
+values, so the reducer cannot carry one from `start` without it going stale
+as the user edits.
+
+**Transient steps recover; they are never reopened.** A snapshot whose open
+step is in `transientStepIds` (§3's per-goal designation) resumes at the
+nearest earlier non-transient step — `resolveResumeStepId` exposes the
+target so G1 can say "we took you back to X" — reopening it with exactly
+`back`'s semantics: progress from the recovery step forward is discarded, so
+the restored record stays truthful. A snapshot open on a transient step with
+no stable predecessor cannot resume at all, and the goal restarts. In every
+refusal or recovery, the document itself is untouched; only guidance
+position is lost.
+
+Resume is otherwise **fail-closed**, and validates the full semantic
+invariant rather than only checking that ids are recognizable. Recorded
+progress must be **exactly the prefix of steps before the open step, each
+accounted for exactly once** across completed and skipped.
 
 Requiring only that progress lies *behind* the current step is not enough: it
 would accept `{current: C, completed: [A]}` for steps A/B/C, claiming the user
@@ -519,7 +635,7 @@ provenance-recording convention the M14 G6 owner retest already established
 | Representative SVG | A real multi-object SVG with layers | Import commits with expected units/scale/findings | A deliberately malformed variant returns to *Choose the file* without committing | Import My Own Design (vector) |
 | Representative DXF | A real multi-entity DXF | Same as SVG | Same as SVG | Import My Own Design (vector) |
 | Raster image (PNG or JPEG) | A real photo/scan of sign artwork | Trace accepted, editable paths produced | A degenerate image (blank/solid) is rejected without producing empty paths | Import My Own Design (raster) |
-| Large-finding broken DXF | A file with a large finding count (hundreds+), none safely auto-fixable | Findings are summarized into a small number of grouped categories, not a raw entity-level list; **Review decisions** is primary and **Fix safe problems** is correctly absent (post-analysis routing route 3, §3) | Forward: resolving or truthfully acknowledging findings clears route 4 and reaches 3D. Exit: the global **Exit guidance** action, reachable from the repair/decision stage like every other stage — a large finding count is never a trap with no way out short of finishing repairs | Repair what can be fixed |
+| Large-finding broken DXF | A file with a large finding count (hundreds+), none safely auto-fixable | Findings are summarized into a small number of grouped categories, not a raw entity-level list; `resolutionPrimaryAction` returns **Review decisions** and **Fix safe problems** is correctly absent (§3) | Forward: resolving or truthfully acknowledging findings until `canCompleteResolution` holds, then 3D. Exit: the global **Exit guidance** action, reachable from the resolution checkpoint like every other stage — a large finding count is never a trap with no way out short of finishing repairs | Resolve what's found |
 | Multi-layer preview/export project | A real multi-layer `.laserx` project (already used for M14 G6 owner retest) | 3D preview renders exact thickness/holes/layer order; export writes real SVG/DXF | An explicit graceful-unavailable state if WebGL is absent | See it in 3D, Export the result |
 | AI unavailable | `ai.connection.status !== "connected"` (no credential configured) | The AI goal is presented as unavailable, never as broken; manual paths remain fully usable | n/a | Describe What I Want With AI — Optional (disconnected) |
 | AI connected (deterministic/stubbed) | `ai.connection.status === "connected"` via the existing test-mock credential path (`LASERX_TEST_AI_MOCK`/`LASERX_TEST_AI_CREDENTIAL_MODE`, defined in `apps/desktop/tests/e2e/helpers.ts` and already exercised by `ai-generation.spec.ts`) | A concept is generated and accepted deterministically, without a live provider call | A stubbed failure response is shown as an explicit failure, not a hang | Describe What I Want With AI — Optional (connected) |

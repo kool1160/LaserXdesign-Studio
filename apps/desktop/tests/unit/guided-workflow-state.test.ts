@@ -2,24 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import {
   ALLOWED_SOURCE_STATUSES,
+  canCompleteResolution,
   canResumeSnapshot,
   initialGuidedWorkflowState,
   initialOnboardingPreferences,
   isStepSkippable,
+  isStepTransient,
   isTerminalStatus,
+  isUsableProjectBinding,
   isValidWorkflowDefinition,
   reduceGuidedWorkflow,
+  resolutionPrimaryAction,
+  resolveResumeStepId,
   toWorkflowSnapshot,
   type GuidedGoal,
+  type GuidedProjectBinding,
   type GuidedWorkflowAction,
   type GuidedWorkflowActionType,
   type GuidedWorkflowDefinition,
   type GuidedWorkflowState,
+  type ResolutionFindingCounts,
   type StepScopedAction,
   type OnboardingWorkflowSnapshot,
 } from "../../src/features/onboarding/guidedWorkflowState.js";
 
 const GOALS: readonly GuidedGoal[] = ["create-first-sign", "import-own-design", "describe-with-ai"];
+
+/** The document the guided run is bound to in most tests. */
+const BINDING: GuidedProjectBinding = { documentId: "doc-1", fingerprint: "fp-1" };
 
 const DEFINITION: GuidedWorkflowDefinition = {
   goal: "create-first-sign",
@@ -30,6 +40,7 @@ const DEFINITION: GuidedWorkflowDefinition = {
   // which are unrelated to eligibility. Skip-eligibility gating itself is
   // covered by MIXED_SKIP_DEFINITION below.
   skippableStepIds: ["choose-material", "add-text", "review-cutability"],
+  transientStepIds: [],
 };
 
 /**
@@ -44,6 +55,30 @@ const MIXED_SKIP_DEFINITION: GuidedWorkflowDefinition = {
   definitionVersion: 1,
   stepIds: ["choose-file", "learn-about-scale", "analyze-cutability", "physical-3d", "export"],
   skippableStepIds: ["learn-about-scale"],
+  transientStepIds: [],
+};
+
+/**
+ * The locked stable-linear-superset shape for Import My Own Design (ADR 0027
+ * §3): one stable source-preparation step whose vector/raster presentation is
+ * a contextual variant, and one always-present resolution checkpoint.
+ * `prepare-source` and `resolve-findings` depend on transient in-memory state
+ * (a preview slot, current analysis results) and are marked so.
+ */
+const IMPORT_GOAL_DEFINITION: GuidedWorkflowDefinition = {
+  goal: "import-own-design",
+  definitionVersion: 1,
+  stepIds: [
+    "choose-file",
+    "prepare-source",
+    "assign-physical",
+    "analyze-cutability",
+    "resolve-findings",
+    "physical-3d",
+    "export",
+  ],
+  skippableStepIds: [],
+  transientStepIds: ["prepare-source", "resolve-findings"],
 };
 
 function deepFreeze<T>(value: T): T {
@@ -174,6 +209,12 @@ describe("guided workflow -- definition validity", () => {
     ["a zero version", { ...DEFINITION, definitionVersion: 0 }],
     ["a negative version", { ...DEFINITION, definitionVersion: -1 }],
     ["a fractional version", { ...DEFINITION, definitionVersion: 1.5 }],
+    ["a transientStepIds entry naming no real step", { ...DEFINITION, transientStepIds: ["ghost"] }],
+    [
+      "a duplicate entry within transientStepIds",
+      { ...DEFINITION, transientStepIds: ["add-text", "add-text"] },
+    ],
+    ["a blank transientStepIds entry", { ...DEFINITION, transientStepIds: ["  "] }],
   ];
 
   it.each(INVALID)("rejects %s", (_label, definition) => {
@@ -209,12 +250,14 @@ describe("guided workflow -- definition validity", () => {
       type: "resume",
       definition: trapped,
       runToken: RUN,
+      liveBinding: BINDING,
       snapshot: {
         goal: trapped.goal,
         definitionVersion: trapped.definitionVersion,
         currentStepId: "b",
         completedStepIds: ["a"],
         skippedStepIds: [],
+        projectBinding: BINDING,
       },
     });
     expect(resumed).toEqual(initialGuidedWorkflowState);
@@ -372,14 +415,16 @@ describe("guided workflow -- skip eligibility is locked in the definition", () =
       // analyze-cutability is not in skippableStepIds -- the reducer could
       // never have produced this snapshot.
       skippedStepIds: ["learn-about-scale", "analyze-cutability"],
+      projectBinding: BINDING,
     };
-    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot)).toBe(false);
+    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot, BINDING)).toBe(false);
     expect(
       reduceGuidedWorkflow(initialGuidedWorkflowState, {
         type: "resume",
         definition: MIXED_SKIP_DEFINITION,
         snapshot,
         runToken: RUN,
+        liveBinding: BINDING,
       }),
     ).toEqual(initialGuidedWorkflowState);
   });
@@ -391,13 +436,15 @@ describe("guided workflow -- skip eligibility is locked in the definition", () =
       currentStepId: "physical-3d",
       completedStepIds: ["choose-file", "analyze-cutability"],
       skippedStepIds: ["learn-about-scale"],
+      projectBinding: BINDING,
     };
-    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot)).toBe(true);
+    expect(canResumeSnapshot(MIXED_SKIP_DEFINITION, snapshot, BINDING)).toBe(true);
     const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, {
       type: "resume",
       definition: MIXED_SKIP_DEFINITION,
       snapshot,
       runToken: RUN,
+      liveBinding: BINDING,
     });
     expect(restored.status).toBe("active");
     expect(restored.currentStepId).toBe("physical-3d");
@@ -406,10 +453,10 @@ describe("guided workflow -- skip eligibility is locked in the definition", () =
 
 describe("guided workflow -- persistence round trip", () => {
   it("captures no snapshot when there is nothing meaningful to resume", () => {
-    expect(toWorkflowSnapshot(initialGuidedWorkflowState)).toBeNull();
+    expect(toWorkflowSnapshot(initialGuidedWorkflowState, BINDING)).toBeNull();
     const completed = dispatch(dispatch(dispatch(start(), "advance"), "advance"), "advance");
     expect(completed.status).toBe("completed");
-    expect(toWorkflowSnapshot(completed)).toBeNull();
+    expect(toWorkflowSnapshot(completed, BINDING)).toBeNull();
   });
 
   it("reconstructs the exact interrupted state from the persisted shape alone", () => {
@@ -419,7 +466,7 @@ describe("guided workflow -- persistence round trip", () => {
     live = dispatch(live, "advance");
     expect(live.currentStepId).toBe("review-cutability");
 
-    const snapshot = toWorkflowSnapshot(live);
+    const snapshot = toWorkflowSnapshot(live, BINDING);
     expect(snapshot).not.toBeNull();
 
     const persisted = {
@@ -431,7 +478,7 @@ describe("guided workflow -- persistence round trip", () => {
     const reloaded = JSON.parse(JSON.stringify(persisted)) as typeof persisted;
     expect(reloaded.activeWorkflow).not.toBeNull();
 
-    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: reloaded.activeWorkflow as OnboardingWorkflowSnapshot, runToken: RUN });
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: reloaded.activeWorkflow as OnboardingWorkflowSnapshot, runToken: RUN, liveBinding: BINDING });
 
     expect(restored.status).toBe("active");
     expect(restored.currentStepId).toBe(live.currentStepId);
@@ -440,37 +487,38 @@ describe("guided workflow -- persistence round trip", () => {
   });
 
   it("refuses to resume across a definition version change instead of inventing progress", () => {
-    const snapshot = toWorkflowSnapshot(advanceTo("add-text"));
+    const snapshot = toWorkflowSnapshot(advanceTo("add-text"), BINDING);
     expect(snapshot).not.toBeNull();
     const newerDefinition = { ...DEFINITION, definitionVersion: 2 };
 
-    expect(canResumeSnapshot(newerDefinition, snapshot as OnboardingWorkflowSnapshot)).toBe(false);
-    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: newerDefinition, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN });
+    expect(canResumeSnapshot(newerDefinition, snapshot as OnboardingWorkflowSnapshot, BINDING)).toBe(false);
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: newerDefinition, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN, liveBinding: BINDING });
     expect(restored).toEqual(initialGuidedWorkflowState);
   });
 
   it("refuses to resume a step the definition no longer contains", () => {
-    const snapshot = toWorkflowSnapshot(advanceTo("add-text"));
+    const snapshot = toWorkflowSnapshot(advanceTo("add-text"), BINDING);
     const withoutStep = {
       ...DEFINITION,
       stepIds: ["choose-material", "review-cutability"],
     };
 
-    expect(canResumeSnapshot(withoutStep, snapshot as OnboardingWorkflowSnapshot)).toBe(false);
+    expect(canResumeSnapshot(withoutStep, snapshot as OnboardingWorkflowSnapshot, BINDING)).toBe(false);
     expect(
-      reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: withoutStep, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN }),
+      reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: withoutStep, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN, liveBinding: BINDING }),
     ).toEqual(initialGuidedWorkflowState);
   });
 
   it("refuses to resume a snapshot from a different goal", () => {
-    const snapshot = toWorkflowSnapshot(advanceTo("add-text"));
+    const snapshot = toWorkflowSnapshot(advanceTo("add-text"), BINDING);
     const otherGoal = { ...DEFINITION, goal: "import-own-design" as const };
-    expect(canResumeSnapshot(otherGoal, snapshot as OnboardingWorkflowSnapshot)).toBe(false);
+    expect(canResumeSnapshot(otherGoal, snapshot as OnboardingWorkflowSnapshot, BINDING)).toBe(false);
   });
 
   const base = {
     goal: DEFINITION.goal,
     definitionVersion: DEFINITION.definitionVersion,
+    projectBinding: BINDING,
   } as const;
 
   const CONTRADICTORY: readonly (readonly [string, OnboardingWorkflowSnapshot])[] = [
@@ -512,13 +560,14 @@ describe("guided workflow -- persistence round trip", () => {
   ];
 
   it.each(CONTRADICTORY)("refuses a snapshot with %s", (_label, snapshot) => {
-    expect(canResumeSnapshot(DEFINITION, snapshot)).toBe(false);
+    expect(canResumeSnapshot(DEFINITION, snapshot, BINDING)).toBe(false);
     expect(
       reduceGuidedWorkflow(initialGuidedWorkflowState, {
         type: "resume",
         definition: DEFINITION,
         snapshot,
         runToken: RUN,
+        liveBinding: BINDING,
       }),
     ).toEqual(initialGuidedWorkflowState);
   });
@@ -533,10 +582,11 @@ describe("guided workflow -- persistence round trip", () => {
       currentStepId: "review-cutability",
       completedStepIds: ["choose-material"],
       skippedStepIds: [],
+      projectBinding: BINDING,
     };
-    expect(canResumeSnapshot(DEFINITION, gap)).toBe(false);
+    expect(canResumeSnapshot(DEFINITION, gap, BINDING)).toBe(false);
     expect(
-      reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: gap, runToken: RUN }),
+      reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: gap, runToken: RUN, liveBinding: BINDING }),
     ).toEqual(initialGuidedWorkflowState);
   });
 
@@ -549,8 +599,9 @@ describe("guided workflow -- persistence round trip", () => {
       // open step rather than part of the prefix.
       completedStepIds: ["choose-material", "review-cutability"],
       skippedStepIds: [],
+      projectBinding: BINDING,
     };
-    expect(canResumeSnapshot(DEFINITION, outOfOrder)).toBe(false);
+    expect(canResumeSnapshot(DEFINITION, outOfOrder, BINDING)).toBe(false);
   });
 
   it("every active state the reducer can produce satisfies the resume invariant", () => {
@@ -567,9 +618,11 @@ describe("guided workflow -- persistence round trip", () => {
       seen.add(key);
 
       if (state.status === "active") {
-        const snapshot = toWorkflowSnapshot(state);
+        const snapshot = toWorkflowSnapshot(state, BINDING);
         expect(snapshot).not.toBeNull();
-        expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot)).toBe(true);
+        expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot, BINDING)).toBe(
+          true,
+        );
       }
       for (const type of stepTypes) {
         queue.push(dispatch(state, type));
@@ -591,11 +644,13 @@ describe("guided workflow -- persistence round trip", () => {
     expect(live.currentStepId).toBe("add-text");
     expect(live.completedStepIds).toEqual(["choose-material"]);
 
-    const snapshot = toWorkflowSnapshot(live);
+    const snapshot = toWorkflowSnapshot(live, BINDING);
     expect(snapshot).not.toBeNull();
-    expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot)).toBe(true);
+    expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot, BINDING)).toBe(
+      true,
+    );
 
-    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN });
+    const restored = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "resume", definition: DEFINITION, snapshot: snapshot as OnboardingWorkflowSnapshot, runToken: RUN, liveBinding: BINDING });
     expect(restored.currentStepId).toBe("add-text");
     expect(restored.completedStepIds).toEqual(["choose-material"]);
   });
@@ -620,12 +675,14 @@ describe("guided workflow -- transition table", () => {
           type: "resume",
           definition: DEFINITION,
           runToken: RUN,
+          liveBinding: BINDING,
           snapshot: {
             goal: DEFINITION.goal,
             definitionVersion: DEFINITION.definitionVersion,
             currentStepId: "add-text",
             completedStepIds: ["choose-material"],
             skippedStepIds: [],
+            projectBinding: BINDING,
           },
         };
       case "replay":
@@ -856,12 +913,14 @@ describe("guided workflow -- stale and duplicate events", () => {
           type: "resume",
           definition: DEFINITION,
           runToken: blank,
+          liveBinding: BINDING,
           snapshot: {
             goal: DEFINITION.goal,
             definitionVersion: DEFINITION.definitionVersion,
             currentStepId: "add-text",
             completedStepIds: ["choose-material"],
             skippedStepIds: [],
+            projectBinding: BINDING,
           },
         }),
       ).toEqual(initialGuidedWorkflowState);
@@ -899,6 +958,7 @@ describe("guided workflow -- input ownership", () => {
       definitionVersion: 1,
       stepIds,
       skippableStepIds: [],
+      transientStepIds: [],
     };
     let state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
       type: "start",
@@ -925,12 +985,14 @@ describe("guided workflow -- input ownership", () => {
       currentStepId: "add-text",
       completedStepIds,
       skippedStepIds,
+      projectBinding: BINDING,
     };
     const state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
       type: "resume",
       definition: DEFINITION,
       snapshot,
       runToken: RUN,
+      liveBinding: BINDING,
     });
     expect(state.completedStepIds).toEqual(["choose-material"]);
 
@@ -943,7 +1005,7 @@ describe("guided workflow -- input ownership", () => {
 
   it("mutating a returned snapshot cannot reach back into live progress", () => {
     const state = advanceTo("review-cutability");
-    const snapshot = toWorkflowSnapshot(state) as OnboardingWorkflowSnapshot;
+    const snapshot = toWorkflowSnapshot(state, BINDING) as OnboardingWorkflowSnapshot;
     expect(snapshot.completedStepIds).toEqual(["choose-material", "add-text"]);
 
     // Frozen, so the attempt throws rather than silently corrupting state.
@@ -979,12 +1041,14 @@ describe("guided workflow -- non-mutation", () => {
         type: "resume",
         definition: DEFINITION,
         runToken: RUN,
+        liveBinding: BINDING,
         snapshot: {
           goal: DEFINITION.goal,
           definitionVersion: 1,
           currentStepId: "add-text",
           completedStepIds: ["choose-material"],
           skippedStepIds: [],
+          projectBinding: BINDING,
         },
       },
       { type: "replay", expectedRunToken: identity.runToken, nextRunToken: "run-token-next" },
@@ -1014,6 +1078,321 @@ describe("guided workflow -- goals", () => {
       expect(state.status).toBe("completed");
       expect(reduceGuidedWorkflow(state, { type: "cancel" })).toEqual(initialGuidedWorkflowState);
     }
+  });
+});
+
+describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
+  function startImport(runToken = RUN): GuidedWorkflowState {
+    return reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "start",
+      definition: IMPORT_GOAL_DEFINITION,
+      runToken,
+    });
+  }
+
+  it("the vector and raster paths traverse the same stable step ids with no branch action and no definition change", () => {
+    // The vector/raster split is a contextual presentation variant of the one
+    // stable prepare-source step, decided by classifying the selected file --
+    // it is not a different step sequence. Both paths are therefore the same
+    // reducer walk: same ids, same definition object from start to completion,
+    // no branch action, no definition mutation, no cancel/restart.
+    for (const variant of ["vector", "raster"] as const) {
+      let state = startImport();
+      const definitionAtStart = state.definition;
+      const visited: string[] = [];
+      while (state.status === "active") {
+        visited.push(state.currentStepId ?? "");
+        state = dispatch(state, "advance");
+        // The definition never changes identity mid-run -- the walk needs no
+        // per-variant definition swap.
+        expect(state.definition).toBe(definitionAtStart);
+      }
+      expect(state.status).toBe("completed");
+      expect(visited).toEqual([...IMPORT_GOAL_DEFINITION.stepIds]);
+      expect(variant).toBeTruthy();
+    }
+  });
+
+  it("the resolution checkpoint is always present and auto-completes through an ordinary advance when nothing is actionable", () => {
+    // Route "no actionable findings": the checkpoint is still in stepIds; the
+    // caller sees canCompleteResolution(...) true at the moment it opens and
+    // advances immediately, so no stage is presented and no skip is recorded.
+    const noFindings: ResolutionFindingCounts = {
+      safeFixableCount: 0,
+      needsDecisionCount: 0,
+      blockingCount: 0,
+    };
+    expect(resolutionPrimaryAction(noFindings)).toBe("continue");
+    expect(canCompleteResolution(noFindings)).toBe(true);
+
+    let state = startImport();
+    while (state.currentStepId !== "resolve-findings" && state.status === "active") {
+      state = dispatch(state, "advance");
+    }
+    expect(state.currentStepId).toBe("resolve-findings");
+
+    const autoCompleted = dispatch(state, "advance");
+    expect(autoCompleted.currentStepId).toBe("physical-3d");
+    expect(autoCompleted.completedStepIds).toContain("resolve-findings");
+    expect(autoCompleted.skippedStepIds).toEqual([]);
+  });
+
+  it("the resolution checkpoint cannot be skipped and cancel remains the exit while findings block", () => {
+    let state = startImport();
+    while (state.currentStepId !== "resolve-findings" && state.status === "active") {
+      state = dispatch(state, "advance");
+    }
+
+    // Blocking findings: the caller must not advance (canCompleteResolution is
+    // false), and skip-step is structurally refused because the checkpoint is
+    // never in skippableStepIds.
+    const blocking: ResolutionFindingCounts = {
+      safeFixableCount: 2,
+      needsDecisionCount: 3,
+      blockingCount: 1,
+    };
+    expect(canCompleteResolution(blocking)).toBe(false);
+    expect(isStepSkippable(IMPORT_GOAL_DEFINITION, "resolve-findings")).toBe(false);
+    expect(dispatch(state, "skip-step")).toBe(state);
+
+    // The global escape stays unconditional -- a large finding count is never
+    // a trap.
+    expect(reduceGuidedWorkflow(state, { type: "cancel" })).toBe(initialGuidedWorkflowState);
+  });
+});
+
+describe("guided workflow -- deterministic resolution routing", () => {
+  const counts = (
+    safeFixableCount: number,
+    needsDecisionCount: number,
+    blockingCount: number,
+  ): ResolutionFindingCounts => ({ safeFixableCount, needsDecisionCount, blockingCount });
+
+  it("safe fixes win first: Fix safe problems is primary whenever eligible safe fixes exist", () => {
+    expect(resolutionPrimaryAction(counts(1, 0, 0))).toBe("fix-safe-problems");
+    expect(resolutionPrimaryAction(counts(4, 7, 0))).toBe("fix-safe-problems");
+    // Even alongside blocking findings -- the overlap the old four-route
+    // wording left undefined resolves to exactly one action.
+    expect(resolutionPrimaryAction(counts(4, 7, 2))).toBe("fix-safe-problems");
+  });
+
+  it("after safe fixes are exhausted, Review decisions is primary while anything needs attention", () => {
+    expect(resolutionPrimaryAction(counts(0, 5, 0))).toBe("review-decisions");
+    expect(resolutionPrimaryAction(counts(0, 0, 3))).toBe("review-decisions");
+    expect(resolutionPrimaryAction(counts(0, 5, 3))).toBe("review-decisions");
+  });
+
+  it("Continue is primary only when nothing is actionable, and completion then always holds", () => {
+    expect(resolutionPrimaryAction(counts(0, 0, 0))).toBe("continue");
+    expect(canCompleteResolution(counts(0, 0, 0))).toBe(true);
+  });
+
+  it("the checkpoint unlocks exactly when no blocking findings remain", () => {
+    expect(canCompleteResolution(counts(0, 0, 1))).toBe(false);
+    expect(canCompleteResolution(counts(5, 5, 1))).toBe(false);
+    // Non-blocking suggestions never trap the user: Review decisions stays
+    // primary, but Continue is allowed.
+    expect(canCompleteResolution(counts(0, 5, 0))).toBe(true);
+    expect(canCompleteResolution(counts(3, 0, 0))).toBe(true);
+  });
+
+  it("exactly one primary action applies for every count combination", () => {
+    for (const safe of [0, 1, 3]) {
+      for (const decisions of [0, 1, 3]) {
+        for (const blocking of [0, 1, 3]) {
+          const action = resolutionPrimaryAction(counts(safe, decisions, blocking));
+          if (safe > 0) expect(action).toBe("fix-safe-problems");
+          else if (decisions > 0 || blocking > 0) expect(action).toBe("review-decisions");
+          else expect(action).toBe("continue");
+          // Continue while completion is refused is contradictory and must be
+          // impossible by construction.
+          if (action === "continue") {
+            expect(canCompleteResolution(counts(safe, decisions, blocking))).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it("malformed counts fail closed: a human reviews and the checkpoint never unlocks", () => {
+    for (const bad of [counts(-1, 0, 0), counts(0, 1.5, 0), counts(0, 0, Number.NaN)]) {
+      expect(resolutionPrimaryAction(bad)).toBe("review-decisions");
+      expect(canCompleteResolution(bad)).toBe(false);
+    }
+  });
+});
+
+describe("guided workflow -- project binding and transient-step recovery", () => {
+  function snapshotOn(stepId: string, binding = BINDING): OnboardingWorkflowSnapshot {
+    let state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "start",
+      definition: IMPORT_GOAL_DEFINITION,
+      runToken: RUN,
+    });
+    while (state.currentStepId !== stepId && state.status === "active") {
+      state = dispatch(state, "advance");
+    }
+    expect(state.currentStepId).toBe(stepId);
+    return toWorkflowSnapshot(state, binding) as OnboardingWorkflowSnapshot;
+  }
+
+  function resume(
+    snapshot: OnboardingWorkflowSnapshot,
+    liveBinding: GuidedProjectBinding,
+  ): GuidedWorkflowState {
+    return reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: IMPORT_GOAL_DEFINITION,
+      snapshot,
+      runToken: RUN,
+      liveBinding,
+    });
+  }
+
+  it("resumes exactly when the same unchanged document is open and the step is stable", () => {
+    const snapshot = snapshotOn("assign-physical");
+    expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, BINDING)).toBe(true);
+    const restored = resume(snapshot, BINDING);
+    expect(restored.status).toBe("active");
+    expect(restored.currentStepId).toBe("assign-physical");
+    expect(restored.completedStepIds).toEqual(["choose-file", "prepare-source"]);
+  });
+
+  it("refuses a snapshot from a different project", () => {
+    const snapshot = snapshotOn("assign-physical");
+    const otherProject = { documentId: "doc-2", fingerprint: "fp-1" };
+    expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, otherProject)).toBe(false);
+    expect(resume(snapshot, otherProject)).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("refuses a snapshot whose document changed since it was taken", () => {
+    // Same identity, different content: "analysis passed" or "material
+    // assigned" may no longer describe the document, so progress is stale.
+    const snapshot = snapshotOn("assign-physical");
+    const edited = { documentId: "doc-1", fingerprint: "fp-2" };
+    expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, edited)).toBe(false);
+    expect(resume(snapshot, edited)).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("a binding that cannot distinguish documents is rejected at both capture and resume", () => {
+    for (const blank of [
+      { documentId: "", fingerprint: "fp-1" },
+      { documentId: "doc-1", fingerprint: "  " },
+    ]) {
+      expect(isUsableProjectBinding(blank)).toBe(false);
+      // No snapshot is even produced against a vacuous binding.
+      let state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "start",
+        definition: IMPORT_GOAL_DEFINITION,
+        runToken: RUN,
+      });
+      state = dispatch(state, "advance");
+      expect(toWorkflowSnapshot(state, blank)).toBeNull();
+
+      // And a persisted one (however it was written) never matches.
+      const snapshot = snapshotOn("assign-physical");
+      expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, blank)).toBe(false);
+      expect(resume(snapshot, blank)).toEqual(initialGuidedWorkflowState);
+    }
+  });
+
+  it("restart during the transient source-preparation step recovers to choosing the file", () => {
+    // The import/trace preview slot does not survive a restart, so reopening
+    // prepare-source would present a review surface with nothing behind it.
+    const snapshot = snapshotOn("prepare-source");
+    expect(isStepTransient(IMPORT_GOAL_DEFINITION, "prepare-source")).toBe(true);
+    expect(resolveResumeStepId(IMPORT_GOAL_DEFINITION, snapshot)).toBe("choose-file");
+
+    const restored = resume(snapshot, BINDING);
+    expect(restored.status).toBe("active");
+    expect(restored.currentStepId).toBe("choose-file");
+    // The recovery step is reopened, so nothing at or after it stays recorded.
+    expect(restored.completedStepIds).toEqual([]);
+    expect(restored.skippedStepIds).toEqual([]);
+  });
+
+  it("restart during the transient resolution checkpoint recovers to the analysis step that rebuilds its findings", () => {
+    const snapshot = snapshotOn("resolve-findings");
+    expect(resolveResumeStepId(IMPORT_GOAL_DEFINITION, snapshot)).toBe("analyze-cutability");
+
+    const restored = resume(snapshot, BINDING);
+    expect(restored.currentStepId).toBe("analyze-cutability");
+    expect(restored.completedStepIds).toEqual([
+      "choose-file",
+      "prepare-source",
+      "assign-physical",
+    ]);
+  });
+
+  it("a snapshot open on a transient step with no stable predecessor cannot resume at all", () => {
+    const transientFirst: GuidedWorkflowDefinition = {
+      goal: "describe-with-ai",
+      definitionVersion: 1,
+      stepIds: ["pick-concept", "make-manufacturable"],
+      skippableStepIds: [],
+      transientStepIds: ["pick-concept"],
+    };
+    const snapshot: OnboardingWorkflowSnapshot = {
+      goal: "describe-with-ai",
+      definitionVersion: 1,
+      currentStepId: "pick-concept",
+      completedStepIds: [],
+      skippedStepIds: [],
+      projectBinding: BINDING,
+    };
+    expect(resolveResumeStepId(transientFirst, snapshot)).toBeNull();
+    expect(canResumeSnapshot(transientFirst, snapshot, BINDING)).toBe(false);
+    expect(
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "resume",
+        definition: transientFirst,
+        snapshot,
+        runToken: RUN,
+        liveBinding: BINDING,
+      }),
+    ).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("the binding survives the JSON round trip the persistence store performs", () => {
+    const snapshot = snapshotOn("assign-physical");
+    const reloaded = JSON.parse(JSON.stringify(snapshot)) as OnboardingWorkflowSnapshot;
+    expect(reloaded.projectBinding).toEqual(BINDING);
+    expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, reloaded, BINDING)).toBe(true);
+    expect(resume(reloaded, BINDING).currentStepId).toBe("assign-physical");
+  });
+
+  it("every reachable active state of a transient-bearing definition snapshots to something resumable", () => {
+    // Same validator-reducer tie as the plain walk, for a definition with
+    // transient steps: an active state either resumes exactly or recovers to
+    // its documented stable predecessor -- never rejected outright, because
+    // choose-file (stable) precedes every transient step in this shape.
+    const seen = new Set<string>();
+    const queue: GuidedWorkflowState[] = [
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "start",
+        definition: IMPORT_GOAL_DEFINITION,
+        runToken: RUN,
+      }),
+    ];
+    const stepTypes = ["advance", "skip-step", "back"] as const;
+    while (queue.length > 0) {
+      const state = queue.shift() as GuidedWorkflowState;
+      const key = JSON.stringify(state);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (state.status === "active") {
+        const snapshot = toWorkflowSnapshot(state, BINDING) as OnboardingWorkflowSnapshot;
+        expect(snapshot).not.toBeNull();
+        expect(canResumeSnapshot(IMPORT_GOAL_DEFINITION, snapshot, BINDING)).toBe(true);
+        const target = resolveResumeStepId(IMPORT_GOAL_DEFINITION, snapshot);
+        expect(target).not.toBeNull();
+        expect(isStepTransient(IMPORT_GOAL_DEFINITION, target)).toBe(false);
+      }
+      for (const type of stepTypes) {
+        queue.push(dispatch(state, type));
+      }
+    }
+    expect(seen.size).toBeGreaterThan(IMPORT_GOAL_DEFINITION.stepIds.length);
   });
 });
 

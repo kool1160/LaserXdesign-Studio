@@ -62,6 +62,21 @@ export interface GuidedWorkflowDefinition {
    * a step outside it is a same-reference no-op (`isStepSkippable`).
    */
   readonly skippableStepIds: readonly string[];
+  /**
+   * Which of `stepIds` depend on transient in-memory feature state -- a
+   * nullable preview slot (vector-import review, raster-trace acceptance,
+   * AI-concept choice) or current analysis results -- that does not survive an
+   * application restart.
+   *
+   * Resume never reopens such a step: its prerequisites are gone, so
+   * reopening it would present a surface with nothing behind it. A snapshot
+   * whose open step is transient instead recovers to the nearest earlier
+   * non-transient step (`resolveResumeStepId`), and a definition whose
+   * *first* step is transient simply cannot be resumed mid-run -- the goal
+   * restarts. Like `skippableStepIds`, this is locked in the definition so
+   * recovery is a contract, not a per-caller improvisation.
+   */
+  readonly transientStepIds: readonly string[];
 }
 
 export interface GuidedWorkflowState {
@@ -116,12 +131,34 @@ export const initialGuidedWorkflowState: GuidedWorkflowState = freezeState({
 });
 
 /**
+ * The project/document a guided run's progress is actually *about*.
+ *
+ * Both values are opaque to this module and supplied by the app layer, which
+ * already owns document identity and fingerprinting (the
+ * `documentFingerprint`/`projectFingerprint` idiom in `ProjectSession`). The
+ * pure module compares them by exact string equality and nothing else, so it
+ * stays independent of every project package.
+ *
+ * Without this, a persisted snapshot is structurally valid against *any*
+ * open document: progress recorded against Project A -- "analysis passed",
+ * "material assigned" -- would resume against Project B or an empty document
+ * and claim work that was never done there.
+ */
+export interface GuidedProjectBinding {
+  /** Opaque, stable identity of the bound project/document. */
+  readonly documentId: string;
+  /** Opaque content fingerprint captured at snapshot time. */
+  readonly fingerprint: string;
+}
+
+/**
  * The persisted record of an interrupted workflow.
  *
  * Carries everything needed to reconstruct the in-progress state truthfully:
- * which goal, against which step-set version, which exact step was open, and
- * which steps were already completed or skipped. Without the version and the
- * step id, a restart could only guess.
+ * which goal, against which step-set version, which exact step was open,
+ * which steps were already completed or skipped, and which document that
+ * progress belongs to. Without the version, the step id, and the binding, a
+ * restart could only guess.
  */
 export interface OnboardingWorkflowSnapshot {
   readonly goal: GuidedGoal;
@@ -129,6 +166,7 @@ export interface OnboardingWorkflowSnapshot {
   readonly currentStepId: string;
   readonly completedStepIds: readonly string[];
   readonly skippedStepIds: readonly string[];
+  readonly projectBinding: GuidedProjectBinding;
 }
 
 /**
@@ -176,6 +214,13 @@ export type GuidedWorkflowAction =
       definition: GuidedWorkflowDefinition;
       snapshot: OnboardingWorkflowSnapshot;
       runToken: string;
+      /**
+       * The binding of the document actually open right now, freshly derived
+       * by the app layer -- never copied from the snapshot, which would make
+       * the comparison vacuous. Resume refuses a snapshot whose persisted
+       * binding does not exactly match this live one.
+       */
+      liveBinding: GuidedProjectBinding;
     }
   | ({ type: "advance" } & StepScopedAction)
   | ({ type: "back" } & StepScopedAction)
@@ -239,6 +284,16 @@ export function isUsableToken(token: string): boolean {
 }
 
 /**
+ * Whether a project binding can actually distinguish one document from
+ * another. A blank identity or fingerprint would match anything, so the
+ * wrong-project and changed-project checks would pass vacuously -- the same
+ * reasoning that rejects a blank run token.
+ */
+export function isUsableProjectBinding(binding: GuidedProjectBinding): boolean {
+  return isUsableToken(binding.documentId) && isUsableToken(binding.fingerprint);
+}
+
+/**
  * Whether a step definition is well-formed enough to drive the reducer.
  *
  * Duplicate ids are not a cosmetic problem: step lookup resolves an id to its
@@ -257,19 +312,21 @@ export function isValidWorkflowDefinition(definition: GuidedWorkflowDefinition):
   if (definition.stepIds.some((id) => typeof id !== "string" || id.trim() === "")) return false;
   if (new Set(definition.stepIds).size !== definition.stepIds.length) return false;
 
-  // skippableStepIds must itself be well-formed and describe only real steps:
-  // a blank/duplicate entry is meaningless, and an id absent from stepIds
-  // would silently claim skip eligibility for a step that does not exist.
-  if (
-    definition.skippableStepIds.some((id) => typeof id !== "string" || id.trim() === "")
-  ) {
-    return false;
-  }
-  if (new Set(definition.skippableStepIds).size !== definition.skippableStepIds.length) {
-    return false;
-  }
-  const stepIdSet = new Set(definition.stepIds);
-  return definition.skippableStepIds.every((id) => stepIdSet.has(id));
+  // skippableStepIds and transientStepIds must each be well-formed and
+  // describe only real steps: a blank/duplicate entry is meaningless, and an
+  // id absent from stepIds would silently claim eligibility for a step that
+  // does not exist.
+  return (
+    isWellFormedStepSubset(definition.skippableStepIds, definition.stepIds) &&
+    isWellFormedStepSubset(definition.transientStepIds, definition.stepIds)
+  );
+}
+
+function isWellFormedStepSubset(ids: readonly string[], stepIds: readonly string[]): boolean {
+  if (ids.some((id) => typeof id !== "string" || id.trim() === "")) return false;
+  if (new Set(ids).size !== ids.length) return false;
+  const stepIdSet = new Set(stepIds);
+  return ids.every((id) => stepIdSet.has(id));
 }
 
 /**
@@ -294,6 +351,14 @@ function ownDefinition(definition: GuidedWorkflowDefinition): GuidedWorkflowDefi
     definitionVersion: definition.definitionVersion,
     stepIds: ownList(definition.stepIds),
     skippableStepIds: ownList(definition.skippableStepIds),
+    transientStepIds: ownList(definition.transientStepIds),
+  });
+}
+
+function ownBinding(binding: GuidedProjectBinding): GuidedProjectBinding {
+  return Object.freeze({
+    documentId: binding.documentId,
+    fingerprint: binding.fingerprint,
   });
 }
 
@@ -308,6 +373,43 @@ export function isStepSkippable(
   stepId: string | null,
 ): boolean {
   return stepId !== null && definition.skippableStepIds.includes(stepId);
+}
+
+/**
+ * Whether a step's prerequisites live in transient in-memory feature state
+ * that does not survive an application restart. Exported so a caller (G1) can
+ * explain a recovery ("we took you back to X") without duplicating the rule
+ * the resume path itself enforces.
+ */
+export function isStepTransient(
+  definition: GuidedWorkflowDefinition,
+  stepId: string | null,
+): boolean {
+  return stepId !== null && definition.transientStepIds.includes(stepId);
+}
+
+/**
+ * The step a snapshot actually resumes to, or `null` when it cannot resume.
+ *
+ * A non-transient open step resumes exactly. A transient open step recovers
+ * to the nearest earlier non-transient step -- its prerequisites (a preview
+ * slot, current analysis results) are gone after a restart, so reopening it
+ * would present a surface with nothing behind it. When no earlier
+ * non-transient step exists the snapshot is unresumable and the goal
+ * restarts; the document itself is untouched either way, only guidance
+ * position is lost.
+ */
+export function resolveResumeStepId(
+  definition: GuidedWorkflowDefinition,
+  snapshot: OnboardingWorkflowSnapshot,
+): string | null {
+  const currentIndex = definition.stepIds.indexOf(snapshot.currentStepId);
+  if (currentIndex < 0) return null;
+  for (let index = currentIndex; index >= 0; index -= 1) {
+    const stepId = definition.stepIds[index];
+    if (stepId !== undefined && !isStepTransient(definition, stepId)) return stepId;
+  }
+  return null;
 }
 
 function stepIndexOf(definition: GuidedWorkflowDefinition, stepId: string | null): number {
@@ -383,23 +485,41 @@ function startedState(
 }
 
 /**
- * Whether a persisted snapshot can be trusted against a step definition.
+ * Whether a persisted snapshot can be trusted against a step definition and
+ * the document that is actually open.
  *
  * Fail-closed by design: a snapshot from a different goal, a different step-set
- * version, or naming a step the definition no longer contains cannot be
+ * version, a different document, a document whose content changed since the
+ * snapshot, or naming a step the definition no longer contains cannot be
  * repaired into "probably this step" without inventing progress the user never
- * made. Callers restart the goal instead.
+ * made. Callers restart the goal instead; refusal never touches the document,
+ * only guidance position.
  */
 export function canResumeSnapshot(
   definition: GuidedWorkflowDefinition,
   snapshot: OnboardingWorkflowSnapshot,
+  liveBinding: GuidedProjectBinding,
 ): boolean {
   if (!isValidWorkflowDefinition(definition)) return false;
   if (snapshot.goal !== definition.goal) return false;
   if (snapshot.definitionVersion !== definition.definitionVersion) return false;
 
+  // Progress belongs to one exact document. A different identity is the wrong
+  // project outright; the same identity with a different fingerprint means the
+  // document changed since the snapshot, so recorded progress ("analysis
+  // passed", "material assigned") may no longer describe it. Both refuse
+  // rather than resume against a document the progress is not about.
+  if (!isUsableProjectBinding(snapshot.projectBinding)) return false;
+  if (!isUsableProjectBinding(liveBinding)) return false;
+  if (snapshot.projectBinding.documentId !== liveBinding.documentId) return false;
+  if (snapshot.projectBinding.fingerprint !== liveBinding.fingerprint) return false;
+
   const currentIndex = definition.stepIds.indexOf(snapshot.currentStepId);
   if (currentIndex < 0) return false;
+
+  // A transient open step must have a stable predecessor to recover to
+  // (resolveResumeStepId); otherwise the snapshot cannot be resumed at all.
+  if (resolveResumeStepId(definition, snapshot) === null) return false;
 
   // The reducer can only reach a step by processing every step before it, so
   // recorded progress must be *exactly* the prefix before the open step, each
@@ -432,11 +552,22 @@ export function canResumeSnapshot(
 /**
  * Captures the persistable record of an in-progress workflow, or `null` when
  * there is nothing meaningful to resume (idle, terminal, or no open step).
+ *
+ * The caller supplies the binding of the document the run is operating on,
+ * derived at snapshot time -- fingerprints are point-in-time values, so the
+ * reducer cannot carry one from `start` without it going stale as the user
+ * edits. A binding that cannot distinguish documents (blank identity or
+ * fingerprint) produces no snapshot at all: persisting it would only create
+ * a record the resume checks must later refuse.
  */
-export function toWorkflowSnapshot(state: GuidedWorkflowState): OnboardingWorkflowSnapshot | null {
+export function toWorkflowSnapshot(
+  state: GuidedWorkflowState,
+  projectBinding: GuidedProjectBinding,
+): OnboardingWorkflowSnapshot | null {
   if (state.status !== "active" || state.definition === null || state.currentStepId === null) {
     return null;
   }
+  if (!isUsableProjectBinding(projectBinding)) return null;
   // Detached: a caller mutating the returned snapshot must not reach back
   // into live progress.
   return Object.freeze({
@@ -445,6 +576,7 @@ export function toWorkflowSnapshot(state: GuidedWorkflowState): OnboardingWorkfl
     currentStepId: state.currentStepId,
     completedStepIds: ownList(state.completedStepIds),
     skippedStepIds: ownList(state.skippedStepIds),
+    projectBinding: ownBinding(projectBinding),
   });
 }
 
@@ -473,18 +605,27 @@ export function reduceGuidedWorkflow(
 
     case "resume": {
       if (!isUsableToken(action.runToken)) return initialGuidedWorkflowState;
-      if (!canResumeSnapshot(action.definition, action.snapshot)) {
+      if (!canResumeSnapshot(action.definition, action.snapshot, action.liveBinding)) {
         // Fail closed to idle rather than guessing a step: a wrong guess would
         // silently claim progress the user never made.
         return initialGuidedWorkflowState;
       }
+      const definition = ownDefinition(action.definition);
+      // A transient open step recovers to its nearest stable predecessor
+      // (resolveResumeStepId) -- never reopened with its prerequisites gone.
+      // Reopening the recovery step discards progress from that step forward,
+      // exactly the `back` semantics, so the restored record stays truthful.
+      const resumeStepId = resolveResumeStepId(definition, action.snapshot);
+      if (resumeStepId === null) return initialGuidedWorkflowState;
+      const resumeIndex = definition.stepIds.indexOf(resumeStepId);
+      const stillBehind = (id: string): boolean => definition.stepIds.indexOf(id) < resumeIndex;
       return {
         status: "active",
-        definition: ownDefinition(action.definition),
+        definition,
         runToken: action.runToken,
-        currentStepId: action.snapshot.currentStepId,
-        completedStepIds: ownList(action.snapshot.completedStepIds),
-        skippedStepIds: ownList(action.snapshot.skippedStepIds),
+        currentStepId: resumeStepId,
+        completedStepIds: ownList(action.snapshot.completedStepIds.filter(stillBehind)),
+        skippedStepIds: ownList(action.snapshot.skippedStepIds.filter(stillBehind)),
         failureReason: null,
       };
     }
@@ -583,4 +724,77 @@ export function reduceGuidedWorkflow(
       return exhaustive;
     }
   }
+}
+
+/**
+ * The current findings at a post-analysis resolution checkpoint, grouped by
+ * the milestone's locked classification. Producing these counts -- deciding
+ * which finding is safely auto-fixable, which needs a judgment call, and
+ * which blocks manufacturing -- is the grouped-repair engine's job (G4). This
+ * module only fixes what the checkpoint *does* with the counts, so every
+ * goal shares one deterministic rule instead of each UI inventing its own.
+ */
+export interface ResolutionFindingCounts {
+  /** Findings a deterministic, previewable, undoable safe repair can fix. */
+  readonly safeFixableCount: number;
+  /** Findings needing a user judgment (Suggested fix or Needs your decision). */
+  readonly needsDecisionCount: number;
+  /** Findings that block continuing to 3D/export until resolved. */
+  readonly blockingCount: number;
+}
+
+export type ResolutionPrimaryAction = "fix-safe-problems" | "review-decisions" | "continue";
+
+function isValidFindingCount(count: number): boolean {
+  return Number.isInteger(count) && count >= 0;
+}
+
+function hasValidFindingCounts(counts: ResolutionFindingCounts): boolean {
+  return (
+    isValidFindingCount(counts.safeFixableCount) &&
+    isValidFindingCount(counts.needsDecisionCount) &&
+    isValidFindingCount(counts.blockingCount)
+  );
+}
+
+/**
+ * The one primary action a resolution checkpoint shows, decided by strict
+ * first-match precedence so exactly one rule ever applies:
+ *
+ * 1. eligible safe fixes exist -- **Fix safe problems**;
+ * 2. otherwise, anything still needs attention (a decision or a blocking
+ *    finding) -- **Review decisions**;
+ * 3. otherwise nothing is actionable -- **Continue**.
+ *
+ * "Continue" is primary only when `canCompleteResolution` also holds, by
+ * construction: a blocking finding forces rule 2, so the checkpoint can never
+ * present Continue while refusing to complete. Malformed counts (negative,
+ * fractional, NaN) fail closed to **Review decisions** -- a human looks,
+ * rather than a broken count waving the checkpoint through.
+ */
+export function resolutionPrimaryAction(counts: ResolutionFindingCounts): ResolutionPrimaryAction {
+  if (!hasValidFindingCounts(counts)) return "review-decisions";
+  if (counts.safeFixableCount > 0) return "fix-safe-problems";
+  if (counts.needsDecisionCount > 0 || counts.blockingCount > 0) return "review-decisions";
+  return "continue";
+}
+
+/**
+ * Whether the resolution checkpoint's completion signal is satisfied: no
+ * blocking findings remain. Non-blocking suggestions do not trap the user --
+ * Review decisions stays primary while they exist, but Continue remains
+ * available. An explicitly-approved acknowledgment path may later widen this
+ * (G4 work); nothing here invents one. Malformed counts fail closed.
+ *
+ * This is the caller-side gate for dispatching `advance` on a resolution
+ * checkpoint, the same kind of obligation as minting run tokens: the reducer
+ * cannot see findings, so the definition keeps the checkpoint out of
+ * `skippableStepIds` (skip is structurally refused) and the caller advances
+ * only when this returns true. When it returns true *at the moment the
+ * checkpoint opens*, the caller advances immediately and the checkpoint
+ * completes without presenting a stage at all.
+ */
+export function canCompleteResolution(counts: ResolutionFindingCounts): boolean {
+  if (!hasValidFindingCounts(counts)) return false;
+  return counts.blockingCount === 0;
 }
