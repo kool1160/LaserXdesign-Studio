@@ -5,16 +5,40 @@ import { join, resolve } from "node:path";
 
 import { auditGuidedWorkflowArchitecture } from "./guided-workflow-architecture-audit.mjs";
 
-async function fixture(source = "export const idle = { status: \"idle\" };") {
+const VALID_PURE_CONFIG = {
+  extends: "../../tsconfig.base.json",
+  compilerOptions: {
+    target: "ES2023",
+    module: "ESNext",
+    lib: ["ES2023"],
+    types: [],
+    noEmit: true,
+  },
+  include: ["src/features/onboarding/guidedWorkflowState.ts"],
+};
+
+async function fixture({
+  source = 'export const idle = { status: "idle" };',
+  pureConfig = VALID_PURE_CONFIG,
+  omitPureConfig = false,
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), "laserx-guided-workflow-boundary-"));
-  const featureRoot = join(root, "apps", "desktop", "src", "features", "onboarding");
+  const desktopRoot = join(root, "apps", "desktop");
+  const featureRoot = join(desktopRoot, "src", "features", "onboarding");
   await mkdir(featureRoot, { recursive: true });
   await writeFile(join(featureRoot, "guidedWorkflowState.ts"), source, "utf8");
+  if (!omitPureConfig) {
+    await writeFile(
+      join(desktopRoot, "tsconfig.onboarding-pure.json"),
+      JSON.stringify(pureConfig, null, 2),
+      "utf8",
+    );
+  }
   return root;
 }
 
-async function runCase(source, expectedPattern) {
-  const root = await fixture(source);
+async function runCase(options, expectedPattern) {
+  const root = await fixture(options);
   try {
     const failures = await auditGuidedWorkflowArchitecture(root);
     if (expectedPattern === null) {
@@ -30,53 +54,74 @@ async function runCase(source, expectedPattern) {
   }
 }
 
+// Clean baseline.
 await runCase(undefined, null);
-await runCase('import { randomUUID } from "node:crypto";\nvoid randomUUID;', /node: module/u);
-await runCase('export const id = require("node:crypto");', /CommonJS require/u);
-await runCase('import { BrowserWindow } from "electron";\nvoid BrowserWindow;', /must not import electron/u);
-await runCase('import { useState } from "react";\nvoid useState;', /must not import react/u);
 
-// DOM and ambient globals: reachable without any import, so the no-DOM
-// guarantee has to be checked directly rather than inferred from imports.
-await runCase("export const w = window.innerWidth;", /window global/u);
-await runCase('export const el = document.getElementById("x");', /document global/u);
-await runCase('export const v = localStorage.getItem("k");', /browser storage/u);
-await runCase('export const v = sessionStorage["k"];', /browser storage/u);
-await runCase("export const ua = navigator.userAgent;", /navigator global/u);
-await runCase("export const g = globalThis.crypto;", /ambient globals/u);
-await runCase("export const mode = process.env.NODE_ENV;", /ambient globals/u);
-
-// Bare references and typeof bypass any pattern anchored on property access,
-// yet are exactly the coupling being prevented.
-await runCase("export const root = document;", /document global/u);
-await runCase('export const hasDom = typeof window !== "undefined";', /window global/u);
-await runCase("export const storage = localStorage;", /browser storage/u);
-await runCase("export function f(target: EventTarget): void { void target; }", /DOM type/u);
-await runCase("export function f(el: HTMLElement): void { void el; }", /DOM type/u);
-await runCase("export let node: Node | null = null;", /DOM type/u);
-
-// Must NOT fire on ordinary identifiers that merely contain a global's name,
-// or on property accesses of the caller's own objects -- a guard that blocks
-// legitimate code gets disabled, which is worse than no guard.
+// Import boundary -- what a text scan genuinely can prove.
 await runCase(
-  [
-    "interface Options { windowSize: number; documentId: string; nodeCount: number; }",
-    "export function read(options: Options, host: { document: { title: string } }): string {",
-    "  void options.windowSize;",
-    "  void options.documentId;",
-    "  void options.nodeCount;",
-    "  return host.document.title;",
-    "}",
-  ].join("\n"),
-  null,
+  { source: 'import { randomUUID } from "node:crypto";\nvoid randomUUID;' },
+  /node: module/u,
+);
+await runCase({ source: 'export const id = require("node:crypto");' }, /CommonJS require/u);
+await runCase(
+  { source: 'import { BrowserWindow } from "electron";\nvoid BrowserWindow;' },
+  /must not import electron/u,
+);
+await runCase(
+  { source: 'import { useState } from "react";\nvoid useState;' },
+  /must not import react/u,
 );
 
-// The real production module must itself pass -- proves the audit doesn't
-// false-positive on the actual guided-workflow state machine, not just on a
-// synthetic clean fixture.
+// The DOM/browser-global boundary is enforced by the ES-only typecheck, so
+// what this audit must protect is the configuration that performs it. Each
+// case below is a real way that enforcement could be silently weakened.
+await runCase({ omitPureConfig: true }, /tsconfig\.onboarding-pure\.json is missing/u);
+await runCase(
+  {
+    pureConfig: {
+      ...VALID_PURE_CONFIG,
+      compilerOptions: { ...VALID_PURE_CONFIG.compilerOptions, lib: ["ES2023", "DOM"] },
+    },
+  },
+  /must not enable DOM libraries/u,
+);
+await runCase(
+  {
+    pureConfig: {
+      ...VALID_PURE_CONFIG,
+      compilerOptions: { ...VALID_PURE_CONFIG.compilerOptions, lib: ["ES2023", "DOM.Iterable"] },
+    },
+  },
+  /must not enable DOM libraries/u,
+);
+await runCase(
+  {
+    pureConfig: {
+      ...VALID_PURE_CONFIG,
+      compilerOptions: { ...VALID_PURE_CONFIG.compilerOptions, types: ["node"] },
+    },
+  },
+  /must not enable ambient types/u,
+);
+await runCase(
+  {
+    pureConfig: {
+      ...VALID_PURE_CONFIG,
+      compilerOptions: { ...VALID_PURE_CONFIG.compilerOptions, types: undefined },
+    },
+  },
+  /must not enable ambient types/u,
+);
+await runCase(
+  { pureConfig: { ...VALID_PURE_CONFIG, include: ["src/**/*.ts"] } },
+  /must cover exactly the guided-workflow state module/u,
+);
+
+// The real production module and its real configuration must both pass --
+// not just synthetic stand-ins.
 const realFailures = await auditGuidedWorkflowArchitecture(resolve(import.meta.dirname, ".."));
 assert.deepEqual(realFailures, []);
 
 console.log(
-  "Guided-workflow architecture regression tests passed: forbidden React/Electron/Node imports and DOM/ambient globals are rejected, ordinary identifiers that merely contain a global's name are allowed, and the real production module passes cleanly.",
+  "Guided-workflow architecture regression tests passed: forbidden React/Electron/Node imports are rejected, every way of weakening the ES-only typecheck configuration is rejected, and the real module and configuration pass cleanly.",
 );

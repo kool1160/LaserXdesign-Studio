@@ -1,0 +1,12 @@
+{
+  "//": "M15 G0 (ADR 0027). Compiles the guided-workflow state machine alone against ES libraries only, with no ambient Node, DOM, or Vite types. Any reference to a browser global or DOM type -- window, document, self, location, indexedDB, KeyboardEvent, Storage, and so on -- fails to resolve here, which is what makes the no-DOM guarantee mechanically enforced rather than enumerated by a pattern list that must be extended every time a new global is remembered.",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "lib": ["ES2023"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["src/features/onboarding/guidedWorkflowState.ts"]
+}

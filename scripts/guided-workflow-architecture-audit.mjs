@@ -35,44 +35,6 @@ const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
     pattern: /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'`]react/u,
     message: "guided-workflow state must not import react",
   },
-  // Import checks alone would let `window.localStorage` or `document.body`
-  // through, so the advertised no-DOM guarantee is enforced directly rather
-  // than implied.
-  //
-  // Matching any *reference*, not just property access: `const root = document`
-  // and `typeof window` are bypasses of a `\.`-anchored pattern but are exactly
-  // the coupling this is meant to prevent. The trailing `(?![\w$:])` keeps
-  // ordinary property names (`{ document: ... }`, `windowSize`) passing, and
-  // the leading `(?<![.\w$])` keeps member access on the caller's own objects
-  // (`host.document.title`) passing -- a guard that rejects legitimate code
-  // gets switched off, which is worse than no guard.
-  {
-    pattern: /(?<![.\w$])window(?![\w$:])/u,
-    message: "guided-workflow state must not reference the window global",
-  },
-  {
-    pattern: /(?<![.\w$])document(?![\w$:])/u,
-    message: "guided-workflow state must not reference the document global",
-  },
-  {
-    pattern: /(?<![.\w$])(?:localStorage|sessionStorage)(?![\w$:])/u,
-    message: "guided-workflow state must not reference browser storage",
-  },
-  {
-    pattern: /(?<![.\w$])navigator(?![\w$:])/u,
-    message: "guided-workflow state must not reference the navigator global",
-  },
-  {
-    pattern: /(?<![.\w$])(?:globalThis|process)(?![\w$:])/u,
-    message: "guided-workflow state must not reach for ambient globals",
-  },
-  {
-    // Representative DOM types: a type-only dependency still couples this
-    // module to a DOM lib it must compile without.
-    pattern:
-      /(?<![.\w$])(?:HTMLElement|HTMLInputElement|HTMLDivElement|Element|Document|Window|Node|NodeList|Event|EventTarget|DOMRect|MutationObserver)(?![\w$:])/u,
-    message: "guided-workflow state must not reference a DOM type",
-  },
 ];
 
 export async function auditGuidedWorkflowArchitecture(root) {
@@ -94,6 +56,46 @@ export async function auditGuidedWorkflowArchitecture(root) {
     }
   }
 
+  // The DOM/browser-global boundary is enforced by compiling this module
+  // against ES libraries only (`pnpm audit:guided-workflow-types`). A finite
+  // pattern list could never cover every global -- `self`, `location`,
+  // `indexedDB`, `KeyboardEvent`, `Storage` and the rest -- and would silently
+  // overclaim the moment a new one appeared. What this audit can usefully do
+  // is prove the configuration that performs the enforcement still exists and
+  // has not been weakened.
+  const pureConfigPath = resolve(root, "apps/desktop/tsconfig.onboarding-pure.json");
+  if (!(await exists(pureConfigPath))) {
+    failures.push("apps/desktop/tsconfig.onboarding-pure.json is missing");
+    return failures;
+  }
+
+  let config;
+  try {
+    config = JSON.parse(await readFile(pureConfigPath, "utf8"));
+  } catch {
+    failures.push("apps/desktop/tsconfig.onboarding-pure.json is not valid JSON");
+    return failures;
+  }
+
+  const libs = config.compilerOptions?.lib ?? [];
+  const types = config.compilerOptions?.types;
+  const include = config.include ?? [];
+
+  if (libs.some((lib) => String(lib).toUpperCase().startsWith("DOM"))) {
+    failures.push("apps/desktop/tsconfig.onboarding-pure.json must not enable DOM libraries");
+  }
+  if (!Array.isArray(types) || types.length > 0) {
+    failures.push("apps/desktop/tsconfig.onboarding-pure.json must not enable ambient types");
+  }
+  if (
+    include.length !== 1 ||
+    !String(include[0]).includes("features/onboarding/guidedWorkflowState.ts")
+  ) {
+    failures.push(
+      "apps/desktop/tsconfig.onboarding-pure.json must cover exactly the guided-workflow state module",
+    );
+  }
+
   return failures;
 }
 
@@ -106,6 +108,6 @@ if (invokedDirectly) {
     throw new Error(`Guided-workflow architecture audit failed:\n- ${failures.join("\n- ")}`);
   }
   console.log(
-    "Guided-workflow architecture audit passed: the guided-workflow state module stays free of React, Electron, Node, and DOM/browser-global dependencies.",
+    "Guided-workflow architecture audit passed: the guided-workflow state module imports no React, Electron, or node: module, and its ES-only typecheck configuration remains free of DOM libraries and ambient types.",
   );
 }

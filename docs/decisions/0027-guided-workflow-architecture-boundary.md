@@ -111,6 +111,14 @@ from the first `a` to the second, resolve back to the first, and never reach
 `b` or complete -- a permanently non-progressing "active" state, which is
 exactly the trapped state this contract promises cannot exist.
 
+State **owns** its definition and progress lists: they are copied and frozen at
+every boundary rather than aliased to caller values. TypeScript's `readonly`
+is erased at runtime, so storing a supplied array by reference would leave
+validated state mutable by whoever supplied it -- a caller could pass a valid
+`["A", "B"]`, have it accepted, then write `stepIds[1] = "A"` and recreate the
+non-progressing workflow the validator exists to prevent, *after* validation
+passed. Snapshots returned for persistence are likewise detached.
+
 The module reads relevant signals from existing state (e.g.
 `workspaceIsEmpty`, `ai.connection.status`) but **never mutates** authoritative
 project state, dirty state, undo/redo history, selection, analysis results,
@@ -209,14 +217,20 @@ interface OnboardingPreferences {
 stable, but their meaning and ordering belong to one specific step set.
 
 Resume is **fail-closed**, and validates the full semantic invariant rather
-than only checking that ids are recognizable. A snapshot is refused when it
-comes from a different goal or definition version, names a step the definition
-no longer contains, repeats an id, records the same step as both completed and
-skipped, or claims the current step -- or any step after it -- is already
-finished. Progress can only exist *behind* the open step; anything else
-describes a journey that cannot have happened, and resuming it would invent
-progress the user never made. `canResumeSnapshot` exposes that decision so a
-caller can offer a clean restart instead.
+than only checking that ids are recognizable. Recorded progress must be
+**exactly the prefix of steps before the open step, each accounted for exactly
+once** across completed and skipped.
+
+Requiring only that progress lies *behind* the current step is not enough: it
+would accept `{current: C, completed: [A]}` for steps A/B/C, claiming the user
+reached C without ever processing B -- a state the reducer cannot produce, and
+resuming it would silently bypass a required step. The exact-prefix comparison
+also subsumes the narrower rules it replaces, since a duplicated id, a step in
+both lists, an unknown id, and the current or a later step marked finished each
+break either its length or its coverage test.
+
+`canResumeSnapshot` exposes that decision so a caller can offer a clean restart
+instead.
 
 Persistence is versioned the same way `RecentProjectsStore`/`RecoveryStore`
 are, written atomically, and stored alongside `recent-projects.json` in

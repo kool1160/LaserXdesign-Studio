@@ -2,10 +2,17 @@
  * Pure guided-workflow state machine (M15 G0, ADR 0027).
  *
  * Deliberately framework-agnostic: no React, no DOM, no Electron, no `node:`
- * import, and no browser global. Proven mechanically by
- * `scripts/guided-workflow-architecture-audit.mjs` rather than left to
- * convention, so a later gate cannot accidentally couple guided-workflow state
- * to Electron privilege, to a specific UI framework, or to the DOM.
+ * import, and no browser global. Both halves are mechanically enforced rather
+ * than left to convention, so a later gate cannot accidentally couple
+ * guided-workflow state to Electron privilege, to a UI framework, or to the
+ * DOM:
+ *
+ * - DOM and browser globals -- `apps/desktop/tsconfig.onboarding-pure.json`
+ *   compiles this file alone against ES libraries with no ambient types, so
+ *   any such reference fails to resolve (`pnpm audit:guided-workflow-types`);
+ * - React/Electron/`node:` imports -- rejected by
+ *   `scripts/guided-workflow-architecture-audit.mjs`, which a typecheck cannot
+ *   do because those packages ship real type declarations.
  *
  * This module owns no project data. It never receives, reads, or returns a
  * `LaserxProject` or any authoritative editor state -- the non-mutation
@@ -161,6 +168,30 @@ export function isValidWorkflowDefinition(definition: GuidedWorkflowDefinition):
   return new Set(definition.stepIds).size === definition.stepIds.length;
 }
 
+/**
+ * Detaches and freezes a list the state will own.
+ *
+ * TypeScript's `readonly` is erased at runtime, so storing a caller's array by
+ * reference leaves live state aliased to a value the caller can still mutate
+ * *after* validation has passed. A caller could hand over a valid
+ * `["A", "B"]`, have it accepted, then assign `stepIds[1] = "A"` and recreate
+ * exactly the non-progressing workflow the definition validator exists to
+ * prevent. Copying makes the state's own value independent; freezing makes a
+ * later attempt to mutate it throw in this module's strict-mode scope instead
+ * of silently corrupting progress.
+ */
+function ownList(ids: readonly string[]): readonly string[] {
+  return Object.freeze([...ids]);
+}
+
+function ownDefinition(definition: GuidedWorkflowDefinition): GuidedWorkflowDefinition {
+  return Object.freeze({
+    goal: definition.goal,
+    definitionVersion: definition.definitionVersion,
+    stepIds: ownList(definition.stepIds),
+  });
+}
+
 function stepIndexOf(definition: GuidedWorkflowDefinition, stepId: string | null): number {
   return stepId === null ? -1 : definition.stepIds.indexOf(stepId);
 }
@@ -174,7 +205,10 @@ function withoutId(ids: readonly string[], stepId: string | null): readonly stri
   return stepId === null ? ids : ids.filter((id) => id !== stepId);
 }
 
-function startedState(definition: GuidedWorkflowDefinition): GuidedWorkflowState {
+function startedState(supplied: GuidedWorkflowDefinition): GuidedWorkflowState {
+  // Validate the caller value, then keep an owned copy: validating a value the
+  // caller can still mutate would only prove it was valid at one instant.
+  const definition = ownDefinition(supplied);
   const firstStepId = definition.stepIds[0];
   if (!isValidWorkflowDefinition(definition) || firstStepId === undefined) {
     // Fail closed rather than entering an active workflow that cannot
@@ -217,18 +251,25 @@ export function canResumeSnapshot(
   const currentIndex = definition.stepIds.indexOf(snapshot.currentStepId);
   if (currentIndex < 0) return false;
 
-  const { completedStepIds, skippedStepIds } = snapshot;
-  const progressIds = [...completedStepIds, ...skippedStepIds];
-
-  // Every recorded id must be a real step of this definition.
-  if (progressIds.some((id) => !definition.stepIds.includes(id))) return false;
-  // A step is completed or skipped, never both, and never recorded twice --
-  // otherwise the summary shown after the journey would be untrue.
-  if (new Set(progressIds).size !== progressIds.length) return false;
-  // Progress can only exist *behind* the open step. A snapshot claiming the
-  // current step, or a step after it, is already finished describes a journey
-  // that cannot have happened, and resuming it would invent progress.
-  return progressIds.every((id) => definition.stepIds.indexOf(id) < currentIndex);
+  // The reducer can only reach a step by processing every step before it, so
+  // recorded progress must be *exactly* the prefix before the open step, each
+  // step accounted for exactly once across completed and skipped.
+  //
+  // Requiring only "all progress lies behind the current step" is not enough:
+  // it would accept {current: C, completed: [A]} for steps A/B/C, which claims
+  // the user reached C without ever processing B -- a journey the reducer
+  // cannot produce, and resuming it would silently skip a required step.
+  //
+  // This single comparison also subsumes the narrower checks it replaces: a
+  // duplicate id, the same step in both lists, an unknown id, and the current
+  // or a later step marked finished all break either the length or the
+  // coverage test below.
+  const prefix = definition.stepIds.slice(0, currentIndex);
+  const progressIds = [...snapshot.completedStepIds, ...snapshot.skippedStepIds];
+  if (progressIds.length !== prefix.length) return false;
+  const progress = new Set(progressIds);
+  if (progress.size !== progressIds.length) return false;
+  return prefix.every((id) => progress.has(id));
 }
 
 /**
@@ -239,13 +280,15 @@ export function toWorkflowSnapshot(state: GuidedWorkflowState): OnboardingWorkfl
   if (state.status !== "active" || state.definition === null || state.currentStepId === null) {
     return null;
   }
-  return {
+  // Detached: a caller mutating the returned snapshot must not reach back
+  // into live progress.
+  return Object.freeze({
     goal: state.definition.goal,
     definitionVersion: state.definition.definitionVersion,
     currentStepId: state.currentStepId,
-    completedStepIds: state.completedStepIds,
-    skippedStepIds: state.skippedStepIds,
-  };
+    completedStepIds: ownList(state.completedStepIds),
+    skippedStepIds: ownList(state.skippedStepIds),
+  });
 }
 
 /**
@@ -279,10 +322,10 @@ export function reduceGuidedWorkflow(
       }
       return {
         status: "active",
-        definition: action.definition,
+        definition: ownDefinition(action.definition),
         currentStepId: action.snapshot.currentStepId,
-        completedStepIds: action.snapshot.completedStepIds,
-        skippedStepIds: action.snapshot.skippedStepIds,
+        completedStepIds: ownList(action.snapshot.completedStepIds),
+        skippedStepIds: ownList(action.snapshot.skippedStepIds),
         failureReason: null,
       };
     }
@@ -302,12 +345,16 @@ export function reduceGuidedWorkflow(
       const skipping = action.type === "skip-step";
       // A step is either completed or skipped, never recorded as both -- the
       // summary a user is shown after the journey has to be truthful.
-      const completedStepIds = skipping
-        ? withoutId(state.completedStepIds, state.currentStepId)
-        : withId(state.completedStepIds, state.currentStepId);
-      const skippedStepIds = skipping
-        ? withId(state.skippedStepIds, state.currentStepId)
-        : withoutId(state.skippedStepIds, state.currentStepId);
+      const completedStepIds = ownList(
+        skipping
+          ? withoutId(state.completedStepIds, state.currentStepId)
+          : withId(state.completedStepIds, state.currentStepId),
+      );
+      const skippedStepIds = ownList(
+        skipping
+          ? withId(state.skippedStepIds, state.currentStepId)
+          : withoutId(state.skippedStepIds, state.currentStepId),
+      );
 
       const nextStepId = definition.stepIds[index + 1];
       if (nextStepId === undefined) {
@@ -335,8 +382,8 @@ export function reduceGuidedWorkflow(
       return {
         ...state,
         currentStepId: previousStepId,
-        completedStepIds: state.completedStepIds.filter(stillBehind),
-        skippedStepIds: state.skippedStepIds.filter(stillBehind),
+        completedStepIds: ownList(state.completedStepIds.filter(stillBehind)),
+        skippedStepIds: ownList(state.skippedStepIds.filter(stillBehind)),
       };
     }
 

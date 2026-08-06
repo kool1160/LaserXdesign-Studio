@@ -340,6 +340,69 @@ describe("guided workflow -- persistence round trip", () => {
     ).toEqual(initialGuidedWorkflowState);
   });
 
+  it("refuses a partial-prefix snapshot that skipped a required step", () => {
+    // The reducer cannot reach C without processing B, so a snapshot claiming
+    // it did is describing a journey that never happened. Resuming it would
+    // silently bypass a required step.
+    const gap: OnboardingWorkflowSnapshot = {
+      goal: DEFINITION.goal,
+      definitionVersion: DEFINITION.definitionVersion,
+      currentStepId: "review-cutability",
+      completedStepIds: ["choose-material"],
+      skippedStepIds: [],
+    };
+    expect(canResumeSnapshot(DEFINITION, gap)).toBe(false);
+    expect(
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "resume",
+        definition: DEFINITION,
+        snapshot: gap,
+      }),
+    ).toEqual(initialGuidedWorkflowState);
+  });
+
+  it("refuses progress recorded out of prefix order", () => {
+    const outOfOrder: OnboardingWorkflowSnapshot = {
+      goal: DEFINITION.goal,
+      definitionVersion: DEFINITION.definitionVersion,
+      currentStepId: "review-cutability",
+      // Two entries, so the count matches, but "review-cutability" is the
+      // open step rather than part of the prefix.
+      completedStepIds: ["choose-material", "review-cutability"],
+      skippedStepIds: [],
+    };
+    expect(canResumeSnapshot(DEFINITION, outOfOrder)).toBe(false);
+  });
+
+  it("every active state the reducer can produce satisfies the resume invariant", () => {
+    // Ties the validator to the reducer: anything reachable must be resumable,
+    // or persistence would reject states the product can legitimately be in.
+    const seen = new Set<string>();
+    const queue: GuidedWorkflowState[] = [start()];
+    const actions: GuidedWorkflowAction[] = [
+      { type: "advance" },
+      { type: "skip-step" },
+      { type: "back" },
+    ];
+
+    while (queue.length > 0) {
+      const state = queue.shift() as GuidedWorkflowState;
+      const key = JSON.stringify(state);
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      if (state.status === "active") {
+        const snapshot = toWorkflowSnapshot(state);
+        expect(snapshot).not.toBeNull();
+        expect(canResumeSnapshot(DEFINITION, snapshot as OnboardingWorkflowSnapshot)).toBe(true);
+      }
+      for (const action of actions) {
+        queue.push(reduceGuidedWorkflow(state, action));
+      }
+    }
+    expect(seen.size).toBeGreaterThan(3);
+  });
+
   it("a snapshot taken after going back is still resumable and truthful", () => {
     // The exact sequence the review flagged: complete two steps, reach the
     // third, then go back. The persisted snapshot must not claim the step
@@ -465,6 +528,75 @@ describe("guided workflow -- transition table", () => {
       // failed before a definition existed still has cancel.
       if (state.definition !== null) expect(replayed.status).toBe("active");
     }
+  });
+});
+
+describe("guided workflow -- input ownership", () => {
+  it("mutating the caller's step list after start cannot corrupt live state", () => {
+    // TypeScript's `readonly` is erased at runtime, so a caller can hand over
+    // a valid definition, have it accepted, and then mutate the same array.
+    // Without an owned copy this recreates the exact duplicate-id trap the
+    // definition validator exists to prevent -- after validation has passed.
+    const stepIds = ["A", "B"];
+    const definition = {
+      goal: "create-first-sign" as const,
+      definitionVersion: 1,
+      stepIds,
+    };
+    let state = reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "start", definition });
+    expect(state.status).toBe("active");
+
+    stepIds[1] = "A";
+
+    expect(state.definition?.stepIds).toEqual(["A", "B"]);
+    state = reduceGuidedWorkflow(state, { type: "advance" });
+    expect(state.currentStepId).toBe("B");
+    state = reduceGuidedWorkflow(state, { type: "advance" });
+    expect(state.status).toBe("completed");
+  });
+
+  it("mutating the caller's snapshot arrays after resume cannot corrupt live progress", () => {
+    const completedStepIds = ["choose-material"];
+    const skippedStepIds: string[] = [];
+    const snapshot = {
+      goal: DEFINITION.goal,
+      definitionVersion: DEFINITION.definitionVersion,
+      currentStepId: "add-text",
+      completedStepIds,
+      skippedStepIds,
+    };
+    const state = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: DEFINITION,
+      snapshot,
+    });
+    expect(state.completedStepIds).toEqual(["choose-material"]);
+
+    completedStepIds.push("review-cutability");
+    skippedStepIds.push("add-text");
+
+    expect(state.completedStepIds).toEqual(["choose-material"]);
+    expect(state.skippedStepIds).toEqual([]);
+  });
+
+  it("mutating a returned snapshot cannot reach back into live progress", () => {
+    const state = advanceTo("review-cutability");
+    const snapshot = toWorkflowSnapshot(state) as OnboardingWorkflowSnapshot;
+    expect(snapshot.completedStepIds).toEqual(["choose-material", "add-text"]);
+
+    // Frozen, so the attempt throws rather than silently corrupting state.
+    expect(() => (snapshot.completedStepIds as string[]).push("review-cutability")).toThrow();
+    expect(state.completedStepIds).toEqual(["choose-material", "add-text"]);
+  });
+
+  it("owned state arrays are frozen at every boundary", () => {
+    const started = start();
+    expect(Object.isFrozen(started.definition?.stepIds)).toBe(true);
+    const advanced = reduceGuidedWorkflow(started, { type: "advance" });
+    expect(Object.isFrozen(advanced.completedStepIds)).toBe(true);
+    expect(Object.isFrozen(advanced.skippedStepIds)).toBe(true);
+    const backed = reduceGuidedWorkflow(advanced, { type: "back" });
+    expect(Object.isFrozen(backed.completedStepIds)).toBe(true);
   });
 });
 
