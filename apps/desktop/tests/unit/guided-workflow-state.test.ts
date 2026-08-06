@@ -114,8 +114,17 @@ function dispatch(
   return reduceGuidedWorkflow(state, live(state, type, reason));
 }
 
-function start(definition = DEFINITION, runToken = RUN): GuidedWorkflowState {
-  return reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "start", definition, runToken });
+function start(
+  definition = DEFINITION,
+  runToken = RUN,
+  documentId = BINDING.documentId,
+): GuidedWorkflowState {
+  return reduceGuidedWorkflow(initialGuidedWorkflowState, {
+    type: "start",
+    definition,
+    runToken,
+    documentId,
+  });
 }
 
 function advanceTo(stepId: string): GuidedWorkflowState {
@@ -313,6 +322,7 @@ describe("guided workflow -- skip eligibility is locked in the definition", () =
       type: "start",
       definition: MIXED_SKIP_DEFINITION,
       runToken,
+      documentId: BINDING.documentId,
     });
   }
 
@@ -670,7 +680,7 @@ describe("guided workflow -- transition table", () => {
     };
     switch (type) {
       case "start":
-        return { type: "start", definition: DEFINITION, runToken: RUN };
+        return { type: "start", definition: DEFINITION, runToken: RUN, documentId: BINDING.documentId };
       case "resume":
         return {
           type: "resume",
@@ -696,6 +706,8 @@ describe("guided workflow -- transition table", () => {
         return { type, runToken: state.runToken ?? RUN };
       case "cancel":
         return { type };
+      case "document-changed":
+        return { type, documentId: "some-other-document" };
       case "fail":
         return { type: "fail", reason: "example", ...identity };
       default:
@@ -744,7 +756,12 @@ describe("guided workflow -- transition table", () => {
   it("a stale start cannot reset an active journey", () => {
     const midway = advanceTo("add-text");
     expect(
-      reduceGuidedWorkflow(midway, { type: "start", definition: DEFINITION, runToken: RUN }),
+      reduceGuidedWorkflow(midway, {
+        type: "start",
+        definition: DEFINITION,
+        runToken: RUN,
+        documentId: BINDING.documentId,
+      }),
     ).toBe(midway);
   });
 
@@ -965,6 +982,7 @@ describe("guided workflow -- input ownership", () => {
       type: "start",
       definition,
       runToken: RUN,
+      documentId: BINDING.documentId,
     });
     expect(state.status).toBe("active");
 
@@ -1033,7 +1051,7 @@ describe("guided workflow -- non-mutation", () => {
       runToken: sample.runToken ?? RUN,
     };
     const actions: GuidedWorkflowAction[] = [
-      { type: "start", definition: DEFINITION, runToken: RUN },
+      { type: "start", definition: DEFINITION, runToken: RUN, documentId: BINDING.documentId },
       { type: "advance", ...identity },
       { type: "back", ...identity },
       { type: "skip-step", ...identity },
@@ -1055,6 +1073,7 @@ describe("guided workflow -- non-mutation", () => {
       { type: "replay", expectedRunToken: identity.runToken, nextRunToken: "run-token-next" },
       { type: "cancel" },
       { type: "fail", reason: "x", ...identity },
+      { type: "document-changed", documentId: "some-other-document" },
     ];
     for (const action of actions) {
       const input = deepFreeze(advanceTo("add-text"));
@@ -1088,6 +1107,7 @@ describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
       type: "start",
       definition: IMPORT_GOAL_DEFINITION,
       runToken,
+      documentId: BINDING.documentId,
     });
   }
 
@@ -1280,6 +1300,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
       type: "start",
       definition: IMPORT_GOAL_DEFINITION,
       runToken: RUN,
+      documentId: BINDING.documentId,
     });
     while (state.currentStepId !== stepId && state.status === "active") {
       state = dispatch(state, "advance");
@@ -1337,6 +1358,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
         type: "start",
         definition: IMPORT_GOAL_DEFINITION,
         runToken: RUN,
+        documentId: BINDING.documentId,
       });
       state = dispatch(state, "advance");
       expect(toWorkflowSnapshot(state, blank)).toBeNull();
@@ -1424,6 +1446,7 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
         type: "start",
         definition: IMPORT_GOAL_DEFINITION,
         runToken: RUN,
+        documentId: BINDING.documentId,
       }),
     ];
     const stepTypes = ["advance", "skip-step", "back"] as const;
@@ -1445,6 +1468,137 @@ describe("guided workflow -- project binding and transient-step recovery", () =>
       }
     }
     expect(seen.size).toBeGreaterThan(IMPORT_GOAL_DEFINITION.stepIds.length);
+  });
+});
+
+describe("guided workflow -- document replacement ends the run", () => {
+  const OTHER_BINDING: GuidedProjectBinding = { documentId: "doc-2", fingerprint: "fp-9" };
+
+  it("start binds the run to the document identity for its whole life", () => {
+    const state = start();
+    expect(state.documentId).toBe(BINDING.documentId);
+    expect(dispatch(state, "advance").documentId).toBe(BINDING.documentId);
+  });
+
+  it("a blank document identity fails closed at start", () => {
+    for (const blank of ["", "   "]) {
+      const state = start(DEFINITION, RUN, blank);
+      expect(state.status).toBe("failed");
+      expect(state.failureReason).toMatch(/non-blank document identity/u);
+    }
+  });
+
+  it("replacing the document atomically ends an active run with the exact pre-guided state", () => {
+    const midway = dispatch(start(), "advance");
+    expect(midway.status).toBe("active");
+    const after = reduceGuidedWorkflow(midway, {
+      type: "document-changed",
+      documentId: OTHER_BINDING.documentId,
+    });
+    expect(after).toBe(initialGuidedWorkflowState);
+  });
+
+  it("a document-changed for the run's own document is a same-reference no-op", () => {
+    const midway = dispatch(start(), "advance");
+    expect(
+      reduceGuidedWorkflow(midway, {
+        type: "document-changed",
+        documentId: BINDING.documentId,
+      }),
+    ).toBe(midway);
+  });
+
+  it("clears a terminal record bound to the replaced document, and no-ops on idle", () => {
+    let terminal = start();
+    for (let i = 0; i < DEFINITION.stepIds.length; i += 1) terminal = dispatch(terminal, "advance");
+    expect(terminal.status).toBe("completed");
+    expect(
+      reduceGuidedWorkflow(terminal, {
+        type: "document-changed",
+        documentId: OTHER_BINDING.documentId,
+      }),
+    ).toBe(initialGuidedWorkflowState);
+
+    expect(
+      reduceGuidedWorkflow(initialGuidedWorkflowState, {
+        type: "document-changed",
+        documentId: OTHER_BINDING.documentId,
+      }),
+    ).toBe(initialGuidedWorkflowState);
+  });
+
+  it("a blank replacement identity fail-safes to ending the run, never continuing", () => {
+    // A broken identity signal must not leave guidance running against an
+    // unknown document.
+    const midway = dispatch(start(), "advance");
+    expect(reduceGuidedWorkflow(midway, { type: "document-changed", documentId: "" })).toBe(
+      initialGuidedWorkflowState,
+    );
+  });
+
+  it("an in-flight event from the replaced run cannot apply afterwards, even to a new run on the same step", () => {
+    // The concrete failure path from the review: guidance on Project A,
+    // project replaced by B, old Next still in flight.
+    const runOnA = start(DEFINITION, "run-A", BINDING.documentId);
+    const inFlight = live(runOnA, "advance");
+
+    const reset = reduceGuidedWorkflow(runOnA, {
+      type: "document-changed",
+      documentId: OTHER_BINDING.documentId,
+    });
+    expect(reset).toBe(initialGuidedWorkflowState);
+    // The reset itself already refuses the old event (idle source status)...
+    expect(reduceGuidedWorkflow(reset, inFlight)).toBe(reset);
+
+    // ...and a fresh run on Project B, sitting on the same step id, refuses
+    // it too, because the run token changed with the run.
+    const runOnB = start(DEFINITION, "run-B", OTHER_BINDING.documentId);
+    expect(runOnB.currentStepId).toBe(inFlight.expectedStepId);
+    const result = reduceGuidedWorkflow(runOnB, inFlight);
+    expect(result).toBe(runOnB);
+    expect(result.completedStepIds).toEqual([]);
+  });
+
+  it("no snapshot can combine one document's progress with another document's binding", () => {
+    const progressOnA = dispatch(start(), "advance");
+    // The exact record the review describes -- A's progress under B's
+    // binding -- is unconstructible through this module.
+    expect(toWorkflowSnapshot(progressOnA, OTHER_BINDING)).toBeNull();
+    expect(toWorkflowSnapshot(progressOnA, BINDING)).not.toBeNull();
+
+    // After the replacement resets the run there is nothing to snapshot at
+    // all, so the caller's ordinary persist-on-change write clears the
+    // stored snapshot.
+    const reset = reduceGuidedWorkflow(progressOnA, {
+      type: "document-changed",
+      documentId: OTHER_BINDING.documentId,
+    });
+    expect(toWorkflowSnapshot(reset, OTHER_BINDING)).toBeNull();
+  });
+
+  it("resume and replay keep the run bound to the document the progress is about", () => {
+    const snapshot = toWorkflowSnapshot(
+      dispatch(start(), "advance"),
+      BINDING,
+    ) as OnboardingWorkflowSnapshot;
+    const resumed = reduceGuidedWorkflow(initialGuidedWorkflowState, {
+      type: "resume",
+      definition: DEFINITION,
+      snapshot,
+      runToken: "run-resumed",
+      liveBinding: BINDING,
+    });
+    expect(resumed.documentId).toBe(BINDING.documentId);
+
+    let terminal = resumed;
+    while (terminal.status === "active") terminal = dispatch(terminal, "advance");
+    const replayed = reduceGuidedWorkflow(terminal, {
+      type: "replay",
+      expectedRunToken: "run-resumed",
+      nextRunToken: "run-replayed",
+    });
+    expect(replayed.status).toBe("active");
+    expect(replayed.documentId).toBe(BINDING.documentId);
   });
 });
 

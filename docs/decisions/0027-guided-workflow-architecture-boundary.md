@@ -82,9 +82,9 @@ current `main`) establishes the starting point precisely:
 ### 1. The guided-workflow state machine is a new, pure module
 
 `apps/desktop/src/features/onboarding/guidedWorkflowState.ts` owns guided
-first-run state: the active goal and step definition, the current step, the
-completed and skipped step ids, and status
-(`idle | active | completed | dismissed | failed`). It is a pure TypeScript
+first-run state: the active goal and step definition, the run token, the
+bound document identity (§5), the current step, the completed and skipped
+step ids, and status (`idle | active | completed | dismissed | failed`). It is a pure TypeScript
 module — no React, no DOM, no Electron, no Node import, and no browser global.
 Both halves of that claim are mechanically enforced, by two different
 mechanisms with different reach (§7): an ES-only typecheck for DOM and browser
@@ -164,10 +164,12 @@ Every surface takes one of three states under an active guided stage:
 The surfaces are the ones the app mounts unconditionally today: **Import**
 (SVG/DXF), **Trace** (raster), **Analyze** (cutability), **Create** (shapes),
 **Text**, **Sign** (sign tools), **AI**, **Editing** (selection/geometry/
-transform/layers), **3D** (physical preview), **Save**, and **Export**
-(SVG/DXF and production package).
+transform/layers), **3D** (physical preview), **Save**, **Export** (SVG/DXF
+and production package), and **Project** (New Design, Open Project, and the
+Recent-projects entries — the document-*replacement* controls, which the
+shipped app also mounts globally).
 
-Two rules hold in every row, and are the reason the matrix exists:
+Three rules hold in every row, and are the reason the matrix exists:
 
 - an **Exit guidance** action is always reachable from every stage — a single,
   global affordance to leave guided mode and return to ordinary editing, kept
@@ -176,7 +178,21 @@ Two rules hold in every row, and are the reason the matrix exists:
   focused stage (3D, most notably) can legitimately hide every other mounted
   surface and still satisfy it, because leaving guidance is still one click
   away. It is not a promise that every panel stays visible;
-- **Save** is always *available* from any stage that has a document.
+- **Save** is always *available* from any stage that has a document. Save
+  and Save As write the bound document; they are **not** document
+  replacement and are never gated by the Project rule below;
+- **Project replacement controls are hidden in every guided stage.** New
+  Design, Open Project, and the Recent-projects entries replace the document
+  a guided run's progress is about; while a run is active the one way to
+  reach them is the global **Exit guidance** action, which ends the run
+  first. This rule is deliberately belt-and-braces, not the safety
+  mechanism itself: even if a G1 surface leaked a replacement control (or
+  the OS delivered one another way, e.g. a file association), the
+  `document-changed` contract (§5) atomically ends the run the moment the
+  open document's identity changes, so hiding the controls is UX coherence
+  while the reducer transition is the guarantee. Because the rule is
+  uniform, the per-stage tables below do not repeat Project in every hidden
+  cell; it is hidden everywhere a guided stage is showing.
 
 #### One stable step list per goal — variants and checkpoints, never branches
 
@@ -515,6 +531,45 @@ in the app layer is sufficient), and must test that integration contract at the
 layer that owns it. The reducer enforces what it can see: non-blank, and, for
 replay, different from the run being restarted.
 
+**The run is bound to one document, and a replaced document ends the run.**
+A run token scopes events to a run, but says nothing about which *document*
+the run is guiding. Without more, replacing the open project mid-run (New
+Design, Open Project, a Recent-projects entry) would leave the old run
+active with matching token and step id: its events would keep mutating a
+progress record whose completed prefix belongs to the replaced document, and
+a snapshot taken with the *new* document's binding would persist the old
+document's progress under the new identity -- internally self-consistent,
+accepted by the resume comparison, and false. Three mechanisms close this:
+
+- `start` carries a non-blank opaque `documentId` (identity only — a
+  fingerprint is point-in-time and would go stale with the first edit the
+  run itself causes), stored in state for the run's life; `resume` binds to
+  the identity the validated snapshot proved the progress is about, and
+  `replay` keeps the terminal run's binding. A blank identity fails closed
+  at start, for the same vacuous-match reason as a blank token.
+- **`document-changed`** reports the externally observed fact that the open
+  document was replaced, carrying the new identity. It is deliverable from
+  every status — a run bound to a replaced document is invalid whether
+  active or terminal — and, unless the identity equals the run's own, it
+  atomically returns exactly the pre-guided initial state: the token clears
+  with the rest of the state, so every in-flight event from the old run
+  no-ops, and `toWorkflowSnapshot` now returns `null`, so the ordinary
+  persist-on-change write clears the resumable snapshot. A blank
+  replacement identity also ends the run — a broken identity signal
+  fail-safes to stopping guidance, never to continuing against an unknown
+  document. Recovery is honest and small: the goal restarts on the new
+  document; the old document itself is untouched.
+- `toWorkflowSnapshot` additionally refuses a binding whose identity is not
+  the run's own (§6), so the false-snapshot record is unconstructible
+  through this module regardless of event ordering in the caller.
+
+**Caller obligation, second part.** G1 must dispatch `document-changed`
+synchronously at the moment `DesktopState.project` is replaced — before any
+queued guided event is processed — and must persist the (now-null) snapshot
+through its ordinary persist-on-change path. The reducer guarantees the
+transition; observing the replacement is the app layer's job, tested at the
+layer that owns it, exactly like token minting.
+
 ### 6. Resumable persistence
 
 `resume` is keyed off a persisted snapshot that can truthfully reconstruct an
@@ -558,11 +613,15 @@ the document changed since the snapshot, so recorded progress ("analysis
 passed", "material assigned") may no longer describe it. A binding that
 cannot distinguish documents — blank identity or fingerprint — is rejected
 at both capture (`toWorkflowSnapshot` returns `null` rather than persisting
-a record every later resume must refuse) and resume. Deriving the binding
-freshly at snapshot time and at resume time is a **G1 caller obligation** of
-the same kind as minting run tokens (§5): fingerprints are point-in-time
-values, so the reducer cannot carry one from `start` without it going stale
-as the user edits.
+a record every later resume must refuse) and resume. Capture also refuses a
+binding whose identity is not the identity the *run* is bound to (§5): a
+caller passing the current document's binding after a replacement the run
+has not yet been reset for would otherwise pair the old document's progress
+with the new document's identity, and the resume comparison would accept
+that false record. Deriving the binding freshly at snapshot time and at
+resume time is a **G1 caller obligation** of the same kind as minting run
+tokens (§5): fingerprints are point-in-time values, so the reducer cannot
+carry one from `start` without it going stale as the user edits.
 
 **Transient steps recover; they are never reopened.** A snapshot whose open
 step is in `transientStepIds` (§3's per-goal designation) resumes at the
