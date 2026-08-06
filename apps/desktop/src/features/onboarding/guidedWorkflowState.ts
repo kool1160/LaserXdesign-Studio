@@ -780,21 +780,49 @@ export function resolutionPrimaryAction(counts: ResolutionFindingCounts): Resolu
 }
 
 /**
- * Whether the resolution checkpoint's completion signal is satisfied: no
- * blocking findings remain. Non-blocking suggestions do not trap the user --
- * Review decisions stays primary while they exist, but Continue remains
- * available. An explicitly-approved acknowledgment path may later widen this
- * (G4 work); nothing here invents one. Malformed counts fail closed.
+ * Whether the *user* may leave the resolution checkpoint: no blocking
+ * findings remain. Non-blocking suggestions do not trap -- Review decisions
+ * stays primary while they exist, but a visible Continue action remains
+ * available and this rule is its permission. An explicitly-approved
+ * acknowledgment path may later widen this (G4 work); nothing here invents
+ * one. Malformed counts fail closed.
  *
  * This is the caller-side gate for dispatching `advance` on a resolution
  * checkpoint, the same kind of obligation as minting run tokens: the reducer
  * cannot see findings, so the definition keeps the checkpoint out of
  * `skippableStepIds` (skip is structurally refused) and the caller advances
- * only when this returns true. When it returns true *at the moment the
- * checkpoint opens*, the caller advances immediately and the checkpoint
- * completes without presenting a stage at all.
+ * only when this returns true.
+ *
+ * It is deliberately NOT the unseen auto-advance trigger. Permission to
+ * continue is broader than "nothing to show": safe fixes or non-blocking
+ * decisions leave this true while the checkpoint still has real work to
+ * present. Auto-advancing on this rule would silently bypass Fix safe
+ * problems and Review decisions -- the flagship repair workflow -- so the
+ * unseen path is gated by `shouldAutoCompleteResolution` instead.
  */
 export function canCompleteResolution(counts: ResolutionFindingCounts): boolean {
   if (!hasValidFindingCounts(counts)) return false;
   return counts.blockingCount === 0;
+}
+
+/**
+ * Whether the resolution checkpoint should complete unseen, without ever
+ * presenting a stage: true only when *nothing is actionable at all* -- no
+ * safe fixes, no decisions, no blocking findings. Equivalently, exactly when
+ * `resolutionPrimaryAction` returns "continue"; the tests pin that
+ * equivalence so the two rules cannot drift apart.
+ *
+ * The caller dispatches the immediate `advance` on this rule and only this
+ * rule. `canCompleteResolution` merely permits a user-chosen Continue; using
+ * that broader permission as the auto-advance trigger would skip repair
+ * surfaces the user was owed. Malformed counts fail closed: the stage is
+ * presented, never silently bypassed.
+ */
+export function shouldAutoCompleteResolution(counts: ResolutionFindingCounts): boolean {
+  if (!hasValidFindingCounts(counts)) return false;
+  return (
+    counts.safeFixableCount === 0 &&
+    counts.needsDecisionCount === 0 &&
+    counts.blockingCount === 0
+  );
 }

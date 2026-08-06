@@ -14,6 +14,7 @@ import {
   reduceGuidedWorkflow,
   resolutionPrimaryAction,
   resolveResumeStepId,
+  shouldAutoCompleteResolution,
   toWorkflowSnapshot,
   type GuidedGoal,
   type GuidedProjectBinding,
@@ -1115,14 +1116,16 @@ describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
 
   it("the resolution checkpoint is always present and auto-completes through an ordinary advance when nothing is actionable", () => {
     // Route "no actionable findings": the checkpoint is still in stepIds; the
-    // caller sees canCompleteResolution(...) true at the moment it opens and
-    // advances immediately, so no stage is presented and no skip is recorded.
+    // caller sees shouldAutoCompleteResolution(...) true at the moment it
+    // opens and advances immediately, so no stage is presented and no skip is
+    // recorded. canCompleteResolution alone is never the auto-advance trigger.
     const noFindings: ResolutionFindingCounts = {
       safeFixableCount: 0,
       needsDecisionCount: 0,
       blockingCount: 0,
     };
     expect(resolutionPrimaryAction(noFindings)).toBe("continue");
+    expect(shouldAutoCompleteResolution(noFindings)).toBe(true);
     expect(canCompleteResolution(noFindings)).toBe(true);
 
     let state = startImport();
@@ -1218,6 +1221,55 @@ describe("guided workflow -- deterministic resolution routing", () => {
     for (const bad of [counts(-1, 0, 0), counts(0, 1.5, 0), counts(0, 0, Number.NaN)]) {
       expect(resolutionPrimaryAction(bad)).toBe("review-decisions");
       expect(canCompleteResolution(bad)).toBe(false);
+      expect(shouldAutoCompleteResolution(bad)).toBe(false);
+    }
+  });
+
+  it("safe fixes do not auto-complete the checkpoint even though Continue is permitted", () => {
+    // Permission to leave and "nothing to show" are different decisions. If
+    // the caller auto-advanced on canCompleteResolution, a checkpoint with
+    // only non-blocking safe fixes would be silently bypassed and Fix safe
+    // problems -- the flagship repair action -- would never be presented.
+    const safeOnly = counts(3, 0, 0);
+    expect(canCompleteResolution(safeOnly)).toBe(true);
+    expect(shouldAutoCompleteResolution(safeOnly)).toBe(false);
+    expect(resolutionPrimaryAction(safeOnly)).toBe("fix-safe-problems");
+  });
+
+  it("non-blocking decisions do not auto-complete the checkpoint even though Continue is permitted", () => {
+    const decisionsOnly = counts(0, 5, 0);
+    expect(canCompleteResolution(decisionsOnly)).toBe(true);
+    expect(shouldAutoCompleteResolution(decisionsOnly)).toBe(false);
+    expect(resolutionPrimaryAction(decisionsOnly)).toBe("review-decisions");
+
+    const both = counts(3, 5, 0);
+    expect(canCompleteResolution(both)).toBe(true);
+    expect(shouldAutoCompleteResolution(both)).toBe(false);
+  });
+
+  it("only the all-zero counts auto-complete, and never anything blocked", () => {
+    expect(shouldAutoCompleteResolution(counts(0, 0, 0))).toBe(true);
+    expect(shouldAutoCompleteResolution(counts(0, 0, 1))).toBe(false);
+    expect(shouldAutoCompleteResolution(counts(1, 0, 1))).toBe(false);
+  });
+
+  it("auto-completion agrees with the primary action for every count combination", () => {
+    // The unseen path exists exactly when Continue is the primary action --
+    // pinned so the two rules cannot drift apart.
+    for (const safe of [0, 1, 3]) {
+      for (const decisions of [0, 1, 3]) {
+        for (const blocking of [0, 1, 3]) {
+          const c = counts(safe, decisions, blocking);
+          expect(shouldAutoCompleteResolution(c)).toBe(
+            resolutionPrimaryAction(c) === "continue",
+          );
+          // Auto-completing always implies the user-permission rule too; the
+          // reverse direction is exactly what must NOT hold.
+          if (shouldAutoCompleteResolution(c)) {
+            expect(canCompleteResolution(c)).toBe(true);
+          }
+        }
+      }
     }
   });
 });

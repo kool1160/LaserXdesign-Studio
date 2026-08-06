@@ -212,7 +212,7 @@ this ADR, not a G1 improvisation.
 
 Every goal's `stepIds` contains one **resolution checkpoint** immediately
 after cutability analysis. It is never absent, never in `skippableStepIds`,
-and its behavior is fixed by two pure functions exported from
+and its behavior is fixed by three pure functions exported from
 `guidedWorkflowState.ts`, so all three goals share one deterministic rule
 instead of each UI inventing its own:
 
@@ -228,29 +228,46 @@ instead of each UI inventing its own:
   choose different behavior — the overlap the earlier four-route wording left
   open (safe fixes coexisting with blocking findings, decisions that are also
   blocking) resolves to one answer by construction.
-- **`canCompleteResolution(counts)`** is the unlock rule: the checkpoint may
-  complete exactly when **no blocking findings remain**. Non-blocking
-  suggestions never trap the user — Review decisions stays primary while they
-  exist, but Continue remains available. An explicitly-approved truthful
-  acknowledgment path (G4 work, not invented here) may later widen this rule;
-  nothing here does. Malformed counts fail closed: a human reviews, and the
-  checkpoint never unlocks on a broken count.
+- **`canCompleteResolution(counts)`** is the *user permission* rule: a
+  user-chosen Continue is allowed exactly when **no blocking findings
+  remain**. Non-blocking suggestions never trap the user — Review decisions
+  stays primary while they exist, but the visible Continue action remains
+  available under this rule. An explicitly-approved truthful acknowledgment
+  path (G4 work, not invented here) may later widen this rule; nothing here
+  does. Malformed counts fail closed: a human reviews, and the checkpoint
+  never unlocks on a broken count.
+- **`shouldAutoCompleteResolution(counts)`** is the *unseen auto-advance*
+  rule, and the only trigger for completing the checkpoint without
+  presenting a stage: true exactly when **nothing is actionable at all** —
+  no safe fixes, no decisions, no blocking findings — which is also exactly
+  when `resolutionPrimaryAction` returns Continue, an equivalence the tests
+  pin so the rules cannot drift apart. The two decisions are deliberately
+  separate: permission to continue is broader than "nothing to show", and
+  auto-advancing on `canCompleteResolution` would silently bypass Fix safe
+  problems and Review decisions — the milestone's flagship repair workflow —
+  whenever the remaining work happened to be non-blocking. Malformed counts
+  fail closed here too: the stage is presented, never silently bypassed.
 
-**When nothing is actionable, the checkpoint auto-completes.** If
-`canCompleteResolution` already holds at the moment the checkpoint opens (or
-re-opens via Back), the caller dispatches an ordinary step-scoped `advance`
-immediately: no stage is presented, the checkpoint is recorded completed —
-truthfully, since passing with nothing to fix is what happened — and nothing
-is recorded skipped. Producing the counts (grouping findings into the three
-tiers) is the grouped-repair engine's job and remains G4 work; this contract
-fixes only what the checkpoint does with them.
+**Only a checkpoint with nothing actionable auto-completes.** If
+`shouldAutoCompleteResolution` already holds at the moment the checkpoint
+opens (or re-opens via Back), the caller dispatches an ordinary step-scoped
+`advance` immediately: no stage is presented, the checkpoint is recorded
+completed — truthfully, since passing with nothing to fix is what happened —
+and nothing is recorded skipped. When safe fixes or decisions exist, even
+non-blocking ones, the stage **is** presented with its precedence-decided
+primary action; leaving it then is a visible, user-chosen Continue permitted
+by `canCompleteResolution`. Producing the counts (grouping findings into the
+three tiers) is the grouped-repair engine's job and remains G4 work; this
+contract fixes only what the checkpoint does with them.
 
 **Enforcement is split the same way as run tokens (§5).** The reducer cannot
 see findings, so the checkpoint's guarantees come from two places: the
 definition keeps its step id out of `skippableStepIds`, making `skip-step` a
 same-reference no-op on it by construction (`isStepSkippable`), and the
-caller dispatches `advance` on it **only when `canCompleteResolution` returns
-true** — an explicit G1 caller obligation, tested at the layer that owns it,
+caller's dispatch of `advance` on it is bound to **both** rules — dispatched
+unseen only when `shouldAutoCompleteResolution` returns true, and otherwise
+only for a user-chosen Continue while `canCompleteResolution` returns true —
+an explicit two-part G1 caller obligation, tested at the layer that owns it,
 exactly like minting fresh run tokens. 3D therefore unlocks only through the
 checkpoint's completion.
 
@@ -275,7 +292,7 @@ never become a trap with no way out short of finishing repairs.
 | Choose size and material | Set stock size and material | Physical layer has material and thickness | Editing (layers) | Create, Text, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Add the sign content | Add text or a shape | Document has at least one object on a physical layer | Text | Create, Sign, Editing, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Text, Create, Save | Import, Trace, AI, 3D, Export |
-| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | Complete via user Continue under `canCompleteResolution` (no blocking findings); unseen auto-advance only under `shouldAutoCompleteResolution` (nothing actionable) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
@@ -299,7 +316,7 @@ list for both variants; nothing branches, and no definition changes mid-run.
 | Prepare the source *(raster variant)* — trace settings | Accept the traced paths | The source is committed as editable geometry | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
 | Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export, Analyze |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
-| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | Complete via user Continue under `canCompleteResolution` (no blocking findings); unseen auto-advance only under `shouldAutoCompleteResolution` (nothing actionable) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
@@ -355,7 +372,7 @@ rather than a new one (§2).
 | Choose a concept | Accept one concept | Concept accepted into the document | AI | Editing, Text, Save | Import, Trace, Analyze, 3D, Export, Create, Sign |
 | Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Save | Import, Trace, AI, 3D, Export, Analyze |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
-| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | `canCompleteResolution`: no blocking findings remain (auto-advance when already true on open) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Resolve what's found — the resolution checkpoint, always present; auto-completes unseen when nothing is actionable | One of Fix safe problems / Review decisions / Continue, by `resolutionPrimaryAction` | Complete via user Continue under `canCompleteResolution` (no blocking findings); unseen auto-advance only under `shouldAutoCompleteResolution` (nothing actionable) | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
 | See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
 | Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
