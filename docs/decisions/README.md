@@ -25,6 +25,7 @@ Accepted implementation decisions:
 - ADR 0023 — Windows beta installer and release boundary
 - ADR 0024 — production physical 3D preview boundary
 - ADR 0026 — Claude implementation with ChatGPT orchestration and audit authority
+- ADR 0027 — guided-workflow architecture boundary
 
 Superseded decisions (retained for history, not current):
 

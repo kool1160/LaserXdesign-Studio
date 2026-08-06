@@ -10,18 +10,18 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The active M14 slice legitimately advances G0 -> G6, so pinning one literal
-# makes the guard fail on main every time the milestone moves forward. Pinning
-# only the "G" prefix would accept G7, GARBAGE, or a truncated line, so the
-# accepted values are matched explicitly instead.
+# M15 legitimately advances G0 -> G6, so pinning one literal would make the
+# guard fail on main every time the milestone moves forward. Pinning only the
+# "G" prefix would accept G7, GARBAGE, or a truncated line, so the accepted
+# values are matched explicitly instead.
 CURRENT_SLICE_PATTERN = re.compile(r"^- Current slice: \*\*G[0-6] ", re.MULTILINE)
 
 
 def current_slice_error(text: str) -> str | None:
-    """Returns an error message when CURRENT.md does not name a valid M14 slice."""
+    """Returns an error message when CURRENT.md does not name a valid M15 slice."""
     if CURRENT_SLICE_PATTERN.search(text) is None:
         return (
-            "docs/status/CURRENT.md must name the active M14 slice as "
+            "docs/status/CURRENT.md must name the active M15 slice as "
             '"- Current slice: **G<0-6> ..."'
         )
     return None
@@ -75,6 +75,7 @@ REQUIRED_FILES = (
     "docs/MILESTONES.md",
     "docs/OPERATOR_PROTOCOL.md",
     "docs/WORKSTREAM_OWNERSHIP.md",
+    "docs/SOL_EXECUTION_PLAN.md",
     "docs/CLAUDE_EXECUTION_PLAN.md",
     "docs/status/CURRENT.md",
     *(f"docs/milestones/{name}" for name in MILESTONE_FILENAMES),
@@ -85,6 +86,8 @@ REQUIRED_FILES = (
     "docs/decisions/0022-explicit-manufacturing-layers-and-atomic-production-packages.md",
     "docs/decisions/0023-windows-beta-installer-and-release-boundary.md",
     "docs/decisions/0025-chatgpt-implementation-ownership.md",
+    "docs/decisions/0026-claude-implementation-chatgpt-orchestration.md",
+    "docs/decisions/0027-guided-workflow-architecture-boundary.md",
     ".github/workflows/m06-svg-dxf.yml",
     ".github/workflows/m07-raster-tracing.yml",
     ".github/workflows/m08-cutability.yml",
@@ -165,6 +168,111 @@ IGNORED_DIRECTORY_NAMES = {
 }
 
 
+# Durable source-of-truth markers. These intentionally avoid volatile head
+# SHAs and gate status while enforcing the current model assignment, command
+# separation, active milestone, product/unit/security boundaries, and the held
+# status of the superseded Claude plan.
+CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    (
+        "AGENTS.md",
+        (
+            "GitHub Issues #44 and #37",
+            "Planning/review chat — orchestrator and acceptance authority",
+            "SOL High — implementation agent",
+            "Canonical stored length is millimeters.",
+            "LaserX is not plasma-control software, not a general CAD replacement",
+            "Electron renderer has no unrestricted Node access.",
+            "no implementation agent merges, closes the active issue, activates the next gate, or approves its own work;",
+        ),
+        "AGENTS.md",
+    ),
+    (
+        "docs/OPERATOR_PROTOCOL.md",
+        (
+            "Only `Continue LaserX` goes to that implementation thread.",
+            "`READY`, `REPAIR`, or `BLOCKED`",
+            "There is no automatic routine merge.",
+            "SOL High implements and repairs; it never merges or advances.",
+        ),
+        "docs/OPERATOR_PROTOCOL.md",
+    ),
+    (
+        "docs/WORKSTREAM_OWNERSHIP.md",
+        (
+            "This assignment supersedes ADR 0026's Claude implementation assignment.",
+            "Only `Continue LaserX` goes to the SOL High implementation thread.",
+            "SOL High must never:",
+            "Claude and paid Anthropic models are held from implementation",
+        ),
+        "docs/WORKSTREAM_OWNERSHIP.md",
+    ),
+    (
+        "docs/status/CURRENT.md",
+        (
+            "M15 — Guided Onboarding, Workflow-First UI, and Learn Mode",
+            "Implementation model: **SOL High**",
+            "planning/review ChatGPT",
+            "Every agent must read GitHub Issues #44 and #37",
+            "## M15 gate order",
+            "## M14 completion record",
+            "M14 is complete and accepted.",
+        ),
+        "docs/status/CURRENT.md",
+    ),
+    (
+        "docs/SOL_EXECUTION_PLAN.md",
+        (
+            "# SOL High Execution Plan",
+            "Only `Continue LaserX` goes to the SOL High implementation thread.",
+            "repair review blockers first;",
+            "stop at `AWAITING_REVIEW` or `BLOCKED`;",
+            "There is no automatic routine merge.",
+            "## Current M15 queue",
+            "### G0 — guided-workflow architecture and first-run contract",
+            "### G6 — packaged accessibility and first-session validation",
+        ),
+        "docs/SOL_EXECUTION_PLAN.md",
+    ),
+    (
+        "docs/FILE_FORMATS.md",
+        (
+            "Native DWG is out of scope.",
+            "Do not rename a DXF file to `.dwg` or claim\nequivalence.",
+        ),
+        "docs/FILE_FORMATS.md",
+    ),
+    (
+        "docs/milestones/M15-guided-onboarding-learn-mode.md",
+        (
+            "## Approved implementation gates",
+            "Each gate requires exact-head review and explicit owner advancement",
+            "Status advances to M16 only after exact-head audit, merge, issue closure, and owner approval.",
+        ),
+        "M15 milestone",
+    ),
+    (
+        "docs/decisions/0027-guided-workflow-architecture-boundary.md",
+        (
+            "Accepted for M15 G0.",
+            "`transientStepIds`",
+            "Transient steps recover; they are never reopened.",
+            "stable-to-stable Back remains a one-step move.",
+        ),
+        "ADR 0027",
+    ),
+    (
+        "docs/CLAUDE_EXECUTION_PLAN.md",
+        (
+            "# Claude Execution Plan — Superseded",
+            "**Superseded and held as of 2026-08-06 by explicit owner direction.**",
+            "docs/SOL_EXECUTION_PLAN.md",
+            "It contains no executable implementation authority.",
+        ),
+        "docs/CLAUDE_EXECUTION_PLAN.md (held historical notice)",
+    ),
+)
+
+
 def relative(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
@@ -188,31 +296,20 @@ def check_required(errors: list[str]) -> None:
             errors.append(f"missing milestone: {relative(milestone)}")
 
 
+def missing_terms(text: str, terms: tuple[str, ...]) -> tuple[str, ...]:
+    """Returns the contract markers absent from text."""
+    return tuple(term for term in terms if term not in text)
+
+
 def require_terms(errors: list[str], path: Path, terms: tuple[str, ...], label: str) -> None:
     text = path.read_text(encoding="utf-8")
-    for term in terms:
-        if term not in text:
-            errors.append(f"{label} is missing required contract text: {term}")
+    for term in missing_terms(text, terms):
+        errors.append(f"{label} is missing required contract text: {term}")
 
 
 def check_instruction_links(errors: list[str]) -> None:
-    require_terms(
-        errors,
-        ROOT / "AGENTS.md",
-        (
-            "GitHub Issue #44",
-            "Claude — implementation agent",
-            "ChatGPT — senior engineer, orchestrator, exact-head auditor, acceptance authority",
-            "canonical stored length unit: millimeters",
-            "Native DWG editing is explicitly out of scope",
-            "M14 — Production physical 3D preview integration.",
-            "M15 — Guided onboarding and Learn Mode.",
-            "M23 — Version 1.0 release and broader-market launch.",
-            "M24 — Simulator-first machine platform foundation.",
-            "M25 — First explicitly approved LaserX controller vertical slice.",
-        ),
-        "AGENTS.md",
-    )
+    for relative_path, terms, label in CONTRACT_REQUIREMENTS:
+        require_terms(errors, ROOT / relative_path, terms, label)
 
     compatibility = (ROOT / "agent.md").read_text(encoding="utf-8")
     if "AGENTS.md" not in compatibility or "authoritative agent contract" not in compatibility:
@@ -221,22 +318,6 @@ def check_instruction_links(errors: list[str]) -> None:
     milestone_index = ROOT / "docs" / "MILESTONES.md"
     required_rows = tuple(f"| M{number:02d} |" for number in range(14, 26))
     require_terms(errors, milestone_index, required_rows, "docs/MILESTONES.md")
-
-    require_terms(
-        errors,
-        ROOT / "docs" / "status" / "CURRENT.md",
-        (
-            "M14 — Production Physical 3D Preview Integration",
-            "Implementation lead: Claude",
-            # G4's sub-slices (G4A/G4B/G4C) are all complete and merged, so the
-            # active gate is now a whole slice with no sub-slice. The
-            # `- Current slice: **G<0-6> ` line remains guarded by
-            # CURRENT_SLICE_PATTERN below.
-            "## Active G5 scope",
-            "Issues #44 and #37",
-        ),
-        "docs/status/CURRENT.md",
-    )
 
     slice_error = current_slice_error(
         (ROOT / "docs" / "status" / "CURRENT.md").read_text(encoding="utf-8")
@@ -255,19 +336,6 @@ def check_instruction_links(errors: list[str]) -> None:
             "Status advances to M15 only after explicit owner approval.",
         ),
         "M14 milestone",
-    )
-
-    require_terms(
-        errors,
-        ROOT / "docs" / "CLAUDE_EXECUTION_PLAN.md",
-        (
-            "Slice G0",
-            "Slice G6",
-            "Claude is the active implementation agent",
-            "ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority",
-            "G4A — renderer-safe integration foundation",
-        ),
-        "active implementation execution plan",
     )
 
     require_terms(
