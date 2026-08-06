@@ -18,10 +18,52 @@ const exists = async (path) => {
   }
 };
 
+/**
+ * Node built-ins are importable by bare specifier as well as the `node:`
+ * spelling, and a bare `from "fs"` resolves regardless of `types: []`, so
+ * matching only `node:` would leave the obvious spelling open.
+ */
+const NODE_BUILTIN_MODULES = [
+  "assert",
+  "buffer",
+  "child_process",
+  "crypto",
+  "dns",
+  "events",
+  "fs",
+  "http",
+  "https",
+  "module",
+  "net",
+  "os",
+  "path",
+  "process",
+  "stream",
+  "timers",
+  "tls",
+  "url",
+  "util",
+  "vm",
+  "worker_threads",
+  "zlib",
+];
+
+const QUOTE = "[\"'`]";
+const BARE_NODE_BUILTIN = new RegExp(
+  `(?:\\bfrom\\s*|\\bimport\\s*(?:\\(\\s*)?|\\brequire\\s*\\(\\s*)${QUOTE}(?:${NODE_BUILTIN_MODULES.join(
+    "|",
+  )})(?:/[^"'\`]*)?${QUOTE}`,
+  "u",
+);
+
 const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
   {
     pattern: /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?|\brequire\s*\(\s*)["'`]node:/u,
     message: "guided-workflow state must not import a node: module",
+  },
+  {
+    pattern: BARE_NODE_BUILTIN,
+    message: "guided-workflow state must not import a Node built-in by bare specifier",
   },
   {
     pattern: /\brequire\s*\(/u,
@@ -34,6 +76,14 @@ const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
   {
     pattern: /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'`]react/u,
     message: "guided-workflow state must not import react",
+  },
+  {
+    // A triple-slash directive re-adds ambient libraries from inside the
+    // source, so the ES-only tsconfig alone would not hold: the JSON config
+    // stays untouched while `dom` or `node` types come back.
+    pattern: /\/\/\/\s*<reference\s+(?:lib|types|no-default-lib)\s*=/u,
+    message:
+      "guided-workflow state must not re-add ambient libraries with a triple-slash reference directive",
   },
 ];
 
@@ -108,6 +158,6 @@ if (invokedDirectly) {
     throw new Error(`Guided-workflow architecture audit failed:\n- ${failures.join("\n- ")}`);
   }
   console.log(
-    "Guided-workflow architecture audit passed: the guided-workflow state module imports no React, Electron, or node: module, and its ES-only typecheck configuration remains free of DOM libraries and ambient types.",
+    "Guided-workflow architecture audit passed: the guided-workflow state module imports no React, Electron, or Node built-in (by node: or bare specifier), re-adds no ambient library through a triple-slash directive, and its ES-only typecheck configuration remains free of DOM libraries and ambient types.",
   );
 }

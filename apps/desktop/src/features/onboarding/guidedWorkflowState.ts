@@ -55,6 +55,16 @@ export interface GuidedWorkflowState {
   readonly status: GuidedWorkflowStatus;
   readonly definition: GuidedWorkflowDefinition | null;
   /**
+   * Opaque identity for this run of a workflow, supplied by the caller and
+   * replaced on every `start`, `resume`, and `replay`.
+   *
+   * A step id alone cannot make a stale event safe: cancelling and restarting,
+   * or replaying, puts a new run on the same step id, so a delayed event from
+   * the abandoned run would still match. The token is what distinguishes
+   * "this step, this run" from "this step, some earlier run".
+   */
+  readonly runToken: string | null;
+  /**
    * The stable id of the step in progress, not an array index. An index is
    * only meaningful against one exact step set; an id survives a definition
    * gaining or reordering steps, and makes a stale snapshot detectable
@@ -69,6 +79,7 @@ export interface GuidedWorkflowState {
 export const initialGuidedWorkflowState: GuidedWorkflowState = {
   status: "idle",
   definition: null,
+  runToken: null,
   currentStepId: null,
   completedStepIds: [],
   skippedStepIds: [],
@@ -110,16 +121,40 @@ export const initialOnboardingPreferences: OnboardingPreferences = {
   activeWorkflow: null,
 };
 
+/**
+ * Identity every step-scoped action must carry.
+ *
+ * `expectedStepId` is the step the user was actually looking at when the
+ * action was produced; `runToken` is the run it belonged to. Both must match
+ * live state or the action is ignored, so a duplicated Next cannot confirm the
+ * *following* step, and a delayed Skip cannot skip a step the user never saw.
+ */
+export interface StepScopedAction {
+  readonly expectedStepId: string;
+  readonly runToken: string;
+}
+
 export type GuidedWorkflowAction =
-  | { type: "start"; definition: GuidedWorkflowDefinition }
-  | { type: "resume"; definition: GuidedWorkflowDefinition; snapshot: OnboardingWorkflowSnapshot }
-  | { type: "advance" }
-  | { type: "back" }
-  | { type: "skip-step" }
-  | { type: "dismiss" }
-  | { type: "replay" }
-  | { type: "cancel" }
-  | { type: "fail"; reason: string };
+  | { type: "start"; definition: GuidedWorkflowDefinition; runToken: string }
+  | {
+      type: "resume";
+      definition: GuidedWorkflowDefinition;
+      snapshot: OnboardingWorkflowSnapshot;
+      runToken: string;
+    }
+  | ({ type: "advance" } & StepScopedAction)
+  | ({ type: "back" } & StepScopedAction)
+  | ({ type: "skip-step" } & StepScopedAction)
+  | ({ type: "fail"; reason: string } & StepScopedAction)
+  // Run-scoped rather than step-scoped: leaving the workflow is a decision
+  // about the journey, not about one step, but it must still not apply to a
+  // run the user already abandoned.
+  | { type: "dismiss"; runToken: string }
+  | { type: "replay"; runToken: string }
+  // Deliberately global and unconditional: cancel is the guaranteed exit from
+  // every state and always restores the same pre-guided state, so binding it
+  // to identity could only ever make an escape hatch fail to work.
+  | { type: "cancel" };
 
 export type GuidedWorkflowActionType = GuidedWorkflowAction["type"];
 
@@ -205,7 +240,29 @@ function withoutId(ids: readonly string[], stepId: string | null): readonly stri
   return stepId === null ? ids : ids.filter((id) => id !== stepId);
 }
 
-function startedState(supplied: GuidedWorkflowDefinition): GuidedWorkflowState {
+/**
+ * Whether a step-scoped action still describes the live step and run.
+ *
+ * This is what makes a duplicated or delayed event harmless. Without it,
+ * `advance`/`back`/`skip-step`/`fail` were accepted whenever the workflow
+ * merely happened to be active, so two Next events produced while step A was
+ * on screen would confirm A *and then B* -- silently completing a step the
+ * user never saw, and defeating the requirement that each guided step is
+ * explicitly confirmed.
+ */
+function matchesLiveStep(state: GuidedWorkflowState, action: StepScopedAction): boolean {
+  return (
+    state.runToken !== null &&
+    state.runToken === action.runToken &&
+    state.currentStepId !== null &&
+    state.currentStepId === action.expectedStepId
+  );
+}
+
+function startedState(
+  supplied: GuidedWorkflowDefinition,
+  runToken: string,
+): GuidedWorkflowState {
   // Validate the caller value, then keep an owned copy: validating a value the
   // caller can still mutate would only prove it was valid at one instant.
   const definition = ownDefinition(supplied);
@@ -218,6 +275,7 @@ function startedState(supplied: GuidedWorkflowDefinition): GuidedWorkflowState {
       ...initialGuidedWorkflowState,
       status: "failed",
       definition,
+      runToken,
       failureReason:
         "A guided workflow requires a positive version and at least one unique, non-blank step id.",
     };
@@ -225,6 +283,7 @@ function startedState(supplied: GuidedWorkflowDefinition): GuidedWorkflowState {
   return {
     status: "active",
     definition,
+    runToken,
     currentStepId: firstStepId,
     completedStepIds: [],
     skippedStepIds: [],
@@ -311,7 +370,7 @@ export function reduceGuidedWorkflow(
     }
 
     case "start": {
-      return startedState(action.definition);
+      return startedState(action.definition, action.runToken);
     }
 
     case "resume": {
@@ -323,6 +382,7 @@ export function reduceGuidedWorkflow(
       return {
         status: "active",
         definition: ownDefinition(action.definition),
+        runToken: action.runToken,
         currentStepId: action.snapshot.currentStepId,
         completedStepIds: ownList(action.snapshot.completedStepIds),
         skippedStepIds: ownList(action.snapshot.skippedStepIds),
@@ -332,11 +392,14 @@ export function reduceGuidedWorkflow(
 
     case "replay": {
       if (state.definition === null) return state;
-      return startedState(state.definition);
+      // A fresh token, so any event still in flight from the finished run
+      // cannot apply to the restarted one.
+      return startedState(state.definition, action.runToken);
     }
 
     case "advance":
     case "skip-step": {
+      if (!matchesLiveStep(state, action)) return state;
       const definition = state.definition;
       if (definition === null) return state;
       const index = stepIndexOf(definition, state.currentStepId);
@@ -364,6 +427,7 @@ export function reduceGuidedWorkflow(
     }
 
     case "back": {
+      if (!matchesLiveStep(state, action)) return state;
       const definition = state.definition;
       if (definition === null) return state;
       const index = stepIndexOf(definition, state.currentStepId);
@@ -388,10 +452,12 @@ export function reduceGuidedWorkflow(
     }
 
     case "dismiss": {
+      if (state.runToken === null || state.runToken !== action.runToken) return state;
       return { ...state, status: "dismissed" };
     }
 
     case "fail": {
+      if (!matchesLiveStep(state, action)) return state;
       return { ...state, status: "failed", failureReason: action.reason };
     }
 

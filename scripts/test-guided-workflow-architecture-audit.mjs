@@ -72,6 +72,30 @@ await runCase(
   /must not import react/u,
 );
 
+// Bare Node built-ins resolve regardless of `types: []`, so the `node:`
+// spelling alone is not the whole boundary.
+await runCase({ source: 'import { readFile } from "fs";\nvoid readFile;' }, /bare specifier/u);
+await runCase({ source: 'import { join } from "path";\nvoid join;' }, /bare specifier/u);
+await runCase(
+  { source: 'import { randomUUID } from "crypto";\nvoid randomUUID;' },
+  /bare specifier/u,
+);
+await runCase(
+  { source: 'import { readFile } from "fs/promises";\nvoid readFile;' },
+  /bare specifier/u,
+);
+
+// Triple-slash directives re-add ambient libraries from inside the source,
+// leaving the ES-only tsconfig untouched while DOM or Node types come back.
+await runCase(
+  { source: '/// <reference lib="dom" />\nexport const x = 1;' },
+  /triple-slash reference directive/u,
+);
+await runCase(
+  { source: '/// <reference types="node" />\nexport const x = 1;' },
+  /triple-slash reference directive/u,
+);
+
 // The DOM/browser-global boundary is enforced by the ES-only typecheck, so
 // what this audit must protect is the configuration that performs it. Each
 // case below is a real way that enforcement could be silently weakened.

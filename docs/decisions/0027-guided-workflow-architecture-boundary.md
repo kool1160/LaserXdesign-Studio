@@ -85,9 +85,12 @@ current `main`) establishes the starting point precisely:
 first-run state: the active goal and step definition, the current step, the
 completed and skipped step ids, and status
 (`idle | active | completed | dismissed | failed`). It is a pure TypeScript
-module — no React, no DOM, no Electron, no `node:` import, and no browser
-global — proven by mechanical audit (§7), the same way
-`packages/physical-preview-3d` is proven free of a renderer dependency.
+module — no React, no DOM, no Electron, no Node import, and no browser global.
+Both halves of that claim are mechanically enforced, by two different
+mechanisms with different reach (§7): an ES-only typecheck for DOM and browser
+globals, and a text audit for imports the typecheck cannot see. This is the
+same reasoning that keeps `packages/physical-preview-3d` free of a renderer
+dependency.
 
 There is deliberately **no `canceled` status**: `cancel` restores the
 pre-guided state, which is exactly `idle`. A status the reducer can never
@@ -191,6 +194,32 @@ over the **reachable** state graph: every reachable non-terminal state can
 move forward on its own, and every reachable state can reach `idle` via
 `cancel`. Unreachable states are never synthesized to pad the matrix.
 
+**A source status is necessary but not sufficient.** Status alone cannot tell
+a fresh event from a duplicated or delayed one, because both arrive while the
+workflow is merely `active`. Every step-scoped action — `advance`, `back`,
+`skip-step`, `fail` — therefore also carries the step it was produced for and
+the run it belonged to, and is a same-reference no-op unless both match live
+state:
+
+- **`expectedStepId`** stops a duplicated Next from confirming the *following*
+  step, and a delayed Skip from skipping a step the user never saw. Issue #45
+  requires each guided step to be explicitly confirmed; without this, a
+  repeated event confirms steps on the user's behalf.
+- **`runToken`** is opaque, supplied by the caller, and replaced on every
+  `start`, `resume`, and `replay`. A step id alone is not enough: cancelling
+  and restarting, or replaying, puts a new run on the same step id, so an
+  event still in flight from the abandoned run would still match.
+
+`dismiss` and `replay` are run-scoped but not step-scoped — leaving or
+restarting a journey is a decision about the journey, not about one step.
+`cancel` is deliberately unconditional: it is the guaranteed exit from every
+state and always restores the same pre-guided state, so binding it to identity
+could only ever make an escape hatch fail to work.
+
+Generating tokens belongs to the caller, which keeps the reducer pure and
+deterministic; a token minted inside the reducer would make the same inputs
+produce different outputs.
+
 ### 6. Resumable persistence
 
 `resume` is keyed off a persisted snapshot that can truthfully reconstruct an
@@ -240,15 +269,41 @@ channel or touch `apps/desktop/electron/persistence.ts`.
 
 ### 7. Mechanical enforcement
 
-`scripts/guided-workflow-architecture-audit.mjs` reads
-`guidedWorkflowState.ts` as text and rejects a `node:` import, a `require(`
-call, an `electron` import, or a `from "react"` import — the same
-`requireText`/`rejectText` shape as `scripts/renderer-source-boundary-audit.mjs`.
-This keeps the module renderer-framework-agnostic and privilege-free by
-construction, so a later gate cannot accidentally couple guided-workflow state
-to Electron privilege or to React internals. A companion
-`scripts/test-guided-workflow-architecture-audit.mjs` proves the audit fires on
-a real violation and does not false-positive on the clean module, matching
+Enforcement is split between two mechanisms, each covering what the other
+cannot. The claim recorded here is exactly what they enforce — no broader.
+
+**The DOM and browser-global boundary is enforced by the type system.**
+`apps/desktop/tsconfig.onboarding-pure.json` compiles this module alone
+against `lib: ["ES2023"]` with `types: []`, run as
+`pnpm audit:guided-workflow-types`. Any reference to a browser global or DOM
+type — `window`, `document`, `self`, `location`, `history`, `indexedDB`,
+`Worker`, `XMLHttpRequest`, `KeyboardEvent`, `Storage`,
+`CSSStyleDeclaration`, and every other one — simply fails to resolve. A
+pattern list was rejected for this job: it can only reject the globals someone
+remembered, so it silently overclaims the moment a new one appears. The
+desktop app's own `tsconfig.json` includes `DOM` and `DOM.Iterable`, so the
+ordinary typecheck cannot close this gap and a dedicated configuration is
+required.
+
+**The import boundary is enforced by text scan.**
+`scripts/guided-workflow-architecture-audit.mjs` rejects a `node:` import, a
+Node built-in imported by bare specifier (`from "fs"`, `from "path"`,
+`from "fs/promises"`, and the rest — these resolve regardless of `types: []`,
+so the `node:` spelling alone would not be the whole boundary), a `require(`
+call, an `electron` import, and a `from "react"` import. These are the rules a
+typecheck cannot express, because those packages ship real type declarations
+and would resolve happily.
+
+The audit also rejects a triple-slash `/// <reference lib="..." />` or
+`types="..."` directive, which would re-add ambient libraries from *inside*
+the source while leaving the JSON configuration untouched, and verifies the
+pure configuration still exists and has not been weakened — no DOM library, no
+ambient types, covering exactly this module — so enforcement cannot be
+disabled by editing a config instead of the code.
+
+`scripts/test-guided-workflow-architecture-audit.mjs` proves every rule fires
+on a real violation, that ordinary code is not falsely rejected, and that the
+real module and real configuration both pass, matching
 `scripts/test-renderer-source-boundary-audit.mjs`.
 
 ### 8. Owner-observed ten-minute fixture set
