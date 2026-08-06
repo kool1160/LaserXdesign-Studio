@@ -97,13 +97,15 @@ export interface GuidedWorkflowState {
    * at `start`/`resume` and never changed for the life of the run.
    *
    * A run token scopes events to a run, but nothing about it says which
-   * project the run is about. Without this, replacing the open project
-   * mid-run (New Design / Open Project / a Recent-projects entry) leaves the
-   * old run active with matching token and step id, so its events keep
-   * mutating a progress record whose completed prefix belongs to the
-   * replaced project -- and a later snapshot could pair that progress with
-   * the new project's binding. `project-changed` (below) and the
-   * `toWorkflowSnapshot` identity guard both key off this field.
+   * project the run is about. Without this, a later snapshot could pair the
+   * run's completed prefix with another project's binding. The
+   * `toWorkflowSnapshot` identity guard keys off this field.
+   *
+   * This persisted project id is deliberately NOT used to detect an open
+   * project replacement. Save As and copied `.laserx` files retain it, so
+   * reopening or replacing from one of those files may present the same id.
+   * The edge-triggered `project-replaced` action (below) is the live-session
+   * boundary and ends the run regardless of persisted identity.
    *
    * Deliberately the project identity, NOT the document identity: the
    * shipped `project.create-document` command replaces the document -- with
@@ -280,22 +282,17 @@ export type GuidedWorkflowAction =
   // every state and always restores the same pre-guided state, so binding it
   // to identity could only ever make an escape hatch fail to work.
   | { type: "cancel" }
-  // Reports an externally observed fact, not a user decision: the open
-  // *project* was replaced (New Design, Open Project, a Recent-projects
-  // entry). Carries the identity of the project now open. If it differs
-  // from the run's bound identity, the run -- active or terminal -- ends
-  // atomically: the state returns to exactly the pre-guided initial state,
-  // which clears the run token (so every in-flight event from the old run
-  // becomes a no-op) and makes `toWorkflowSnapshot` return `null` (so the
-  // ordinary persist-on-change write clears the resumable snapshot).
+  // Reports an edge, not an identity comparison: the open project session
+  // was replaced by New Design, Open Project, a Recent-projects entry, or an
+  // external open. Every delivery ends a non-idle run atomically, even when
+  // the replacement file carries the same persisted project id (Save As and
+  // copied `.laserx` files do). Returning the exact initial state clears the
+  // run token and makes `toWorkflowSnapshot` return `null`, so stale events
+  // and stale persistence cannot cross the replacement boundary.
   //
-  // Deliberately NOT dispatched for a document replacement inside the same
-  // project: the shipped `project.create-document` step replaces the
-  // document id while the project identity is preserved, and that operation
-  // is a guided step, not an exit. Same-identity deliveries are
-  // same-reference no-ops, so a caller wiring this to project identity
-  // changes gets exactly that behavior.
-  | { type: "project-changed"; projectId: string };
+  // Deliberately NOT dispatched for `project.create-document`, Save, or Save
+  // As: those operations stay inside the current open project session.
+  | { type: "project-replaced" };
 
 export type GuidedWorkflowActionType = GuidedWorkflowAction["type"];
 
@@ -324,7 +321,7 @@ export const ALLOWED_SOURCE_STATUSES: Readonly<
   fail: ["active"],
   // An external fact must always be deliverable: a run bound to a replaced
   // project is invalid whether it is active or already terminal.
-  "project-changed": ["idle", "active", "completed", "dismissed", "failed"],
+  "project-replaced": ["idle", "active", "completed", "dismissed", "failed"],
 };
 
 /**
@@ -527,8 +524,8 @@ function startedState(
   }
   if (!isUsableToken(projectId)) {
     // A blank identity could never match or mismatch anything, so the
-    // project-changed and snapshot-identity guards would be vacuous for the
-    // whole run -- the same reasoning that rejects a blank run token.
+    // snapshot-identity guard would be vacuous for the whole run -- the same
+    // reasoning that rejects a blank run token.
     return {
       ...initialGuidedWorkflowState,
       status: "failed",
@@ -641,13 +638,11 @@ export function canResumeSnapshot(
  * fingerprint) produces no snapshot at all: persisting it would only create
  * a record the resume checks must later refuse.
  *
- * The binding's identity must also be the identity the run is bound to. A
- * caller passing the *current* document's binding after a replacement the
- * run has not yet been reset for would otherwise persist the old document's
- * progress under the new document's identity -- an internally
- * self-consistent but false snapshot that the resume comparison would then
- * accept. Refusing the mismatch here makes that record unconstructible
- * through this module, regardless of event ordering in the caller.
+ * The binding's persisted identity must also be the identity the run is
+ * bound to. That rejects a different-project binding directly. A replacement
+ * that retains the same persisted id (reopen, Save As, copied file) is closed
+ * by the caller's synchronous `project-replaced` transaction before snapshot
+ * persistence can observe the replacement binding.
  */
 export function toWorkflowSnapshot(
   state: GuidedWorkflowState,
@@ -693,23 +688,13 @@ export function reduceGuidedWorkflow(
       return startedState(action.definition, action.runToken, action.projectId);
     }
 
-    case "project-changed": {
-      // Same project: not a replacement for this run, nothing to do. This is
-      // also exactly how a guided create-document step stays harmless -- the
-      // document id changes inside the same project, the project identity
-      // does not, so a caller wiring this action to project identity never
-      // ends the run over it.
-      if (state.projectId !== null && state.projectId === action.projectId) return state;
+    case "project-replaced": {
       // No run to invalidate.
       if (state.status === "idle") return state;
-      // The bound project is gone, so the run -- active or terminal -- is
-      // about a project that is no longer open. End it atomically: the
-      // token is cleared with the rest of the state, so in-flight events
-      // from the old run no-op, and toWorkflowSnapshot now returns null, so
-      // the ordinary persist-on-change write clears the resumable snapshot.
-      // A blank replacement identity also lands here deliberately: a broken
-      // identity signal fail-safes to ending the run, never to continuing
-      // against an unknown project.
+      // A replacement is an edge, not an identity comparison: reopening the
+      // same file or opening a Save As/copy may retain the same persisted
+      // project id. End the run atomically so in-flight events no-op and the
+      // ordinary persist-on-change write clears the resumable snapshot.
       return initialGuidedWorkflowState;
     }
 
@@ -756,7 +741,7 @@ export function reduceGuidedWorkflow(
       }
       // The restarted run guides the same project as the run it replays; a
       // replaced project would already have ended this terminal state via
-      // project-changed before replay could target it.
+      // project-replaced before replay could target it.
       return startedState(state.definition, action.nextRunToken, state.projectId ?? "");
     }
 

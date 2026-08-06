@@ -83,7 +83,7 @@ current `main`) establishes the starting point precisely:
 
 `apps/desktop/src/features/onboarding/guidedWorkflowState.ts` owns guided
 first-run state: the active goal and step definition, the run token, the
-bound project identity (§5), the current step, the completed and skipped
+bound persisted project identity (§5), the current step, the completed and skipped
 step ids, and status (`idle | active | completed | dismissed | failed`). It is a pure TypeScript
 module — no React, no DOM, no Electron, no Node import, and no browser global.
 Both halves of that claim are mechanically enforced, by two different
@@ -188,8 +188,9 @@ Three rules hold in every row, and are the reason the matrix exists:
   first. This rule is deliberately belt-and-braces, not the safety
   mechanism itself: even if a G1 surface leaked a replacement control (or
   the OS delivered one another way, e.g. a file association), the
-  `project-changed` contract (§5) atomically ends the run the moment the
-  open project's identity changes, so hiding the controls is UX coherence
+  `project-replaced` contract (§5) atomically ends the run on every true
+  open-session replacement, even when the newly opened file retains the
+  same persisted project id, so hiding the controls is UX coherence
   while the reducer transition is the guarantee. A document replacement
   *inside* the same project — the shipped `project.create-document` step —
   is a guided operation, not a Project-surface action, and never ends the
@@ -534,7 +535,8 @@ in the app layer is sufficient), and must test that integration contract at the
 layer that owns it. The reducer enforces what it can see: non-blank, and, for
 replay, different from the run being restarted.
 
-**The run is bound to one project, and a replaced project ends the run.**
+**Persisted progress is bound to one project; live replacement is an explicit
+edge.**
 A run token scopes events to a run, but says nothing about which *project*
 the run is guiding. Without more, replacing the open project mid-run (New
 Design, Open Project, a Recent-projects entry) would leave the old run
@@ -550,24 +552,33 @@ accepted by the resume comparison, and false. Three mechanisms close this:
   the identity the validated snapshot proved the progress is about, and
   `replay` keeps the terminal run's binding. A blank identity fails closed
   at start, for the same vacuous-match reason as a blank token.
-- **`project-changed`** reports the externally observed fact that the open
-  project was replaced, carrying the new identity. It is deliverable from
-  every status — a run bound to a replaced project is invalid whether
-  active or terminal — and, unless the identity equals the run's own, it
-  atomically returns exactly the pre-guided initial state: the token clears
-  with the rest of the state, so every in-flight event from the old run
-  no-ops, and `toWorkflowSnapshot` now returns `null`, so the ordinary
-  persist-on-change write clears the resumable snapshot. A blank
-  replacement identity also ends the run — a broken identity signal
-  fail-safes to stopping guidance, never to continuing against an unknown
-  project. Recovery is honest and small: the goal restarts in the new
-  project; the old project itself is untouched.
+- **`project-replaced`** reports the edge that the open project session was
+  replaced. It carries no persisted identity and is deliverable from every
+  status — a run about a replaced open session is invalid whether active or
+  terminal. Every delivery from a non-idle state atomically returns exactly
+  the pre-guided initial state: the token clears with the rest of the state,
+  so every in-flight event from the old run no-ops, and
+  `toWorkflowSnapshot` now returns `null`, so the ordinary persist-on-change
+  write clears the resumable snapshot. Recovery is honest and small: the
+  goal restarts in the new open session; the project itself is untouched.
 - `toWorkflowSnapshot` additionally refuses a binding whose project identity
   is not the run's own (§6), so the cross-project false-snapshot record is
-  unconstructible through this module regardless of event ordering in the
-  caller.
+  unconstructible through this module. A same-id replacement is closed by
+  the synchronous `project-replaced` transaction below.
 
-**The bound identity is the project's, deliberately not the document's.**
+**Why replacement is an edge, not an identity comparison.** Save As writes a
+copy of the current project without minting a new `LaserxProject.project.id`,
+and `ProjectSession.open` preserves the id serialized in the file. Reopening
+the same file, opening a Save As file, or opening a copied `.laserx` file can
+therefore replace the open session while presenting the same persisted
+project id. An identity-bearing `project-changed` action that no-ops on equal
+ids would preserve the old token and completed prefix across that replacement,
+then allow the next snapshot to pair the old progress with the newly opened
+document/fingerprint. `project-replaced` is deliberately unconditional, so
+that false record cannot survive the replacement transaction.
+
+**The persisted run binding is the project's, deliberately not the
+document's.**
 The shipped `project.create-document` command — the exact-stock-size
 operation that is the first real step of Create My First Sign — mints a
 **new document id** and installs it via `replaceProjectDocument` while the
@@ -575,25 +586,28 @@ project identity is preserved. A run keyed to the document id would either
 be reset at the moment its first step succeeded, or (if the reset were
 suppressed) hold a stale document id that makes every later
 `toWorkflowSnapshot` return `null`, silently losing resumability for the
-rest of the run. Binding to the project identity makes the guided
-create-document step an ordinary same-identity delivery — a same-reference
-no-op — while every replacement path (New Design and Open Project install a
-different project identity; a Recent-projects open likewise) still ends the
-run atomically. Document identity and content still matter, but per
+rest of the run. The caller therefore does **not** dispatch
+`project-replaced` for this in-project operation; the run continues while
+every true open-session replacement ends it atomically, regardless of the
+persisted id in the replacement file. Document identity and content still
+matter, but per
 *snapshot*, not per run: each `GuidedProjectBinding` captures the exact
 current `documentId` and `fingerprint` at snapshot time (§6), so after a
 mid-run create-document the next snapshot simply binds the new current
 document inside the same project.
 
-**Caller obligation, second part.** G1 must dispatch `project-changed`
-synchronously at the moment `DesktopState.project` is replaced — before any
-queued guided event is processed — wiring it to the **project identity**
-(`LaserxProject.project.id`), not the document id. Same-identity deliveries
-are same-reference no-ops, so dispatching after every project-state commit
-is safe. G1 must also persist the (now-null) snapshot through its ordinary
-persist-on-change path after a reset. The reducer guarantees the
-transition; observing the replacement is the app layer's job, tested at the
-layer that owns it, exactly like token minting.
+**Caller obligation, second part.** G1 must dispatch `project-replaced` as
+part of the same synchronous transaction that installs a replacement open
+session — New Design, Open Project, a Recent-projects open, or an external
+open/file-association path — before the replacement `DesktopState` becomes
+observable to queued guided events or snapshot persistence. It must dispatch
+even when the newly opened project's persisted id equals the old one. It must
+**not** dispatch for `project.create-document`, Save, Save As, or ordinary
+project edits, because those remain inside the current open session. G1 must
+also persist the (now-null) snapshot through its ordinary persist-on-change
+path after a reset. The reducer guarantees the transition; classifying and
+observing the replacement edge is the app layer's job, tested at the layer
+that owns it, exactly like token minting.
 
 ### 6. Resumable persistence
 
@@ -634,7 +648,8 @@ supplied by the app layer, which already owns project/document identity and
 fingerprinting via the `documentFingerprint`/`projectFingerprint` idiom in
 `ProjectSession` (§1) — and compared by exact string equality only, keeping
 the pure module independent of every project package. The three values have
-different lifetimes on purpose: `projectId` matches the run binding (§5) and
+different lifetimes on purpose: `projectId` matches the run's persisted
+binding (§5) and
 is fixed for a run, while `documentId`/`fingerprint` are per-snapshot,
 because the shipped `project.create-document` step legitimately replaces the
 document id inside the same project mid-run — successive snapshots of one
@@ -652,10 +667,13 @@ binding whose project identity is not the identity the *run* is bound to
 (§5): a caller passing the new project's binding after a replacement the
 run has not yet been reset for would otherwise pair the old project's
 progress with the new project's identity, and the resume comparison would
-accept that false record. Deriving the binding freshly at snapshot time and
-at resume time is a **G1 caller obligation** of the same kind as minting
-run tokens (§5): fingerprints are point-in-time values, so the reducer
-cannot carry one from `start` without it going stale as the user edits.
+accept that false record. For a replacement carrying the *same* persisted id,
+the synchronous `project-replaced` transaction in §5 resets the state before
+snapshot persistence can observe the replacement binding. Deriving the
+binding freshly at snapshot time and at resume time is a **G1 caller
+obligation** of the same kind as minting run tokens (§5): fingerprints are
+point-in-time values, so the reducer cannot carry one from `start` without it
+going stale as the user edits.
 
 **Transient steps recover; they are never reopened.** A snapshot whose open
 step is in `transientStepIds` (§3's per-goal designation) resumes at the

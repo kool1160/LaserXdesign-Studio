@@ -710,8 +710,8 @@ describe("guided workflow -- transition table", () => {
         return { type, runToken: state.runToken ?? RUN };
       case "cancel":
         return { type };
-      case "project-changed":
-        return { type, projectId: "some-other-project" };
+      case "project-replaced":
+        return { type };
       case "fail":
         return { type: "fail", reason: "example", ...identity };
       default:
@@ -1077,7 +1077,7 @@ describe("guided workflow -- non-mutation", () => {
       { type: "replay", expectedRunToken: identity.runToken, nextRunToken: "run-token-next" },
       { type: "cancel" },
       { type: "fail", reason: "x", ...identity },
-      { type: "project-changed", projectId: "some-other-project" },
+      { type: "project-replaced" },
     ];
     for (const action of actions) {
       const input = deepFreeze(advanceTo("add-text"));
@@ -1508,21 +1508,22 @@ describe("guided workflow -- project replacement ends the run", () => {
   it("replacing the project atomically ends an active run with the exact pre-guided state", () => {
     const midway = dispatch(start(), "advance");
     expect(midway.status).toBe("active");
-    const after = reduceGuidedWorkflow(midway, {
-      type: "project-changed",
-      projectId: OTHER_BINDING.projectId,
-    });
+    const after = reduceGuidedWorkflow(midway, { type: "project-replaced" });
     expect(after).toBe(initialGuidedWorkflowState);
   });
 
-  it("a project-changed for the run's own project is a same-reference no-op", () => {
+  it("a true replacement resets even when the newly opened file retains the same persisted project id", () => {
     const midway = dispatch(start(), "advance");
-    expect(
-      reduceGuidedWorkflow(midway, {
-        type: "project-changed",
-        projectId: BINDING.projectId,
-      }),
-    ).toBe(midway);
+    // Save As and copied `.laserx` files retain project.id. Replacement is
+    // therefore an edge supplied by the app layer, never an id comparison.
+    const reopenedBinding: GuidedProjectBinding = {
+      projectId: BINDING.projectId,
+      documentId: "doc-from-copy",
+      fingerprint: "fp-from-copy",
+    };
+    const reset = reduceGuidedWorkflow(midway, { type: "project-replaced" });
+    expect(reset).toBe(initialGuidedWorkflowState);
+    expect(toWorkflowSnapshot(reset, reopenedBinding)).toBeNull();
   });
 
   it("the shipped create-document step -- a new document id inside the same project -- preserves the active run", () => {
@@ -1535,13 +1536,9 @@ describe("guided workflow -- project replacement ends the run", () => {
     const afterCreate = dispatch(sizing, "advance");
     expect(afterCreate.status).toBe("active");
 
-    // The caller's project-changed wiring observes the same project id, so
-    // delivery is a same-reference no-op and the run continues untouched.
-    const delivered = reduceGuidedWorkflow(afterCreate, {
-      type: "project-changed",
-      projectId: BINDING.projectId,
-    });
-    expect(delivered).toBe(afterCreate);
+    // The caller does not dispatch project-replaced for this in-project
+    // command, so the run continues untouched.
+    const delivered = afterCreate;
 
     // A later snapshot binds to the NEW current document inside the same
     // project -- resumability is not lost for the rest of the run.
@@ -1573,27 +1570,12 @@ describe("guided workflow -- project replacement ends the run", () => {
     for (let i = 0; i < DEFINITION.stepIds.length; i += 1) terminal = dispatch(terminal, "advance");
     expect(terminal.status).toBe("completed");
     expect(
-      reduceGuidedWorkflow(terminal, {
-        type: "project-changed",
-        projectId: OTHER_BINDING.projectId,
-      }),
+      reduceGuidedWorkflow(terminal, { type: "project-replaced" }),
     ).toBe(initialGuidedWorkflowState);
 
     expect(
-      reduceGuidedWorkflow(initialGuidedWorkflowState, {
-        type: "project-changed",
-        projectId: OTHER_BINDING.projectId,
-      }),
+      reduceGuidedWorkflow(initialGuidedWorkflowState, { type: "project-replaced" }),
     ).toBe(initialGuidedWorkflowState);
-  });
-
-  it("a blank replacement identity fail-safes to ending the run, never continuing", () => {
-    // A broken identity signal must not leave guidance running against an
-    // unknown document.
-    const midway = dispatch(start(), "advance");
-    expect(reduceGuidedWorkflow(midway, { type: "project-changed", projectId: "" })).toBe(
-      initialGuidedWorkflowState,
-    );
   });
 
   it("an in-flight event from the replaced run cannot apply afterwards, even to a new run on the same step", () => {
@@ -1602,10 +1584,7 @@ describe("guided workflow -- project replacement ends the run", () => {
     const runOnA = start(DEFINITION, "run-A", BINDING.projectId);
     const inFlight = live(runOnA, "advance");
 
-    const reset = reduceGuidedWorkflow(runOnA, {
-      type: "project-changed",
-      projectId: OTHER_BINDING.projectId,
-    });
+    const reset = reduceGuidedWorkflow(runOnA, { type: "project-replaced" });
     expect(reset).toBe(initialGuidedWorkflowState);
     // The reset itself already refuses the old event (idle source status)...
     expect(reduceGuidedWorkflow(reset, inFlight)).toBe(reset);
@@ -1629,11 +1608,24 @@ describe("guided workflow -- project replacement ends the run", () => {
     // After the replacement resets the run there is nothing to snapshot at
     // all, so the caller's ordinary persist-on-change write clears the
     // stored snapshot.
-    const reset = reduceGuidedWorkflow(progressOnA, {
-      type: "project-changed",
-      projectId: OTHER_BINDING.projectId,
-    });
+    const reset = reduceGuidedWorkflow(progressOnA, { type: "project-replaced" });
     expect(toWorkflowSnapshot(reset, OTHER_BINDING)).toBeNull();
+  });
+
+  it("same-id replacement cannot persist the old run under the replacement document", () => {
+    const progressBeforeReplacement = dispatch(start(), "advance");
+    const replacementBinding: GuidedProjectBinding = {
+      projectId: BINDING.projectId,
+      documentId: "doc-reopened-same-id",
+      fingerprint: "fp-reopened-same-id",
+    };
+
+    const reset = reduceGuidedWorkflow(progressBeforeReplacement, { type: "project-replaced" });
+    expect(reset).toBe(initialGuidedWorkflowState);
+    expect(toWorkflowSnapshot(reset, replacementBinding)).toBeNull();
+
+    const staleEvent = live(progressBeforeReplacement, "advance");
+    expect(reduceGuidedWorkflow(reset, staleEvent)).toBe(reset);
   });
 
   it("resume and replay keep the run bound to the project the progress is about", () => {
