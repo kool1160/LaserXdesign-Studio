@@ -67,9 +67,25 @@ M14 is complete. Its component-by-component promotion path remains the accepted 
 
 Issue #30 records the exact heads, merges, machine evidence, private installer provenance, owner screenshots, owner pass, and final closure audit. M14 must not be reopened or broadened through M15 work.
 
-## M15 implementation queue
+## M15 binding operating contract
 
 M15 makes the existing depth of LaserX feel simple and obvious. It does not replace the authoritative project, geometry, cutability, save, export, security, or physical-preview systems.
+
+After reviewed merge, `docs/milestones/M15-workflow-first-product-amendment.md` is binding on G1-G6.
+
+The standing implementation direction is:
+
+- guided workflow is the default product experience;
+- Advanced Workspace and Exit Guidance remain direct escape paths;
+- feature surfaces are isolated incrementally instead of through a broad `App.tsx` rewrite;
+- physical 3D is a required guided checkpoint before export unless a truthful unavailable path is acknowledged;
+- repair is a flagship workflow with grouped confidence and Fix Safe Problems;
+- early first-time-user observation occurs during G2-G4;
+- G6 performs a minimum five-participant packaged cohort with at least four ten-minute successes;
+- AI remains optional and user-supplied;
+- machine control and later-milestone work remain excluded.
+
+## M15 implementation queue
 
 ### Slice G0 — guided-workflow architecture and first-run contract — active
 
@@ -92,34 +108,131 @@ Claude must:
 
 G0 does not implement the full first-run shell, tutorial content, grouped repair engine, material expansion, process profiles, export profiles, new AI capability, licensing, public beta, or M16 work.
 
-### Slice G1 — first-launch goal chooser and resumable guidance shell — held
+The workflow-first amendment does not alter PR #67 acceptance or add work to G0.
 
-Will implement the calm first-launch surface, goal choice, guidance shell, orientation, and resume/replay foundations only after G0 is accepted.
+### Slice G1 — default goal chooser and resumable guided shell — held
+
+After G0 is accepted and the owner advances G1, Claude must implement only the guidance shell and its minimum surface-control foundation:
+
+- first-launch goal chooser;
+- Resume Previous Workflow when a valid snapshot exists;
+- Advanced Workspace and Exit Guidance;
+- local onboarding preference and resumable-state persistence;
+- fresh run-token generation and caller-side uniqueness tests required by ADR 0027;
+- keyboard/focus ownership;
+- a feature-surface controller for Create, Import, Trace, Analyze/Repair, Text, Sign, AI, Editing, 3D, Save, and Export;
+- only the smallest incremental extraction needed to prove surface visibility and one-primary-action behavior.
+
+Forbidden in G1:
+
+- no complete create/import/repair journey;
+- no grouped repair engine;
+- no broad `App.tsx` rewrite;
+- no whole-application styling pass;
+- no later-milestone feature work.
 
 ### Slice G2 — Create My First Sign guided vertical slice — held
 
-Will guide one deterministic sign from dimensions and text through material, cutability, 3D, save, and export.
+After G1 acceptance and owner advancement, Claude must deliver one complete deterministic create journey:
+
+1. basic sign type;
+2. text;
+3. exact dimensions;
+4. current supported material and thickness;
+5. applicable backing/border/layer structure;
+6. manufacturing analysis;
+7. finding resolution or acknowledgment;
+8. save;
+9. focused physical 3D;
+10. guided preview completion or truthful unavailable acknowledgment;
+11. export.
+
+Export does not become the guided primary action before the 3D checkpoint.
+
+Before G2 closure, one owner-approved first-time participant must attempt the path without direct coaching. Record time, hesitation, wrong clicks, language confusion, 3D completion, export result, and repaired blockers.
 
 ### Slice G3 — vector import and raster trace contextual guidance — held
 
-Will separate SVG/DXF import from PNG/JPEG tracing and expose only relevant controls and explanations.
+After G2 acceptance and owner advancement, Claude must deliver distinct source-aware paths:
 
-### Slice G4 — grouped repair decisions and Fix safe problems workflow — held
+- generic file selection with Trace hidden while source type is unknown;
+- SVG/DXF vector review with units, scale, layers, grouped findings, accept/cancel, analysis, 3D, save, and export;
+- PNG/JPEG preprocessing and trace controls only after raster selection;
+- cancellation/rejection returning to source selection or a named recovery state without claiming import success;
+- truthful failure paths without invented geometry.
 
-Will group findings into **Safe to fix**, **Suggested fix**, and **Needs your decision**, with preview, acceptance, undo, and fixed/skipped/remaining counts.
+Before G3 closure:
+
+- one owner-approved first-time vector-import observation is recorded;
+- one owner-approved first-time raster-import/trace observation is recorded.
+
+The same participant may cover both paths if evidence remains distinct.
+
+### Slice G4 — flagship grouped repair and Fix Safe Problems — held
+
+After G3 acceptance and owner advancement, Claude must deliver the bounded repair product:
+
+- **Safe to fix**;
+- **Suggested fix**;
+- **Needs your decision**;
+- grouped plain-language summaries rather than default raw entity lists;
+- before/after preview;
+- no geometry mutation before acceptance;
+- one undoable batch when technically practical;
+- fixed, skipped, and remaining counts;
+- truthful analysis invalidation/rerun;
+- reject and undo paths;
+- advanced Details for entity-level diagnostics.
+
+Every repair class must record its deterministic eligibility, affected geometry, change, remaining uncertainty, undo semantics, and analysis consequences.
+
+Required fixtures include duplicate geometry, zero-length entities, redundant collinear points, approved near-closures, unsafe open contours, self-intersections, overlaps, islands/containment ambiguity, unit/scale ambiguity, and one large-finding broken DXF.
+
+Before G4 closure, one owner-approved first-time participant must import a broken file, understand the summary, preview and accept Fix Safe Problems, undo and reapply it, work remaining decisions, reach 3D, and export.
 
 ### Slice G5 — Learn Mode, replay, recovery, and contextual explanations — held
 
-Will add reusable explanations and replayable teaching without turning the product into a disconnected slideshow.
+After G4 acceptance and owner advancement, Claude must add contextual teaching through the same workflow-surface system.
 
-### Slice G6 — packaged accessibility and owner-observed first-session validation — held
+Learn Mode must answer in normal shop language:
 
-Will prove complete packaged flows, accessibility, recovery, and the documented ten-minute owner-observed fixture set before M15 closure.
+- what the control or concept is;
+- why it matters;
+- what changes;
+- whether it can be skipped or undone;
+- whether it affects geometry, presentation, or downstream settings;
+- why LaserX is warning the user.
+
+Required topics include layers, materials/thickness, bridges, islands, cutability, repair confidence, Fix Safe Problems, 3D, save/export, downstream software ownership, and optional AI.
+
+Help must be available inside create, import, trace, repair, 3D, and export. Replay must not overwrite project work. Guidance failure must leave normal editing, saving, analysis, 3D, and export usable. Users can disable Learn Mode without disabling core capability.
+
+### Slice G6 — packaged accessibility and first-session cohort — held
+
+After G5 acceptance and owner advancement, Claude must prepare exact-head packaged evidence for:
+
+- minimum five owner-approved first-time participants;
+- at least four completing one documented primary workflow within ten minutes without direct coaching;
+- coverage of create, vector import, raster trace, broken-file repair, AI disconnected, physical 3D, export, and realistic mistake recovery;
+- keyboard, focus, screen reader, `aria-live`, reduced motion, non-color-only guidance, high-DPI, and supported Windows scaling;
+- no trapped workflow state;
+- no hidden destructive edits;
+- no regression to a permanent wall of unrelated controls.
+
+Record time to success, stuck points, incorrect clicks, undiscovered features, misunderstood terminology, understanding of LaserX versus machine software, understanding that AI is optional, 3D completion, export scale, recovery, and blocker disposition.
+
+M15 closes only after exact-head packaged evidence, owner acceptance, issue closure, and explicit owner advancement.
+
+## M22 carry-forward
+
+M22 remains the broader final Version 1 usability and visual-polish gate.
+
+M22 must begin by reviewing all M15 observation evidence and verify that M16-M21 did not reintroduce permanent tool walls, competing primary actions, optional 3D bypass, raw repair overload, technical-language drift, AI dependency, inaccessible guidance, or create/import/repair/3D/export workflow drift.
 
 ## Operating loop
 
 1. Owner gives Claude `Continue LaserX` or `Repair LaserX`.
-2. Claude reads live GitHub state and performs only active M15 G0 work or an explicitly assigned repair.
+2. Claude reads live GitHub state and performs only the active M15 slice or an explicitly assigned repair.
 3. Claude records exact evidence and stops at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`.
 4. ChatGPT audits the exact head, full diff, tests, review threads, and CI.
 5. A routine accepted PR may merge inside the active slice after exact-head verification.
@@ -129,4 +242,6 @@ Will prove complete packaged flows, accessibility, recovery, and the documented 
 
 ## Restraint
 
-Do not spend implementation capacity on speculative visual rewrites, duplicate onboarding systems, broad cleanup, material expansion, wholesale experiment merges, later-milestone work, or architecture changes unrelated to the active guided-workflow boundary. One complete learnable workflow beats a large cosmetic redesign.
+Do not spend implementation capacity on speculative visual rewrites, duplicate onboarding systems, broad cleanup, material expansion, wholesale experiment merges, later-milestone work, or architecture changes unrelated to the active guided-workflow boundary.
+
+One complete learnable workflow beats a large cosmetic redesign. One incrementally isolated surface beats a risky whole-application rewrite.
