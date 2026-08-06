@@ -14,6 +14,23 @@ A first-time user opens LaserX, chooses a real goal, sees only the controls rele
 
 LaserX should feel simple and obvious despite the depth of the underlying geometry and manufacturing systems.
 
+## Owner-approved workflow-first operating amendment
+
+`docs/milestones/M15-workflow-first-product-amendment.md` is binding on M15 G1-G6 after its reviewed merge.
+
+The locked operating direction is:
+
+- guided workflow is the default first-launch and task-oriented product experience;
+- the complete editor remains available through a clear **Advanced Workspace** or **Exit Guidance** action;
+- feature surfaces are isolated incrementally as the active slice needs them, with no one-shot `App.tsx` or whole-application rewrite;
+- physical 3D is a required guided checkpoint before export unless a truthful unavailable/failure path is explicitly acknowledged;
+- broken-file repair and **Fix safe problems** are flagship workflows rather than buried diagnostics;
+- focused first-time-user observation occurs during G2, G3, and G4 instead of waiting until the end of the roadmap;
+- G6 performs a minimum five-participant packaged first-session cohort, with at least four participants completing a documented primary workflow within ten minutes without direct coaching;
+- M22 must review M15 evidence and prove later milestones did not reintroduce permanent tool walls, workflow drift, repair overload, or AI dependency.
+
+This amendment does not alter the exact acceptance of active G0 / PR #67, activate G1, or authorize later-milestone implementation.
+
 ## Included
 
 ### Guided first-run paths
@@ -90,6 +107,8 @@ Remaining ambiguous decisions are grouped and visually navigable one category or
 
 Each gate requires exact-head review and explicit owner advancement before the next gate becomes active.
 
+The detailed G1-G6 slice contracts, early observation checkpoints, five-participant G6 cohort, incremental extraction rule, mandatory guided 3D checkpoint, and M22 carry-forward requirements are defined in `docs/milestones/M15-workflow-first-product-amendment.md`.
+
 ## Active G0 contract
 
 G0 is architecture and contract lock only. It must establish one coherent guided-workflow system before visible onboarding is implemented in separate screens.
@@ -129,19 +148,29 @@ G0 does not implement the complete first-launch shell, tutorial content, grouped
 14. Keyboard, high-DPI, focus, screen-reader labels, and non-color-only progress states pass.
 15. Packaged E2E proves users cannot become permanently trapped in tutorial or repair state.
 16. Structured owner-observed usability sessions show the primary workflow can be completed within ten minutes on the documented fixture set.
+17. Guided workflow is the default experience while Advanced Workspace and Exit Guidance remain directly available.
+18. The guided path reaches a confirmed physical 3D checkpoint before export, or records a truthful acknowledged unavailable path.
+19. G2, G3, and G4 record focused first-time-user observation evidence before advancement.
+20. G6 records at least five first-time participants and at least four successful ten-minute primary workflows without direct coaching.
+21. Feature-surface extraction remains incremental and does not become a broad one-shot application rewrite.
 
 ## Exit checklist
 
 - [ ] Tutorial architecture and state boundaries are documented.
 - [ ] Workflow-aware contextual-control architecture is documented.
+- [ ] Guided workflow is the default experience and Advanced Workspace / Exit Guidance remain available.
+- [ ] Incremental feature-surface extraction is complete for the M15 paths without a broad application rewrite.
 - [ ] Create, vector-import, raster-trace, repair, 3D, export, and optional-AI guided paths pass.
 - [ ] SVG/DXF import does not expose irrelevant trace controls.
 - [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
 - [ ] Large finding sets reduce to understandable repair decisions.
+- [ ] The guided create, import, and AI paths reach 3D before export or record a truthful unavailable route.
 - [ ] Learn Mode covers the core manufacturing and repair concepts.
 - [ ] Skip/replay/resume/recovery pass.
+- [ ] G2, G3, and G4 early observation evidence is recorded and blocking findings are repaired.
 - [ ] Accessibility and packaged Windows evidence pass.
-- [ ] Owner-observed first-session evidence is recorded.
+- [ ] The five-participant G6 first-session cohort and ten-minute success evidence are recorded.
+- [ ] Owner-observed first-session evidence is accepted.
 - [ ] Status advances to M16 only after exact-head audit, merge, issue closure, and owner approval.
 
 ## Explicitly excluded
