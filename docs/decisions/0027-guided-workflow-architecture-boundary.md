@@ -142,22 +142,79 @@ G0 defines and tests this module in isolation. Wiring it into a visible shell,
 No fourth goal, and no goal-specific product behavior beyond routing/highlight,
 belongs to G0.
 
-### 3. Contextual-control matrix (documented, not yet implemented)
+### 3. Contextual-control matrix
 
-For each always-mounted panel identified above (Import, Trace, Analyze,
-Create, Text, Sign, AI, Editing tools), the guided-workflow contract locks
-which of three states it takes under an active guided goal: **primary**
-(highlighted, the step's one clear action), **available** (visible but
-visually subordinate), or **hidden**. This locks, in particular:
+Every surface takes one of three states under an active guided stage:
 
-- SVG/DXF import never presents raster-trace controls;
-- raster import presents trace controls only once a raster source is chosen;
-- the repair, 3D, and export surfaces each default to only their own relevant
-  controls when reached through a guided goal.
+- **primary** — the stage's one clear action, highlighted;
+- **available** — reachable but visually subordinate;
+- **hidden** — not presented at this stage.
 
-Implementing this hiding/highlighting in `App.tsx` is G1+; G0 locks the matrix
-so later slices implement one already-agreed contract instead of inventing
-per-panel rules ad hoc.
+The surfaces are the ones the app mounts unconditionally today: **Import**
+(SVG/DXF), **Trace** (raster), **Analyze** (cutability), **Create** (shapes),
+**Text**, **Sign** (sign tools), **AI**, **Editing** (selection/geometry/
+transform/layers), **3D** (physical preview), **Save**, and **Export**
+(SVG/DXF and production package).
+
+Two rules hold in every row, and are the reason the matrix exists:
+
+- an **advanced/manual escape** is always *available*, never hidden — a guided
+  stage narrows what is prominent, never what is reachable, so a user who
+  knows what they want is never trapped in guidance;
+- **Save** is always *available* from any stage that has a document.
+
+#### Create My First Sign
+
+| Stage | Primary action | Completion signal | primary | available | hidden |
+|---|---|---|---|---|---|
+| Choose size and material | Set stock size and material | Physical layer has material and thickness | Editing (layers) | Create, Text, Save | Import, Trace, AI, Analyze, 3D, Export |
+| Add the sign content | Add text or a shape | Document has at least one object on a physical layer | Text | Create, Sign, Editing, Save | Import, Trace, AI, Analyze, 3D, Export |
+| Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Text, Create, Save | Import, Trace, AI, 3D, Export |
+| See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Analyze, Editing, Save | Import, Trace, AI, Create, Text, Export |
+| Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D, Analyze, Editing | Import, Trace, AI, Create, Text, Sign |
+
+#### Import My Own Design
+
+| Stage | Primary action | Completion signal | primary | available | hidden |
+|---|---|---|---|---|---|
+| Choose the file | Pick an SVG, DXF, PNG, or JPEG | A source file is selected | Import | Trace, Save | AI, Analyze, 3D, Export, Create, Text, Sign, Editing |
+| Vector import — review scale and findings | Confirm units, scale, and fit | Import committed or cancelled | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| Raster import — trace settings | Adjust preprocessing and trace | Editable paths accepted or rejected | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export |
+| Repair what can be fixed | Fix safe problems | Fixed/skipped/remaining reported | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| Preview and export | Open 3D, then export | Export written, or an explicit failure | Export | 3D, Save, Analyze, Editing | Import, Trace, AI, Create, Text, Sign |
+
+The two bolded cells are the anti-pattern Issue #45 names, stated as a rule
+rather than an example: **the vector-import stage hides Trace outright, and the
+raster stage hides Import outright.** Today both panels are permanently mounted
+side by side.
+
+#### Describe What I Want With AI — Optional
+
+Reachable only while `ai.connection.status === "connected"`; otherwise the goal
+is presented as unavailable and never as broken, reusing the existing check
+rather than a new one (§2).
+
+| Stage | Primary action | Completion signal | primary | available | hidden |
+|---|---|---|---|---|---|
+| Describe the sign | Enter a prompt and generate | Concepts returned, or an explicit failure | AI | Save | Import, Trace, Analyze, 3D, Export, Create, Text, Sign, Editing |
+| Choose a concept | Accept one concept | Concept accepted into the document | AI | Editing, Text, Save | Import, Trace, Analyze, 3D, Export, Create, Sign |
+| Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Analyze, Save | Import, Trace, AI, 3D, Export |
+| Check, preview, export | Run analysis, preview, export | Export written, or an explicit failure | Export | Analyze, 3D, Save, Editing | Import, Trace, AI, Create, Text, Sign |
+
+Accepted AI geometry passes the same import, editing, and cutability
+validation as manual geometry — guidance never routes around a check.
+
+#### What this matrix does and does not decide
+
+It fixes, per stage, the primary action, the completion signal, and each
+surface's state. It deliberately does not specify visual treatment, copy,
+layout, component structure, or step ids — those are G1's to choose, and
+pinning them here would be a UI decision wearing a contract's clothes.
+
+Implementing the hiding and highlighting in `App.tsx` is G1+. G0 locks the
+matrix so later slices implement one already-agreed contract instead of
+inventing per-panel rules while building the shell.
 
 ### 4. Skipping a step is not leaving the workflow
 
@@ -216,9 +273,24 @@ restarting a journey is a decision about the journey, not about one step.
 state and always restores the same pre-guided state, so binding it to identity
 could only ever make an escape hatch fail to work.
 
-Generating tokens belongs to the caller, which keeps the reducer pure and
-deterministic; a token minted inside the reducer would make the same inputs
-produce different outputs.
+`replay` carries **both** identities: `expectedRunToken` names the terminal run
+the user actually chose to replay, and `nextRunToken` is the identity the
+restarted run takes. Without the first, a delayed replay produced by run A
+would restart whichever run happens to be terminal now. Without requiring the
+second to differ, step events still in flight from the finished run would match
+the restarted one. A blank token is rejected everywhere it is accepted, because
+a blank token makes every run indistinguishable and the identity checks would
+pass vacuously.
+
+**Caller obligation.** Generating tokens belongs to the caller. That keeps the
+reducer pure and deterministic -- a token minted inside would make identical
+inputs produce different outputs -- but it means the reducer *cannot* verify
+uniqueness on its own: `cancel` returns exactly the initial state, so the
+module deliberately remembers no history of prior runs. G1 must therefore mint
+a fresh, unique token for every `start`, `resume`, and `replay` (`randomUUID`
+in the app layer is sufficient), and must test that integration contract at the
+layer that owns it. The reducer enforces what it can see: non-blank, and, for
+replay, different from the run being restarted.
 
 ### 6. Resumable persistence
 

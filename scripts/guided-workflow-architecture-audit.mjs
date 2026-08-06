@@ -6,6 +6,7 @@
 // without accidentally coupling guided-workflow state to Electron privilege
 // or to React internals.
 
+import { builtinModules } from "node:module";
 import { readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
@@ -21,32 +22,18 @@ const exists = async (path) => {
 /**
  * Node built-ins are importable by bare specifier as well as the `node:`
  * spelling, and a bare `from "fs"` resolves regardless of `types: []`, so
- * matching only `node:` would leave the obvious spelling open.
+ * matching only `node:` would leave the more common spelling open.
+ *
+ * Derived from Node's own `builtinModules` rather than a hand-kept list: a
+ * partial list silently passes whatever nobody remembered -- `perf_hooks`,
+ * `async_hooks`, `diagnostics_channel`, `readline`, `tty`, `v8`, and anything
+ * a future runtime adds.
  */
-const NODE_BUILTIN_MODULES = [
-  "assert",
-  "buffer",
-  "child_process",
-  "crypto",
-  "dns",
-  "events",
-  "fs",
-  "http",
-  "https",
-  "module",
-  "net",
-  "os",
-  "path",
-  "process",
-  "stream",
-  "timers",
-  "tls",
-  "url",
-  "util",
-  "vm",
-  "worker_threads",
-  "zlib",
-];
+const NODE_BUILTIN_MODULES = builtinModules
+  .filter((name) => !name.startsWith("_"))
+  .map((name) => name.split("/")[0])
+  .filter((name, index, all) => all.indexOf(name) === index)
+  .map((name) => name.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`));
 
 const QUOTE = "[\"'`]";
 const BARE_NODE_BUILTIN = new RegExp(
@@ -78,12 +65,13 @@ const FORBIDDEN_GUIDED_WORKFLOW_SOURCE = [
     message: "guided-workflow state must not import react",
   },
   {
-    // A triple-slash directive re-adds ambient libraries from inside the
-    // source, so the ES-only tsconfig alone would not hold: the JSON config
-    // stays untouched while `dom` or `node` types come back.
-    pattern: /\/\/\/\s*<reference\s+(?:lib|types|no-default-lib)\s*=/u,
+    // Any triple-slash directive, including `path`: a referenced declaration
+    // file can reintroduce ambient DOM or Node declarations just as effectively
+    // as `lib`/`types`, while the ES-only JSON config stays untouched. This
+    // isolated module has no legitimate need for any of them.
+    pattern: /\/\/\/\s*<reference\b/u,
     message:
-      "guided-workflow state must not re-add ambient libraries with a triple-slash reference directive",
+      "guided-workflow state must not re-add ambient declarations with a triple-slash reference directive",
   },
 ];
 

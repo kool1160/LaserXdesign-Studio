@@ -150,7 +150,12 @@ export type GuidedWorkflowAction =
   // about the journey, not about one step, but it must still not apply to a
   // run the user already abandoned.
   | { type: "dismiss"; runToken: string }
-  | { type: "replay"; runToken: string }
+  // Carries both identities. `expectedRunToken` says which terminal run the
+  // user actually chose to replay, so a delayed replay cannot restart a
+  // *later* run; `nextRunToken` is the identity the restarted run takes, and
+  // must differ, or step events still in flight from the finished run would
+  // match the fresh one.
+  | { type: "replay"; expectedRunToken: string; nextRunToken: string }
   // Deliberately global and unconditional: cancel is the guaranteed exit from
   // every state and always restores the same pre-guided state, so binding it
   // to identity could only ever make an escape hatch fail to work.
@@ -182,6 +187,21 @@ export const ALLOWED_SOURCE_STATUSES: Readonly<
   cancel: ["idle", "active", "completed", "dismissed", "failed"],
   fail: ["active"],
 };
+
+/**
+ * Whether a run token can actually identify a run.
+ *
+ * A blank token would make every run indistinguishable from every other, so
+ * the identity checks would pass vacuously and stale events would apply again.
+ *
+ * Uniqueness cannot be checked here -- `cancel` returns exactly the initial
+ * state and so the reducer deliberately remembers no history -- which is why
+ * ADR 0027 makes minting a fresh, unique token for every `start`, `resume`,
+ * and `replay` an explicit caller obligation.
+ */
+export function isUsableToken(token: string): boolean {
+  return typeof token === "string" && token.trim() !== "";
+}
 
 /**
  * Whether a step definition is well-formed enough to drive the reducer.
@@ -267,6 +287,14 @@ function startedState(
   // caller can still mutate would only prove it was valid at one instant.
   const definition = ownDefinition(supplied);
   const firstStepId = definition.stepIds[0];
+  if (!isUsableToken(runToken)) {
+    return {
+      ...initialGuidedWorkflowState,
+      status: "failed",
+      definition,
+      failureReason: "A guided workflow requires a non-blank run token.",
+    };
+  }
   if (!isValidWorkflowDefinition(definition) || firstStepId === undefined) {
     // Fail closed rather than entering an active workflow that cannot
     // progress: a malformed definition must be a visible failure, never a
@@ -374,6 +402,7 @@ export function reduceGuidedWorkflow(
     }
 
     case "resume": {
+      if (!isUsableToken(action.runToken)) return initialGuidedWorkflowState;
       if (!canResumeSnapshot(action.definition, action.snapshot)) {
         // Fail closed to idle rather than guessing a step: a wrong guess would
         // silently claim progress the user never made.
@@ -392,9 +421,16 @@ export function reduceGuidedWorkflow(
 
     case "replay": {
       if (state.definition === null) return state;
-      // A fresh token, so any event still in flight from the finished run
-      // cannot apply to the restarted one.
-      return startedState(state.definition, action.runToken);
+      // Which run the user chose to replay. Without this, a delayed replay
+      // produced by run A would restart whichever run happens to be terminal
+      // now -- a stale event mutating a newer run.
+      if (state.runToken === null || state.runToken !== action.expectedRunToken) return state;
+      // A distinct, usable next identity, so step events still in flight from
+      // the finished run cannot match the restarted one.
+      if (!isUsableToken(action.nextRunToken) || action.nextRunToken === state.runToken) {
+        return state;
+      }
+      return startedState(state.definition, action.nextRunToken);
     }
 
     case "advance":

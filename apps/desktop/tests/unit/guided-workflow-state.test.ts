@@ -133,7 +133,11 @@ describe("guided workflow -- basic transitions", () => {
     state = dispatch(state, "advance");
     expect(state.status).toBe("completed");
 
-    const replayed = reduceGuidedWorkflow(state, { type: "replay", runToken: RUN });
+    const replayed = reduceGuidedWorkflow(state, {
+      type: "replay",
+      expectedRunToken: state.runToken ?? "",
+      nextRunToken: "run-token-2",
+    });
     expect(replayed.status).toBe("active");
     expect(replayed.currentStepId).toBe("choose-material");
     expect(replayed.completedStepIds).toEqual([]);
@@ -196,7 +200,13 @@ describe("guided workflow -- definition validity", () => {
     expect(resumed).toEqual(initialGuidedWorkflowState);
 
     const failedStart = start(trapped);
-    expect(reduceGuidedWorkflow(failedStart, { type: "replay", runToken: RUN }).status).toBe("failed");
+    expect(
+      reduceGuidedWorkflow(failedStart, {
+        type: "replay",
+        expectedRunToken: failedStart.runToken ?? "",
+        nextRunToken: "run-token-2",
+      }).status,
+    ).toBe("failed");
   });
 });
 
@@ -458,6 +468,11 @@ describe("guided workflow -- transition table", () => {
           },
         };
       case "replay":
+        return {
+          type,
+          expectedRunToken: state.runToken ?? RUN,
+          nextRunToken: state.runToken === "replay-a" ? "replay-b" : "replay-a",
+        };
       case "dismiss":
         return { type, runToken: state.runToken ?? RUN };
       case "cancel":
@@ -536,7 +551,11 @@ describe("guided workflow -- transition table", () => {
   it("every reachable terminal state can be replayed or canceled", () => {
     for (const [, state] of reachableStates()) {
       if (!isTerminalStatus(state.status)) continue;
-      const replayed = reduceGuidedWorkflow(state, { type: "replay", runToken: RUN });
+      const replayed = reduceGuidedWorkflow(state, {
+        type: "replay",
+        expectedRunToken: state.runToken ?? "",
+        nextRunToken: state.runToken === "replay-a" ? "replay-b" : "replay-a",
+      });
       const canceled = reduceGuidedWorkflow(state, { type: "cancel" });
       expect(canceled).toEqual(initialGuidedWorkflowState);
       // A terminal state with a definition can always be replayed; one that
@@ -598,7 +617,11 @@ describe("guided workflow -- stale and duplicate events", () => {
     }
     expect(state.status).toBe("completed");
 
-    const replayed = reduceGuidedWorkflow(state, { type: "replay", runToken: "run-B" });
+    const replayed = reduceGuidedWorkflow(state, {
+      type: "replay",
+      expectedRunToken: state.runToken ?? "",
+      nextRunToken: "run-B",
+    });
     expect(replayed.currentStepId).toBe(inFlight.expectedStepId);
     expect(reduceGuidedWorkflow(replayed, inFlight)).toBe(replayed);
   });
@@ -613,6 +636,85 @@ describe("guided workflow -- stale and duplicate events", () => {
     const result = reduceGuidedWorkflow(secondRun, staleFail);
     expect(result).toBe(secondRun);
     expect(result.status).toBe("active");
+  });
+
+  it("a delayed replay from an earlier run cannot restart a later terminal run", () => {
+    // Run A finishes and the user asks to replay it. Before that event is
+    // handled, run B becomes the current terminal state. The delayed replay
+    // must not restart B -- it was a decision about A.
+    let runA = start(DEFINITION, "run-A");
+    for (let i = 0; i < DEFINITION.stepIds.length; i += 1) runA = dispatch(runA, "advance");
+    expect(runA.status).toBe("completed");
+    const delayedReplay = {
+      type: "replay" as const,
+      expectedRunToken: "run-A",
+      nextRunToken: "run-A-next",
+    };
+
+    reduceGuidedWorkflow(runA, { type: "cancel" });
+    let runB = start(DEFINITION, "run-B");
+    runB = reduceGuidedWorkflow(runB, { type: "dismiss", runToken: "run-B" });
+    expect(runB.status).toBe("dismissed");
+
+    expect(reduceGuidedWorkflow(runB, delayedReplay)).toBe(runB);
+  });
+
+  it("replay refuses to reuse the token of the run it restarts", () => {
+    // Reusing the token would let step events still in flight from the
+    // finished run match the fresh one.
+    let state = start(DEFINITION, "run-A");
+    const inFlight = live(state, "advance");
+    for (let i = 0; i < DEFINITION.stepIds.length; i += 1) state = dispatch(state, "advance");
+
+    const sameToken = reduceGuidedWorkflow(state, {
+      type: "replay",
+      expectedRunToken: "run-A",
+      nextRunToken: "run-A",
+    });
+    expect(sameToken).toBe(state);
+
+    // With a genuinely fresh token the replay succeeds, and the old in-flight
+    // step event still cannot apply to it.
+    const replayed = reduceGuidedWorkflow(state, {
+      type: "replay",
+      expectedRunToken: "run-A",
+      nextRunToken: "run-B",
+    });
+    expect(replayed.status).toBe("active");
+    expect(reduceGuidedWorkflow(replayed, inFlight)).toBe(replayed);
+  });
+
+  it("rejects a blank run token rather than making every run indistinguishable", () => {
+    for (const blank of ["", "   "]) {
+      const started = start(DEFINITION, blank);
+      expect(started.status).toBe("failed");
+      expect(started.failureReason).toMatch(/non-blank run token/u);
+
+      expect(
+        reduceGuidedWorkflow(initialGuidedWorkflowState, {
+          type: "resume",
+          definition: DEFINITION,
+          runToken: blank,
+          snapshot: {
+            goal: DEFINITION.goal,
+            definitionVersion: DEFINITION.definitionVersion,
+            currentStepId: "add-text",
+            completedStepIds: ["choose-material"],
+            skippedStepIds: [],
+          },
+        }),
+      ).toEqual(initialGuidedWorkflowState);
+    }
+
+    let terminal = start(DEFINITION, "run-A");
+    for (let i = 0; i < DEFINITION.stepIds.length; i += 1) terminal = dispatch(terminal, "advance");
+    expect(
+      reduceGuidedWorkflow(terminal, {
+        type: "replay",
+        expectedRunToken: "run-A",
+        nextRunToken: "  ",
+      }),
+    ).toBe(terminal);
   });
 
   it("a stale dismiss cannot leave a run the user did not abandon", () => {
@@ -723,7 +825,7 @@ describe("guided workflow -- non-mutation", () => {
           skippedStepIds: [],
         },
       },
-      { type: "replay", runToken: identity.runToken },
+      { type: "replay", expectedRunToken: identity.runToken, nextRunToken: "run-token-next" },
       { type: "cancel" },
       { type: "fail", reason: "x", ...identity },
     ];

@@ -85,7 +85,27 @@ await runCase(
   /bare specifier/u,
 );
 
-// Triple-slash directives re-add ambient libraries from inside the source,
+// Built-ins the previous hand-kept list missed entirely -- now derived from
+// Node builtinModules, so the set cannot drift behind the runtime.
+await runCase(
+  { source: `import { performance } from "perf_hooks";
+void performance;` },
+  /bare specifier/u,
+);
+await runCase(
+  { source: `import { AsyncLocalStorage } from "async_hooks";
+void AsyncLocalStorage;` },
+  /bare specifier/u,
+);
+await runCase({ source: `import v8 from "v8";
+void v8;` }, /bare specifier/u);
+await runCase(
+  { source: `import { createInterface } from "readline";
+void createInterface;` },
+  /bare specifier/u,
+);
+
+// Triple-slash directives re-add ambient declarations from inside the source,
 // leaving the ES-only tsconfig untouched while DOM or Node types come back.
 await runCase(
   { source: '/// <reference lib="dom" />\nexport const x = 1;' },
@@ -93,6 +113,12 @@ await runCase(
 );
 await runCase(
   { source: '/// <reference types="node" />\nexport const x = 1;' },
+  /triple-slash reference directive/u,
+);
+// A referenced declaration file can reintroduce ambient DOM or Node
+// declarations just as effectively as lib/types.
+await runCase(
+  { source: '/// <reference path="./ambient.d.ts" />\nexport const x = 1;' },
   /triple-slash reference directive/u,
 );
 
@@ -147,5 +173,5 @@ const realFailures = await auditGuidedWorkflowArchitecture(resolve(import.meta.d
 assert.deepEqual(realFailures, []);
 
 console.log(
-  "Guided-workflow architecture regression tests passed: forbidden React/Electron/Node imports are rejected, every way of weakening the ES-only typecheck configuration is rejected, and the real module and configuration pass cleanly.",
+  "Guided-workflow architecture regression tests passed: forbidden React/Electron imports, Node built-ins by node: and bare specifier (including ones a hand-kept list would have missed), every triple-slash reference form, and every way of weakening the ES-only typecheck configuration are all rejected, while the real module and configuration pass cleanly.",
 );
