@@ -1,12 +1,12 @@
 # AGENTS.md — LaserX Design Studio
 
-This file is the primary operating contract for every coding, planning, review, and architecture agent working in this repository. Read it completely before changing code, tests, configuration, architecture, milestone state, or documentation.
+This file is the primary operating contract for every coding, planning, review, and architecture agent working in this repository. Read it before changing code, tests, configuration, architecture, milestone state, or documentation.
 
 ## 1. Mission
 
 LaserX Design Studio is an affordable, premium-feeling, Windows-first, machine-independent idea-to-manufacturable-product platform for flat-cut signs and layered products.
 
-LaserX should take a user from:
+LaserX takes a user from:
 
 > I want to make something, but I do not want to waste half the night preparing the design.
 
@@ -16,11 +16,9 @@ To:
 
 LaserX is not plasma-control software, not a general CAD replacement, not a generic vector editor, and not an AI-dependent product. Plasma was the proving ground, not the ceiling.
 
-The product complements tools such as Inkscape, LightBurn, plasma CAM/controller software, fiber-laser software, router CAM, and waterjet software.
-
 Simple distinction:
 
-> LaserX creates the product. The downstream software cuts, engraves, marks, routes, or otherwise manufactures it.
+> LaserX creates the product. Downstream software cuts, engraves, marks, routes, or otherwise manufactures it.
 
 ## 2. Product promise
 
@@ -39,206 +37,220 @@ The measurable first-session target is:
 
 > A first-time user can create or import a design, understand major manufacturing warnings, view it in 3D, and export a usable file within ten minutes.
 
-The core sign-building experience must work without an API key, AI account, internet access, or provider credits. AI is an optional assistant inside LaserX, not the product itself.
+The core sign-building experience must work without an API key, AI account, internet access, or provider credits. AI is optional assistance, not the product itself.
 
-## 3. Mandatory product direction
-
-Before evaluating, criticizing, planning, or implementing post-M13 work, every agent must read:
-
-1. GitHub Issue #44 — planning-chat reset and product interpretation;
-2. GitHub Issue #37 — canonical post-milestone product direction;
-3. `docs/status/CURRENT.md`;
-4. the active milestone specification and issue.
-
-Issue #44 establishes the required product lens:
-
-- first-time usability is central, not optional polish;
-- normal sign creation works without AI;
-- AI remains optional and user-supplied;
-- interactive physical 3D is a major product feature;
-- LaserX must feel premium while remaining generously priced;
-- Inkscape and downstream machine software are companions;
-- R&D reduces uncertainty but does not establish priority or authorize wholesale merges;
-- licensing, trial, community beta, and real-user usability are product work, not afterthoughts.
-
-Do not reinterpret LaserX as plasma-only, AI-dependent, a machine controller, a random collection of experiments, a low-end utility, or a conventional subscription product.
-
-## 4. Source-of-truth order
+## 3. Source-of-truth order
 
 When instructions conflict, use this order:
 
 1. Explicit owner instruction for the current task.
 2. This `AGENTS.md` file.
-3. `docs/status/CURRENT.md` for the active milestone, implementation owner, and allowed scope.
+3. `docs/status/CURRENT.md` for the active milestone, implementation assignment, PR, state, and allowed scope.
 4. The active milestone document in `docs/milestones/`.
 5. The active GitHub issue.
 6. GitHub Issues #44 and #37 for product interpretation and post-milestone direction.
 7. `docs/PRODUCT_REQUIREMENTS.md`.
 8. `docs/ARCHITECTURE.md` and accepted ADRs in `docs/decisions/`.
-9. Existing tests and established code conventions.
+9. Existing tests and established conventions.
 
-`docs/OPERATOR_PROTOCOL.md` defines how the owner, ChatGPT, Claude, Codex, GitHub, pull requests, and CI move work through those sources. It does not override product requirements or milestone scope.
+`docs/OPERATOR_PROTOCOL.md` defines how the owner, planning/review chat, SOL High implementation thread, GitHub, pull requests, and CI move work through those sources. It does not override product requirements or milestone scope.
 
-Do not silently resolve a genuine conflict. Record it in `docs/status/DECISIONS_NEEDED.md` and stop or choose the smallest reversible path that preserves existing behavior.
+A PDF, chat handoff, old completion report, stale README, previous milestone branch, experiment branch, or temporary worktree is never authoritative over current GitHub state. The owner may use an older handoff to restore an operating method; once accepted, that decision must be recorded in current GitHub truth.
 
-A PDF, chat handoff, old completion report, stale README, previous milestone branch, experiment branch, or temporary worktree is never authoritative over current GitHub state.
+Do not silently resolve a genuine conflict. Record it in GitHub and stop or choose the smallest reversible path that preserves existing behavior.
 
-## 5. Mandatory reading before work
+## 4. Durable operating model
 
-Before implementing or repairing any feature:
+The owner restored the original command workflow on **2026-08-06**.
 
-- read this file;
-- read Issues #44 and #37;
-- read `docs/OPERATOR_PROTOCOL.md`;
-- read `docs/WORKSTREAM_OWNERSHIP.md`;
-- read `docs/status/CURRENT.md`;
-- read the active milestone specification and active GitHub issue;
-- inspect any open PR, review threads, and exact-head workflow state;
-- inspect neighboring packages and tests;
-- read relevant ADRs;
-- run the current verification commands when implementation exists.
+> Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence. The owner receives the verdict and next command.
 
-Do not start a later milestone because it appears convenient. Milestones are gates, not suggestions.
+Hard operating rules:
 
-## 6. Agent roles and separation of duties
+- one repository;
+- one active milestone gate;
+- one active implementation target;
+- one next valid command;
+- only `Continue LaserX` goes to the implementation thread;
+- planning, locking decisions, review, status, holds, and advancement stay in the planning/review chat;
+- implementation stops after pushing exact-head evidence;
+- no implementation agent merges, closes the active issue, activates the next gate, or approves its own work;
+- no agent creates scheduled heartbeats, background polling, recurring CI checks, or self-waking sessions;
+- no agent keeps working after `AWAITING_REVIEW` unless the owner issues the next command;
+- detailed evidence belongs on GitHub, not in a giant duplicate chat report.
 
-### 6.1 Owner
+## 5. Roles and separation of duties
 
-The owner decides product direction, milestone order, pricing philosophy, trial policy, and milestone advancement.
+### 5.1 Owner
 
-### 6.2 Claude — implementation agent
+The owner controls product direction, milestone order, pricing philosophy, trial policy, model choice, and advancement.
 
-Claude is the active implementation agent while `docs/status/CURRENT.md` records that assignment under ADR 0026.
+### 5.2 Planning/review chat — orchestrator and acceptance authority
 
-Claude must:
+The planning/review chat:
 
-- work only on the one active milestone and one approved bounded slice;
-- start fresh implementation slices from current `main` unless a reviewed repair continues an existing PR;
-- use focused branches and reviewable PRs;
-- inspect live GitHub state before editing;
+- discusses product intent through `Plan LaserX: <idea>`;
+- records accepted decisions through `Lock that into LaserX`;
+- reads live GitHub state rather than relying on handoffs;
+- performs exact-head review through `Check LaserX`;
+- posts detailed findings to GitHub;
+- returns `READY`, `REPAIR`, or `BLOCKED`;
+- performs `Status LaserX` without changing anything;
+- performs `Hold LaserX` when requested;
+- merges, closes, records, and activates the next gate only through the owner's explicit `Advance LaserX` command;
+- never accepts an implementation report as proof without checking the exact head, diff, tests, review state, and required CI.
+
+There is no automatic routine merge. A `READY` verdict makes `Advance LaserX` valid; it does not replace the owner's advancement command.
+
+### 5.3 SOL High — implementation agent
+
+The implementation model is **SOL High**, meaning the owner-selected OpenAI coding model running at High reasoning in the Codex coding workspace. “Codex” is the execution surface; SOL High is the selected implementation model.
+
+SOL High receives only `Continue LaserX` as the normal owner command.
+
+SOL High must:
+
+- read live repository truth before editing;
+- work only on the one active milestone and bounded slice recorded in `CURRENT.md`;
+- inspect the active PR, review findings, and CI first;
+- repair blocking review findings before doing new work;
+- repair required CI failures second;
+- implement new work only when no active PR is awaiting review or repair;
+- use focused branches and draft PRs;
 - implement the smallest complete vertical result;
-- add regression coverage and behavior-linked documentation in the same change;
+- add regression tests and behavior-linked documentation in the same change;
 - run required verification and inspect exact-head CI;
-- keep PR evidence, issues, status, and code synchronized;
-- distinguish implementation evidence from acceptance review;
-- stop at `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`;
-- never merge, close the milestone issue, activate the next gate, or approve its own work;
-- never treat an earlier summary or another agent's handoff as proof.
+- push exact-head evidence and stop at `AWAITING_REVIEW` or `BLOCKED`;
+- never merge, close the active issue, activate the next gate, redesign unrelated architecture, create speculative infrastructure, or approve its own work.
 
-Implementation responsibility does not authorize speculative rewrites, duplicate research, broad cleanup, parallel future milestones, or self-directed milestone advancement.
+Implementation responsibility does not authorize broad cleanup, parallel future milestones, duplicate research, wholesale experiment merges, or self-directed scope expansion.
 
-### 6.3 ChatGPT — senior engineer, orchestrator, exact-head auditor, acceptance authority
+### 5.4 Claude / Anthropic — held
 
-ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority under ADR 0026.
+Claude and other paid Anthropic models are **held**. Do not invoke them, spend Anthropic usage credits, assign background work to them, or treat them as the implementation lead unless the owner explicitly authorizes one named, bounded task in GitHub.
 
-ChatGPT must:
+Earlier Claude-authored code and evidence remain valid historical repository content and must be reviewed on their merits. The hold changes future routing, not authorship history.
 
-- convert accepted owner decisions into GitHub issues, milestone documents, ADRs, and status changes;
-- inspect the exact PR head, full diff, review threads, tests, fixtures, and required CI;
-- post detailed findings to GitHub;
-- return `READY`, `REPAIR`, or `BLOCKED`;
-- perform the deep senior turning-point audit and assign independent verification at the checkpoints ADR 0026 defines;
-- merge a **routine PR inside the already-approved active gate** after focused exact-head verification, required green CI, and no unresolved blocking finding — this does not require a separate owner command for every PR;
-- merge or close a **gate or milestone**, activate the next gate or milestone, or change product direction only after unchanged-head verification, required green CI, and the owner's explicit command;
-- never treat Claude's report as proof without independently checking GitHub evidence;
-- never implement the load-bearing change it is about to audit in the same review.
+### 5.5 Independent verification
 
-An old `Continue LaserX` instruction, stale execution plan, or local worktree does not by itself authorize either agent to act outside the assignment recorded in `CURRENT.md`.
+A verifier who did not author the load-bearing change may be assigned for critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety boundaries. The planning/review chat records the exact target and verifier in GitHub.
 
-### 6.4 Codex — held unless explicitly assigned
-
-Codex is held under the same boundary. It remains available for an explicit independent review, repair, comparison, specialist task, or later machine-platform assignment.
-
-### 6.5 GitHub
+### 5.6 GitHub
 
 GitHub stores the durable plan, code, evidence, review findings, CI state, and milestone status. Chat is coordination, not project truth.
 
-## 7. Locked product principles
+## 6. Mandatory reading before implementation or repair
 
-### 7.1 Open it and know what to do
+SOL High must read:
 
-The application must not assume CAD knowledge. Guided workflows, normal shop language, clear next actions, and recoverable navigation are core product requirements.
+- this file;
+- `docs/OPERATOR_PROTOCOL.md`;
+- `docs/WORKSTREAM_OWNERSHIP.md`;
+- `docs/status/CURRENT.md`;
+- Issues #44 and #37;
+- the active milestone document and active issue;
+- the active PR, review findings, review threads, and exact-head CI;
+- neighboring code, tests, and relevant ADRs.
 
-### 7.2 Editable first
+Read enough repository history to understand the active contract, but do not repeatedly consume the entire project history when the exact current issue, PR, and findings already define the bounded task.
 
-Generated, traced, imported, or typed content must become editable objects or paths. Flattened previews are temporary only.
+Do not start a later milestone because it appears convenient. Milestones are gates, not suggestions.
 
-### 7.3 Exact dimensions
+## 7. Command protocol
 
-A design shown as 24 inches wide must export as 24 inches wide within documented tolerance. Screen pixels are never authoritative manufacturing units.
+### `Plan LaserX: <idea>`
 
-### 7.4 Manufacturing-aware, not CAM
+Use in the planning/review chat. Discuss product behavior, workflow, concern, priority, business model, manufacturing rule, architecture, or sequencing. No repository implementation begins.
 
-LaserX may analyze manufacturability and prepare files. Version 1 does not own machine motion, lead-ins, pierce timing, speed, power, amperage, focus, gas, toolpaths, THC, firmware, or G-code.
+### `Lock that into LaserX`
 
-Post-Version-1 machine-platform work is allowed only through explicitly activated M24 and M25 gates. Those gates preserve the privileged-host, simulator, operator-review, and safety boundaries defined by ADR 0018.
+Use in the planning/review chat. Record the accepted decision in the smallest authoritative GitHub location: issue, milestone, requirements file, ADR, status file, ownership document, or PR finding.
 
-### 7.5 AI is optional
+### `Continue LaserX`
 
-Normal sign tools must remain useful offline and without provider access. AI output must become editable geometry and pass the same normalization and manufacturing validation as manual or imported work.
+Use in the SOL High implementation thread.
 
-At launch, supported AI access is user-supplied, user-billed, and securely stored. LaserX does not embed a shared provider key or resell AI credits unless a later owner-approved business and security design changes that boundary.
+SOL High must:
 
-### 7.6 Truthful physical preview
+1. Read repository truth: `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/status/CURRENT.md`, active milestone, active issue, active PR, review findings, and CI.
+2. Fix blocking review findings first, with regression tests.
+3. Repair required CI second, without expanding scope.
+4. If the PR is green with no unresolved blocker, refresh exact-head evidence and stop at `AWAITING_REVIEW`.
+5. Implement only when no active PR exists for the bounded gate; build the smallest complete vertical slice, test it, open a draft PR, and stop.
+6. If repository truth conflicts or no active gate exists, record the blocker and stop instead of guessing.
 
-The 3D preview is derived from authoritative 2D manufacturing geometry, explicit physical layers, material identity, and exact canonical thickness. It is read-only and non-mutating.
+`Continue LaserX` never means merge, close the issue, activate the next gate, redesign unrelated architecture, create speculative future infrastructure, or dump a giant duplicate project report into chat.
 
-It must never silently close, repair, scale, union, discard, reinterpret, or invent physical geometry. Rendering failure must not block normal editing, saving, or manufacturing export.
+Compact completion response:
 
-### 7.7 Safe defaults and visible warnings
+```text
+LaserX M## — AWAITING_REVIEW | BLOCKED
+PR: #__
+Head: <full SHA>
+CI: green | failing | running
+Work: <one-sentence result>
+Blocker: none | <one-sentence blocker>
+Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
+```
 
-Never silently delete or alter user geometry during import, simplification, bridging, registration, alignment, preview, or export. Show proposed changes and preserve undoability.
+### `Check LaserX`
 
-### 7.8 Local-first projects
+Use in the planning/review chat. Review the exact current head, full relevant diff, milestone acceptance, tests, review threads, and required CI. Detailed findings go on GitHub.
 
-Editing, project storage, deterministic sign tools, import, validation, save, and export must work without an internet connection.
+Compact verdict:
 
-### 7.9 Premium product, generous price
+```text
+LaserX M## PR #__ — READY | REPAIR | BLOCKED
+Head: <full SHA>
+CI: green | failing | running
+Finding: none | <one or two short blocking reasons>
+Next command: Advance LaserX | Continue LaserX | Plan LaserX: <decision>
+```
 
-Product decisions must support a restrained, obvious, polished experience without turning LaserX into an extractive subscription maze. Pricing and trial mechanics are controlled by M20 and explicit owner decisions.
+### `Advance LaserX`
 
-### 7.10 Narrow before broad
+Use only in the planning/review chat after `READY`. Before advancing, verify:
 
-Prefer one excellent sign workflow over ten partial CAD features. Reject scope that recreates a general-purpose CAD or machine-control system unless a future milestone explicitly authorizes it.
+- the reviewed head has not changed;
+- required GitHub workflows are green;
+- no unresolved blocking review thread remains;
+- milestone or gate acceptance and exit criteria are satisfied;
+- the owner explicitly issued `Advance LaserX`.
 
-## 8. Technology direction
+Then merge using the established method, close the appropriate issue, update `CURRENT.md` with exact merge and verification evidence, activate only the next approved gate from latest `main`, and stop. Implementation of the new gate has not begun until the owner later sends `Continue LaserX` to SOL High.
 
-The approved stack is:
+### `Status LaserX`
 
-- Electron desktop shell;
-- React and TypeScript renderer UI;
-- Vite;
-- pnpm workspaces;
-- Vitest;
-- Playwright;
-- pure TypeScript domain packages where practical;
-- Web Workers for measured expensive work;
-- optional native/WASM acceleration only after profiling proves need.
+Use in the planning/review chat. Read-only status: active milestone, issue, PR, head, CI, blocker, and next valid command. No review, implementation, merge, or status mutation.
 
-For M14 physical preview:
+### `Hold LaserX`
 
-- use Three.js and React Three Fiber;
-- promote the accepted pure scene contract into `packages/physical-preview-3d/`;
-- place renderer conversion in `packages/physical-preview-three/`;
-- lazy-load the entire production preview;
-- use typed Electron preload/main IPC for PNG capture;
-- do not add a CAD kernel;
-- do not merge the experiment branch wholesale;
-- do not ship the lab shell, benchmark hooks, fixture registry, or bundled research fixture payloads.
+Use in either chat. Pause implementation, merging, and advancement while preserving the current branch and PR. Resume only through an explicit owner command.
 
-Do not add a second UI framework, state library, geometry engine, desktop runtime, or CAD kernel without an ADR and owner approval.
+## 8. Locked product principles
 
-## 9. Repository boundaries
+- **Open it and know what to do.** Guided workflows, normal shop language, clear next actions, and recoverable navigation are core product requirements.
+- **Editable first.** Generated, traced, imported, or typed content becomes editable geometry. Flattened previews are temporary only.
+- **Exact dimensions.** Canonical stored length is millimeters. Display may be millimeters or inches. One inch is exactly 25.4 mm.
+- **Manufacturing-aware, not CAM.** Version 1 does not own machine motion, lead-ins, pierce timing, speed, power, amperage, focus, gas, toolpaths, THC, firmware, or G-code.
+- **AI is optional.** Normal sign tools work offline and without provider access. AI output passes the same validation as manual or imported geometry.
+- **Truthful physical preview.** Physical 3D is derived, read-only, non-mutating, and never silently repairs or invents geometry.
+- **Safe defaults and visible warnings.** Proposed geometry changes are visible, previewable, explicit, and undoable.
+- **Local-first projects.** Editing, project storage, deterministic tools, import, validation, save, and export work without internet access.
+- **Premium product, generous price.** Avoid extractive subscription behavior and artificial feature crippling.
+- **Narrow before broad.** Prefer one excellent sign workflow over ten partial CAD features.
 
-Expected production layout includes:
+## 9. Architecture and repository boundaries
+
+Expected production ownership:
 
 ```text
 apps/desktop/                    Electron + React desktop application
 packages/application/            commands, use cases, orchestration
-packages/domain/                 document model and invariants
+packages/domain/                 serializable document model and invariants
 packages/geometry/               pure geometry operations and tolerances
 packages/cutability/             manufacturing analysis and repair proposals
-packages/fonts/                  font discovery, metadata, licensing, text outlines
+packages/fonts/                  font discovery, metadata, licensing, outlines
 packages/import-raster/          raster preprocessing and tracing adapters
 packages/io-svg/                 SVG import/export
 packages/io-dxf/                 DXF import/export
@@ -250,223 +262,46 @@ packages/physical-preview-three/ Three.js conversion and renderer helpers
 packages/material-catalog/       immutable approved material definitions
 packages/ui/                     reusable presentation components
 packages/test-fixtures/          fixture builders and golden helpers
-apps/desktop/tests/              desktop integration and E2E
-fixtures/                        reviewed external test fixtures
+fixtures/                        reviewed fixtures
 docs/                            requirements, architecture, milestones, ADRs
-tools/                           developer-only inspection utilities
+tools/                           developer inspection utilities
 native/                          reserved for measured bottlenecks
 ```
 
 Boundary rules:
 
-- React components must not contain geometry algorithms.
-- Electron main/preload code must not contain document-model behavior.
-- Domain and geometry packages must remain UI-independent and deterministic.
-- `packages/cutability` may depend on domain and geometry, never React or Electron.
-- Importers return normalized domain objects plus warnings; they do not mutate an open document directly.
+- React components do not contain geometry algorithms.
+- Electron main/preload code does not own document-model behavior.
+- Domain and geometry packages remain deterministic and UI-independent.
+- Importers return normalized candidates plus warnings; they do not mutate the open document directly.
 - Exporters consume normalized snapshots and explicit settings.
-- `packages/ai` cannot write project files or bypass validation.
-- `packages/production-export` must not perform filesystem writes.
-- physical-preview packages consume authoritative snapshots and never mutate them.
-- renderer-bound production source must not rely on Node-only globals or unrestricted Node APIs.
-- material catalog definitions must remain renderer-independent.
-- privileged filesystem, capture, credentials, and future device access belong behind typed Electron main/preload boundaries.
+- AI cannot write project files or bypass validation.
+- Production-export code does not perform filesystem writes.
+- Physical-preview packages consume authoritative snapshots and never mutate them.
+- Privileged filesystem, capture, credential, signing, update, and future device access remain behind typed Electron main/preload boundaries.
+- Do not add a second UI framework, geometry engine, desktop runtime, state library, or CAD kernel without an owner-approved ADR.
 
-## 10. Canonical units and geometry rules
+## 10. Units, files, security, and AI
 
-- canonical stored length unit: millimeters;
-- display units: millimeters or inches;
-- user-facing angles: degrees;
-- internal mathematical angles: radians where required;
-- domain coordinates: Cartesian, positive X right, positive Y up;
-- renderer coordinate conversion happens only at tested boundaries;
-- no external geometry API accepts ambiguous unitless values.
-
-All geometry work must be deterministic for identical inputs and settings. Centralize tolerances. Every path declares open or closed state.
-
-Topology-changing operations must return resulting geometry, warnings, replaced/discarded IDs, a UI summary, and enough information for undo or reversal.
-
-Never treat visual overlap as geometric union.
-
-## 11. Document, command, and preview model
-
-The editor uses a serializable document model and command-based mutations with stable IDs, layers, deterministic serialization, migration, dirty-state tracking, and undo/redo.
-
-A React state snapshot is not a project file.
-
-Derived preview state—including 3D camera, exploded spacing, visible-layer toggles, and capture state—is not authoritative project state unless a later schema migration explicitly says otherwise.
-
-## 12. Cutability and process-awareness rules
-
-Warnings must include severity, object/segment references, measured value, configured limit, and plain-language repair guidance.
-
-Automatic repair is proposed, previewable, explicit, and undoable. Passing checks does not certify physical safety.
-
-M17 may add process-aware guidance for plasma, CO2 laser, diode laser, fiber laser, router, waterjet, and other reviewed flat-cut workflows. These are bounded guidance profiles, not universal machine settings and not machine control.
-
-## 13. Fonts and intellectual property
-
-- Bundle only fonts with documented redistribution rights.
-- Store license and provenance for bundled fonts.
-- Do not commit commercial font binaries.
-- Preserve editable text when possible and outline it for portable manufacturing export when required.
-- Do not bundle trademark logos or copied branded templates.
-- Prompt examples may describe general style but must not request exact protected-logo reproduction.
-
-## 14. AI pipeline rules
-
-AI features are provider-isolated and optional.
-
-- Keep credentials out of source control and renderer code.
-- Route secret-bearing requests through a secure main-process boundary.
-- Never send unrelated local project contents.
-- Persist only accepted ordinary geometry and schema-defined project data.
-- Keep prompt text, references, alternatives, provider metadata, usage, and provenance transient unless an owner-approved opt-in migration changes that policy.
-- Validate generated geometry like imported geometry.
-- A project remains openable when the provider is unavailable.
-- AI may never issue machine motion or safety-control commands.
-
-## 15. File-format and export rules
-
-Native projects are versioned, deterministic, migratable, editable, and independent of future machine hardware.
-
-SVG is the preferred editable interchange format. DXF is a primary manufacturing interchange format. Native DWG editing is explicitly out of scope.
-
-Raster images are references or tracing inputs, never manufacturing export geometry.
-
-Production packages are deterministic derived artifacts. Export only explicit physical layers, preserve shared millimeter origin and scale, exclude non-cut preview data, and make partial failure visible.
-
-M18 may add target-software export profiles for LightBurn, plasma CAM, router CAM, waterjet, fiber workflows, and generic flat-cut consumers. Profiles may control interchange details but must never mutate source geometry, fake proprietary formats, or silently discard unsupported information.
-
-## 16. Security rules
-
+- Canonical stored length: millimeters.
+- Display: millimeters or inches.
+- Domain coordinates: positive X right, positive Y up.
+- External geometry APIs never accept ambiguous unitless lengths.
+- Geometry operations are deterministic for identical inputs and settings.
+- SVG and DXF are untrusted input; reject unsafe scripts and references.
+- Native projects are versioned, deterministic, migratable, and editable.
+- Raster images are references or tracing inputs, never manufacturing export geometry.
 - Electron renderer has no unrestricted Node access.
-- Use context isolation and narrow typed preload APIs.
-- Validate IPC, paths, imported files, project files, and production folders.
-- Do not execute embedded scripts.
-- Do not load remote content into privileged renderer contexts.
-- Never log credentials, full private prompts, or unnecessary user content.
-- Future machine access remains in a privileged host, never the renderer.
+- Use context isolation, sandboxing, narrow typed preload APIs, and strict boundary validation.
+- Keep credentials out of source control and renderer code.
+- Never send unrelated local project content to an AI provider.
+- Projects remain openable when the provider is unavailable.
 
-## 17. Claude implementation protocol
+## 11. Testing and verification
 
-When the owner tells Claude `Continue LaserX` or `Repair LaserX`, Claude must:
+Use unit tests for domain rules, units, geometry, parsers, policies, and transitions; property tests for invariants where valuable; golden fixtures for project/SVG/DXF/tracing/production output; integration tests for commands, history, migration, recovery, import/export; and packaged Electron/Playwright tests for complete Windows workflows.
 
-1. read the mandatory sources and live GitHub state;
-2. identify the one active milestone, issue, bounded sub-slice, and any open PR;
-3. address unresolved blocking findings first;
-4. otherwise repair required CI failures;
-5. otherwise implement only the next smallest complete slice authorized by the active milestone and current issue;
-6. add tests, behavior-linked documentation, and exact evidence;
-7. push or update a draft PR;
-8. stop in `AWAITING_REVIEW`, `REPAIRING`, or `BLOCKED`.
-
-Claude always stops after pushing exact-head evidence; it never merges, advances a gate or milestone, or closes the milestone issue under any circumstance, including an owner advancement command directed at the same message — advancement is performed by ChatGPT once it independently re-verifies the exact head. `Continue LaserX` never authorizes Claude to merge, close the milestone issue, activate a later milestone, expand scope, or merge an experiment branch wholesale.
-
-Detailed evidence belongs in GitHub. The owner-facing handoff stays compact:
-
-```text
-LaserX M## — AWAITING_REVIEW | REPAIRING | BLOCKED
-PR: #__
-Head: <full SHA>
-CI: green | failing | running
-Work: <one-sentence result>
-Blocker: none | <one-sentence blocker>
-Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
-```
-
-## 18. Exact-head review and advancement protocol
-
-`Check LaserX` requires ChatGPT to perform a fresh review of:
-
-- current milestone and issue acceptance criteria;
-- exact PR head and full diff;
-- existing findings and whether repairs genuinely close them;
-- relevant source, tests, fixtures, migrations, ADRs, and documentation;
-- required workflow results on the final pushed head or reviewed merge ref;
-- scope control and later-gate restraint;
-- whether PR claims match live code and CI.
-
-The review must not rely on the implementation handoff or an earlier summary. A second-model review may be assigned to Codex, another capable model, or a human reviewer — whichever party did not author the implementation under review — when risk, uncertainty, or owner direction warrants it.
-
-Detailed findings go on GitHub. The chat verdict is:
-
-```text
-LaserX M## PR #__ — READY | REPAIR | BLOCKED
-Head: <full SHA>
-CI: green | failing | running
-Finding: none | <brief blocker>
-Next command: Advance LaserX | Continue LaserX | Plan LaserX: <decision>
-```
-
-`Advance LaserX` is valid only after the reviewed head is unchanged, required checks are green, blocking findings are resolved, acceptance criteria are satisfied, and the owner explicitly authorizes advancement. Then ChatGPT may merge with an expected-head guard, close the issue when appropriate, record the exact merge, and activate only the next owner-approved gate.
-
-## 19. Milestone gate policy
-
-The active milestone is named in `docs/status/CURRENT.md`.
-
-No agent may begin the next milestone until:
-
-- required acceptance tests and automated coverage pass;
-- no severity-1 defect remains;
-- limitations are documented;
-- the exact final head is freshly reviewed;
-- required workflows are green;
-- the PR is merged using the established method;
-- the active issue is closed;
-- current status records the verified merge;
-- the owner authorizes advancement.
-
-Work from a later milestone is allowed only when narrowly required to complete the active vertical result.
-
-M24 and M25 additionally require the hardware and safety prerequisites stated in their milestone contracts. Their roadmap presence does not authorize early machine work.
-
-## 20. Large milestone sequence
-
-Detailed specifications live in `docs/milestones/`.
-
-- M00 — Repository foundation and contracts.
-- M01 — Desktop shell and project lifecycle.
-- M02 — Canonical document model and viewport.
-- M03 — Selection, transforms, layers, and undo/redo.
-- M04 — Text, fonts, and outline conversion.
-- M05 — Node editing and boolean geometry operations.
-- M06 — Dimensionally correct SVG and DXF interoperability.
-- M07 — PNG/JPEG preprocessing and vector tracing.
-- M08 — Cutability analysis, bridges, and manufacturing preview.
-- M09 — Deterministic sign-building tools and templates.
-- M10 — Optional prompt/image-to-sign AI pipeline.
-- M11 — UI, branding, accessibility, and product polish.
-- M12 — Layered-sign workflow and production export packages.
-- M13 — Windows installer, packaging, and private beta hardening.
-- M14 — Production physical 3D preview integration.
-- M15 — Guided onboarding and Learn Mode.
-- M16 — Truthful material catalog and wood/acrylic expansion.
-- M17 — Process-aware manufacturability profiles.
-- M18 — Downstream software export profiles.
-- M19 — Optional AI idea-to-cuttable-design onboarding.
-- M20 — Licensing, trial, and purchase experience.
-- M21 — Community beta distribution readiness.
-- M22 — Real-user usability validation.
-- M23 — Version 1.0 release and broader-market launch.
-- M24 — Simulator-first machine platform foundation.
-- M25 — First explicitly approved LaserX controller vertical slice.
-
-Nesting, quoting, cloud collaboration, mobile editing, native DWG, general 3D CAD, additional controllers, and a marketplace remain deferred unless promoted through a new owner-approved milestone and ADR.
-
-## 21. Testing expectations
-
-Use unit tests for domain rules, geometry, scene conversion, file parsing, and policy; property tests for invariants; golden fixtures for SVG/DXF/tracing/production output; integration tests for command history and migrations; packaged desktop E2E for critical workflows; browser/GPU evidence where required; and manual real-job validation where the milestone demands it.
-
-Every bug fix requires a regression test when feasible. Never update a golden merely to make a failure disappear.
-
-M14 requires exact-thickness, hole/cutout, deterministic, non-mutation, lazy-loading, GPU-fallback, accessibility, capture, and Windows evidence.
-
-M15 and M22 require measurable first-user workflow evidence.
-
-M24 uses simulator and fault-injection tests. M25 requires hardware-in-the-loop evidence before process-enabled testing.
-
-## 22. Verification commands
+Every defect repair requires a regression test when feasible. Never update a golden merely to hide a failure.
 
 Expected root commands include:
 
@@ -483,25 +318,22 @@ git diff --check
 git status --short
 ```
 
-Use all active-milestone commands and required CI. Do not report completion from local tests alone when GitHub evidence is required.
+Use all active-milestone commands and required CI. Do not report success from local tests alone when GitHub evidence is required.
 
-## 23. Git and change discipline
+## 12. Change discipline
 
-- Keep commits and PRs focused and reviewable.
-- Use conventional commit prefixes where practical.
-- Do not commit installers, local settings, credentials, unlicensed fonts, proprietary artwork, or research fixture payloads into production bundles.
-- Do not rewrite public history without owner instruction.
-- Do not mix architecture migrations with unrelated styling.
-- Include screenshots for meaningful UI changes.
-- Keep implementation and repair PRs draft until a fresh exact-head review.
-- Never reuse an old milestone worktree for a new gate.
+1. Restate the active milestone and exact deliverable.
+2. Inspect before editing.
+3. Implement the smallest complete vertical slice allowed.
+4. Add or update tests in the same change.
+5. Run required checks.
+6. Update documentation when behavior, architecture, commands, schema, or status changes.
+7. Report changed files, tests, assumptions, and remaining risks in GitHub.
 
-## 24. Definition of done
+Keep commits and PRs focused. Keep implementation and repair PRs draft until exact-head review. Do not leave fake placeholder success. Do not advance because code exists. Do not reuse an old milestone worktree for a new gate.
 
-A feature is done only when it satisfies active acceptance criteria, is tested at the correct layer, handles error and empty states, preserves exact units, defines undo/redo where applicable, validates imported/generated data, keeps documentation current, verifies cleanly, passes exact-head GitHub workflows, and contains no fake-success path.
+## 13. Active gate
 
-A milestone is not advanced merely because code exists.
+`docs/status/CURRENT.md` names the one active milestone, issue, PR, exact state, implementation model, and next valid command. Read it fresh every time.
 
-## 25. Final restraint
-
-The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep manufacturing geometry authoritative, physical preview derived, AI optional, materials truthful, downstream exports exact, machine control safety-isolated, and the owner out of the courier role.
+The fastest path is not the largest code dump. Build one complete, testable workflow at a time. Keep manufacturing geometry authoritative, physical preview derived, AI optional, materials truthful, downstream exports exact, and the owner out of the courier role.
