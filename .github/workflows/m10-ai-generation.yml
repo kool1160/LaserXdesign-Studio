@@ -1,11 +1,7 @@
 name: M10 AI Generation
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m10-ai-generation"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

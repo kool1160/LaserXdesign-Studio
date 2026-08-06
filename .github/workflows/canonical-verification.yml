@@ -1,0 +1,73 @@
+name: Canonical Verification
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Verify clean patch formatting
+        run: git diff --check
+
+      - name: Classify exact-head verification scope
+        id: scope
+        shell: pwsh
+        env:
+          LASERX_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LASERX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: py -3 scripts/ci_scope.py
+
+      - name: Prove governance and CI regressions
+        run: |
+          py -3 scripts/test_repository_guard.py
+          py -3 scripts/test_ci_scope.py
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.packaged_windows == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.packaged_windows == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install locked dependencies
+        if: steps.scope.outputs.packaged_windows == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        if: steps.scope.outputs.packaged_windows == 'true'
+        run: pnpm audit --prod
+
+      - name: Run canonical packaged Windows verification
+        if: steps.scope.outputs.packaged_windows == 'true'
+        run: pnpm verify
+
+      - name: Upload packaged Windows evidence
+        if: always() && steps.scope.outputs.packaged_windows == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: laserx-canonical-windows-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            apps/desktop/dist-packaged/win-unpacked
+            apps/desktop/test-results
+          if-no-files-found: warn
+          retention-days: 7

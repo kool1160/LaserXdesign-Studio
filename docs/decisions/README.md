@@ -24,9 +24,9 @@ Accepted implementation decisions:
 - ADR 0022 — explicit manufacturing layers and atomic production packages
 - ADR 0023 — Windows beta installer and release boundary
 - ADR 0024 — production physical 3D preview boundary
-- ADR 0026 — Claude implementation with ChatGPT orchestration and audit authority
 - ADR 0027 — guided-workflow architecture boundary
 
 Superseded decisions (retained for history, not current):
 
 - ADR 0025 — ChatGPT implementation ownership — superseded by ADR 0026
+- ADR 0026 — Claude implementation with ChatGPT orchestration and audit authority — superseded by the 2026-08-06 Codex-only G1 governance reset

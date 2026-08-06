@@ -1,11 +1,7 @@
 name: M04 Text and Fonts
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m04-text-fonts"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

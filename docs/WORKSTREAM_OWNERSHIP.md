@@ -2,116 +2,68 @@
 
 ## Status and authority
 
-This document records the owner's restored operating model, effective **2026-08-06**:
+This document records the Codex-only governance reset effective **2026-08-06**:
 
-> Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence.
+> The primary operations chat decides. GitHub remembers. Codex executes the bounded task. Pull requests hold the evidence.
 
-This assignment supersedes ADR 0026's Claude implementation assignment. ADR 0026 remains historical evidence explaining the earlier role split, but it no longer controls current implementation routing.
+This assignment supersedes ADR 0026's Claude implementation assignment and the later fixed-model SOL routing. Those records remain historical evidence but carry no current execution authority.
 
-`AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, and `docs/status/CURRENT.md` are the current operating truth.
+`AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/CHAT_AUTHORITY.md`, `docs/CODEX_EXECUTION_PLAN.md`, and `docs/status/CURRENT.md` are the current operating truth.
 
 ## Current delivery gate
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G0 — guided-workflow architecture and first-run contract**
-- Active PR: **#67**
-- Current implementation state: **AWAITING_REVIEW**
-- G1 and later M15 slices remain held.
+- Active slice: **G1 — Codex-only governance reset and guided-shell activation**
+- Active task: **governance and CI normalization only**
+- Visible onboarding UI, stores, IPC, grouped repair, and later G1 product work remain held.
 
 ## Owner authority
 
-The owner controls:
-
-- product direction;
-- milestone and gate order;
-- pricing and trial philosophy;
-- implementation-model choice;
-- hands-on acceptance;
-- explicit advancement through `Advance LaserX`.
+The owner controls product direction, milestone and gate order, pricing and trial philosophy, model selection inside Codex, hands-on acceptance, and explicit advancement through `Advance LaserX`.
 
 A `READY` verdict is required before advancement, but it does not replace the owner command.
 
-## Planning/review chat ownership
+## Primary operations chat ownership
 
-The planning/review chat owns:
+The **LaserX Design Studio primary operations chat** is the only conversation authorized for planning/review-side writes. It owns:
 
-- `Plan LaserX: <idea>`;
-- `Lock that into LaserX`;
+- `Plan LaserX: <idea>` and `Lock that into LaserX`;
 - exact-head review through `Check LaserX`;
 - durable findings and decisions on GitHub;
 - `Status LaserX` and `Hold LaserX`;
-- merge, issue closure, status recording, and next-gate activation only after the owner issues `Advance LaserX`.
+- merge, issue closure, status recording, and next-gate activation after the owner issues `Advance LaserX` there.
 
-The planning/review chat must independently inspect the exact head, full relevant diff, tests, review state, and required CI. It does not accept an implementation report as proof.
+Every other chat is read-only for those mutations. When chat identity is uncertain, the conversation must fail closed. `docs/CHAT_AUTHORITY.md` contains the binding prohibition and recovery rule.
 
-There is no automatic routine merge under this restored workflow.
+There is no automatic routine merge.
 
-## SOL High implementation ownership
+## Codex implementation ownership
 
-**SOL High** is the owner-selected OpenAI coding model running at High reasoning in the Codex coding workspace.
+Codex is the sole active implementation surface. The repository does not choose or auto-route the model; the owner selects it inside Codex for each session.
 
-Only `Continue LaserX` goes to the SOL High implementation thread.
+Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
 
-SOL High owns:
+Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
-- reading live repository truth before editing;
-- fixing active review blockers first;
-- fixing required CI failures second;
-- implementing only the smallest complete active-gate slice when no active PR exists;
-- using focused branches and draft PRs;
-- adding regression tests and behavior-linked documentation;
-- running required verification;
-- pushing exact-head evidence;
-- stopping at `AWAITING_REVIEW` or `BLOCKED`.
+## Removed external routes
 
-SOL High must never:
-
-- merge its own PR;
-- close the active issue;
-- activate the next gate;
-- redesign unrelated architecture;
-- create speculative future infrastructure;
-- run parallel later-milestone work;
-- create scheduled heartbeats, background polling, or self-waking sessions;
-- continue after `AWAITING_REVIEW` without another owner command.
-
-## Claude / Anthropic hold
-
-Claude and paid Anthropic models are held from implementation, repair, review, and background work.
-
-Do not spend Anthropic usage credits or invoke an Anthropic model unless the owner explicitly authorizes one named, bounded task in GitHub. Earlier Claude-authored code remains normal repository history and is judged by exact-head review, not by author.
+Claude, Anthropic, Fable, and other external paid implementation, repair, review, continuation, and fallback routes are removed from active operation. Earlier authorship remains normal repository history and is judged by exact-head evidence.
 
 ## Independent verification
 
-Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety work may require an independent verifier who did not author the load-bearing change. The planning/review chat records the verifier and exact target head in GitHub.
-
-## GitHub ownership
-
-GitHub stores:
-
-- product decisions;
-- active milestone and gate;
-- implementation assignment;
-- code and exact heads;
-- pull-request evidence;
-- review findings;
-- CI state;
-- merges and milestone history.
-
-The owner does not courier implementation reports between chats.
+Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety work may require a verifier who did not author the load-bearing change. The primary operations chat records the verifier and exact target in GitHub; this does not create an automatic external-model route.
 
 ## Durable operating loop
 
-1. Owner discusses direction with `Plan LaserX: <idea>`.
-2. Planning/review chat records it with `Lock that into LaserX`.
-3. Owner sends `Continue LaserX` to the SOL High implementation thread.
-4. SOL High implements or repairs the bounded active gate and stops.
-5. Owner sends `Check LaserX` to the planning/review chat.
-6. If `REPAIR`, owner sends `Continue LaserX` to SOL High.
-7. If `READY`, owner sends `Advance LaserX` to the planning/review chat.
-8. Planning/review chat merges, records, activates the next gate, and stops.
-9. Owner starts the new gate with a later `Continue LaserX`.
+1. Owner discusses direction with `Plan LaserX: <idea>` in the primary operations chat.
+2. The primary operations chat records it with `Lock that into LaserX`.
+3. Owner sends `Continue LaserX` to Codex.
+4. Codex implements or repairs the bounded active gate and stops.
+5. Owner sends `Check LaserX` in the primary operations chat.
+6. If `REPAIR`, owner sends `Continue LaserX` to Codex.
+7. If `READY`, owner sends `Advance LaserX` in the primary operations chat.
+8. The primary operations chat merges, records, activates the next gate, and stops.
 
 ## Explicit exclusions
 

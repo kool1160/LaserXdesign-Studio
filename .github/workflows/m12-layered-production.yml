@@ -1,11 +1,7 @@
 name: M12 Layered Production
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m12-layered-production"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

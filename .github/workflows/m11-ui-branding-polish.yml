@@ -1,11 +1,7 @@
 name: M11 UI Branding Polish
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m11-ui-branding-polish"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

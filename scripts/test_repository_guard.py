@@ -11,8 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from repository_guard import (  # noqa: E402
     CONTRACT_REQUIREMENTS,
     ROOT,
+    case_collision_errors,
     current_slice_error,
     missing_terms,
+    workflow_contract_errors,
 )
 
 FAILURES: list[str] = []
@@ -75,9 +77,58 @@ Claude is the active implementation agent.
 ChatGPT is the acceptance authority.
 """
 for relative_path, terms, label in CONTRACT_REQUIREMENTS:
-    if relative_path in {"docs/SOL_EXECUTION_PLAN.md", "docs/CLAUDE_EXECUTION_PLAN.md"}:
+    if relative_path in {"docs/CODEX_EXECUTION_PLAN.md", "docs/CLAUDE_EXECUTION_PLAN.md"}:
         if not missing_terms(stale_claude_plan, terms):
             FAILURES.append(f"stale Claude assignment unexpectedly satisfies {label}")
+
+
+# Case-collision enforcement is consolidated into Repository Guard. Prove
+# ordinary paths pass while case-folded and file/directory-prefix collisions fail.
+if case_collision_errors(["docs/A.md", "packages/domain/src/index.ts"]):
+    FAILURES.append("ordinary distinct paths unexpectedly collide")
+if not case_collision_errors(["docs/Guide.md", "DOCS/guide.md"]):
+    FAILURES.append("case-folded path collision was not detected")
+if not case_collision_errors(["tools/cache", "TOOLS/CACHE/item.json"]):
+    FAILURES.append("file/directory-prefix collision was not detected")
+
+
+# Prove workflow consolidation is load-bearing against reactivating a completed
+# milestone workflow or weakening either current exact-head path.
+workflow_directory = ROOT / ".github" / "workflows"
+workflows = {
+    path.name: path.read_text(encoding="utf-8")
+    for path in workflow_directory.glob("*.yml")
+}
+real_workflow_errors = workflow_contract_errors(workflows)
+if real_workflow_errors:
+    FAILURES.extend(f"real workflow contract: {error}" for error in real_workflow_errors)
+
+mutations = (
+    (
+        "reactivated historical PR workflow",
+        "m08-cutability.yml",
+        "\n  pull_request:\n" + workflows["m08-cutability.yml"],
+    ),
+    (
+        "removed exact-head guard checkout",
+        "repository-guard.yml",
+        workflows["repository-guard.yml"].replace(
+            "ref: ${{ github.event.pull_request.head.sha || github.sha }}", "ref: main"
+        ),
+    ),
+    (
+        "removed canonical scope classifier",
+        "canonical-verification.yml",
+        workflows["canonical-verification.yml"].replace(
+            "py -3 scripts/ci_scope.py", "Write-Output skipped"
+        ),
+    ),
+)
+for label, filename, mutated_text in mutations:
+    mutated = dict(workflows)
+    mutated[filename] = mutated_text
+    if not workflow_contract_errors(mutated):
+        FAILURES.append(f"workflow mutation unexpectedly passed: {label}")
 
 
 if FAILURES:
@@ -88,5 +139,5 @@ if FAILURES:
 
 print(
     "Repository guard regression tests passed: M15 G0-G6 slice validation and "
-    "all current SOL High/planning-review/M15 contract markers are load-bearing."
+    "all Codex/primary-chat/M15/CI contract markers are load-bearing."
 )

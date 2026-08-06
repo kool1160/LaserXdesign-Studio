@@ -451,8 +451,8 @@ secret or prompt content.
 
 ## M14 physical-preview executable layers
 
-M14 is delivered as bounded reviewed gates G0–G6 (ADR 0024,
-`docs/CLAUDE_EXECUTION_PLAN.md`). Each gate carries its own evidence; a later
+M14 was delivered as bounded reviewed gates G0–G6 (ADR 0024 and its recorded
+exact-head PR evidence). Each gate carries its own evidence; a later
 gate may not borrow an earlier gate's claim.
 
 - **G0 — governance.** `pnpm audit:physical-preview` proves that production source

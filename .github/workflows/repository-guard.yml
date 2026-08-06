@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "bootstrap/**"
   pull_request:
 
 permissions:
@@ -14,8 +13,11 @@ jobs:
   structure-and-policy:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
+      - name: Check out exact head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -24,3 +26,9 @@ jobs:
 
       - name: Run repository guard
         run: python scripts/repository_guard.py
+
+      - name: Prove repository guard regressions
+        run: python scripts/test_repository_guard.py
+
+      - name: Prove CI scope regressions
+        run: python scripts/test_ci_scope.py

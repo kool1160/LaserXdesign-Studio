@@ -2,109 +2,44 @@
 
 ## Purpose
 
-This is the no-copy-and-paste workflow for planning, SOL High implementation, GitHub, review, and milestone advancement.
+This is the no-copy-and-paste workflow for primary-chat planning and review, Codex implementation, GitHub evidence, and owner-controlled advancement.
 
-> **Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence. The owner receives the verdict and next command.**
+> **The primary operations chat decides. GitHub remembers. Codex executes the bounded task. Pull requests hold the evidence.**
 
 One repo. One active gate. One next command.
 
-The implementation model is **SOL High**, the owner-selected OpenAI coding model running at High reasoning in the Codex coding workspace. Only `Continue LaserX` goes to that implementation thread. All planning, decision locking, review, status, holds, and advancement stay in the planning/review chat.
+The active implementation surface is **Codex**. The owner selects the model inside Codex for each session; the repository does not select, pin, auto-route, or fall back to a model. Only `Continue LaserX` goes to a Codex implementation session.
 
-Claude and paid Anthropic models are held unless the owner explicitly authorizes one named, bounded task in GitHub.
+The **LaserX Design Studio primary operations chat** is the sole planning/review write authority. All other chats are read-only and fail closed when identity is uncertain, exactly as required by `docs/CHAT_AUTHORITY.md`.
+
+Claude, Anthropic, Fable, and other external paid implementation, review, continuation, and fallback routes are removed from active operation.
 
 ## The seven commands
 
-| Command | Use it with | What it does | Normal next move |
+| Command | Authorized location | What it does | Normal next move |
 | --- | --- | --- | --- |
-| `Plan LaserX: <idea>` | Planning/review chat | Discuss product intent. No repository implementation begins. | `Lock that into LaserX` |
-| `Lock that into LaserX` | Planning/review chat | Write the accepted decision to the correct GitHub source of truth. | `Continue LaserX` |
-| `Continue LaserX` | SOL High implementation thread | Implement or repair the active gate, update exact evidence, then stop. | `Check LaserX` |
-| `Check LaserX` | Planning/review chat | Review the real exact PR head and put details on GitHub. | `Continue LaserX` or `Advance LaserX` |
-| `Advance LaserX` | Planning/review chat | After `READY`, merge, close, record, and activate the next issue or gate. | `Continue LaserX` |
-| `Status LaserX` | Planning/review chat | Read-only status. No implementation, review, merge, or mutation. | Use the reported command |
-| `Hold LaserX` | Either chat | Pause new work while preserving the branch and PR. | Explicit resume |
+| `Plan LaserX: <idea>` | Primary operations chat | Discuss product intent. No repository implementation begins. | `Lock that into LaserX` |
+| `Lock that into LaserX` | Primary operations chat | Write the accepted decision to the correct GitHub source of truth. | `Continue LaserX` |
+| `Continue LaserX` | Codex implementation session | Implement or repair the active bounded gate, push exact evidence, then stop. | `Check LaserX` |
+| `Check LaserX` | Primary operations chat | Review the exact PR head and put detailed findings on GitHub. | `Continue LaserX` or `Advance LaserX` |
+| `Advance LaserX` | Primary operations chat | After `READY`, merge, close, record, and activate the next approved gate. | `Continue LaserX` |
+| `Status LaserX` | Primary operations chat | Read-only status. No implementation, review, merge, or mutation. | Use the reported command |
+| `Hold LaserX` | Primary operations chat or active Codex session | Pause new work while preserving the branch and PR. | Explicit resume |
 
-## Command details
+Recognizing a valid command is not authorization. Outside the designated primary operations chat, planning/review commands remain read-only and must receive the return-to-primary response in `docs/CHAT_AUTHORITY.md`.
 
-### `Plan LaserX: <idea>`
+## What Codex does when you say `Continue LaserX`
 
-**Use:** Planning/review chat.
-
-**Purpose:** Discuss a feature, workflow, concern, priority, business model, architecture choice, or manufacturing rule without changing implementation.
-
-**Result:** A clear decision, open question, or rejected idea.
-
-### `Lock that into LaserX`
-
-**Use:** Planning/review chat.
-
-**Purpose:** Write the accepted decision into the smallest correct GitHub location: active issue, milestone, requirements file, ADR, ownership document, status file, or PR finding.
-
-**Result:** SOL High discovers it from GitHub. The owner carries no markdown between chats.
-
-### `Continue LaserX`
-
-**Use:** SOL High implementation thread.
-
-**Purpose:** Read the active gate and live PR state, then implement, repair review findings, or repair required CI.
-
-**Result:** The draft PR is updated to `AWAITING_REVIEW` or the work stops `BLOCKED`.
-
-### `Check LaserX`
-
-**Use:** Planning/review chat.
-
-**Purpose:** Review the exact PR head, full relevant diff, acceptance criteria, tests, review state, and required CI.
-
-**Result:** `READY`, `REPAIR`, or `BLOCKED`. Detailed findings stay on GitHub.
-
-### `Advance LaserX`
-
-**Use:** Planning/review chat.
-
-**Purpose:** After `READY`, verify the unchanged head and green CI, merge, close the issue when appropriate, update `CURRENT.md`, and activate the next approved gate from latest `main`.
-
-**Result:** The next gate is active; its implementation has not started.
-
-### `Status LaserX`
-
-**Use:** Planning/review chat.
-
-**Purpose:** Read the milestone, issue, PR, head, CI, blocker, implementation model, and next valid command without reviewing or changing anything.
-
-**Result:** Compact status plus the next valid command.
-
-### `Hold LaserX`
-
-**Use:** Either chat.
-
-**Purpose:** Pause implementation, merging, and advancement while preserving the current branch and PR.
-
-**Result:** `HELD` until the owner explicitly resumes.
-
-## What SOL High does when you say `Continue LaserX`
-
-1. **Read repository truth.** Read `AGENTS.md`, this protocol, `docs/status/CURRENT.md`, active milestone, active issue, active PR, review findings, and CI.
+1. **Read repository truth.** Read `AGENTS.md`, this protocol, `docs/CHAT_AUTHORITY.md`, `docs/WORKSTREAM_OWNERSHIP.md`, `docs/status/CURRENT.md`, Issues #44 and #37, the active milestone, active issue, active PR, review findings, and CI.
 2. **Review blockers first.** If blocking findings exist, fix only those findings, add regression tests, rerun verification, update the same draft PR, and stop.
-3. **Repair CI second.** If required CI is failing, diagnose and repair it without expanding scope, update the same draft PR, and stop.
-4. **Stop for review when green.** If the PR is green with no unresolved blocker, refresh exact-head evidence and stop at `AWAITING_REVIEW`.
-5. **Implement only when no active PR exists.** Build the smallest complete active-gate vertical slice, test it, open a draft PR, and stop.
-6. **Block instead of guessing.** If repository truth conflicts or no active gate exists, record the problem and stop.
+3. **Repair required CI second.** Diagnose and repair required CI without expanding scope.
+4. **Stop for review when complete.** Push exact-head evidence and stop at `AWAITING_REVIEW`.
+5. **Implement only when no active PR exists.** Build the smallest complete active-gate slice, test it, open one focused draft PR, and stop.
+6. **Block instead of guessing.** If repository truth conflicts or no active gate exists, report `BLOCKED` rather than inventing scope or authority.
 
-`Continue LaserX` never means:
+`Continue LaserX` never means merge, close the active issue, change the active gate, approve its own work, redesign unrelated architecture, create speculative infrastructure, merge an experiment wholesale, start parallel future work, create background polling, or continue after `AWAITING_REVIEW`.
 
-- merge the pull request;
-- close the active issue;
-- activate or begin the next milestone or gate;
-- redesign unrelated architecture;
-- create speculative future infrastructure;
-- merge an experiment branch wholesale;
-- start parallel future work;
-- create scheduled heartbeats or background polling;
-- keep a session alive after `AWAITING_REVIEW`;
-- dump a giant duplicate project report into chat.
-
-### SOL High compact completion response
+### Codex compact completion response
 
 ```text
 LaserX M## — AWAITING_REVIEW | BLOCKED
@@ -126,38 +61,39 @@ Finding: none | <one or two short blocking reasons>
 Next command: Advance LaserX | Continue LaserX | Plan LaserX: <decision>
 ```
 
-The planning/review chat reads the exact head fresh. It does not accept the implementation handoff, an earlier review, or green CI alone as proof.
+The primary operations chat reads the exact head fresh. It does not accept the implementation handoff, an earlier review, or green CI alone as proof.
+
+Its exact verdict is `READY`, `REPAIR`, or `BLOCKED`.
 
 ## Advancement safety check
 
 Before `Advance LaserX` changes GitHub state:
 
+- the conversation is the designated primary operations chat;
 - the reviewed head has not changed;
-- required GitHub workflows are green;
+- the active gate's required checks are green;
 - no unresolved blocking review thread remains;
-- the active gate or milestone acceptance and exit criteria are satisfied;
-- the owner explicitly issued `Advance LaserX`;
+- gate acceptance and exit criteria are satisfied;
+- the owner explicitly issued `Advance LaserX` there;
 - `CURRENT.md` will receive the exact merge and verification record;
-- the next issue or gate will be activated from latest `main`, then work stops.
+- the next approved gate will be activated from latest `main`, then work stops.
 
-There is no automatic routine merge. `READY` makes advancement valid; the owner command performs it.
+There is no automatic routine merge. `READY` makes advancement valid; the owner command in the primary operations chat performs it.
 
-## Complete operating loop
+## CI contract
 
-1. **Decide:** `Plan LaserX: <idea>`
-2. **Record:** `Lock that into LaserX`
-3. **Build or repair:** `Continue LaserX`
-4. **Review:** `Check LaserX`
-5. **If REPAIR:** `Continue LaserX`
-6. **If READY:** `Advance LaserX`
-7. **Start the next gate:** `Continue LaserX`
+Required pull-request verification is consolidated around:
+
+- **Repository Guard / structure-and-policy** — source-of-truth, security-file, case-collision, workflow-policy, and regression enforcement;
+- **Canonical Verification / exact-head** — one exact-head path that always checks patch and governance regressions and runs the complete packaged Windows suite only when the active gate or changed product paths require it.
+
+Completed milestone workflows are historical manual evidence, not independent permanent blockers on later pull requests. Installer signing and release publication remain explicit release gates.
 
 ## Final rules
 
-- GitHub is the project record; chat is not.
-- SOL High implements and repairs; it never merges or advances.
-- Planning/review chat plans, locks, reviews, reports status, holds, and advances.
-- The owner retains product direction, model choice, and advancement.
-- No agent invents the roadmap.
-- No milestone advances merely because code exists.
-- No paid Anthropic work occurs without a new explicit owner authorization.
+- GitHub is the project record; chat summaries are not proof.
+- Codex implements and repairs; it never merges or advances.
+- The primary operations chat plans, locks, reviews, reports status, holds, and advances.
+- Other chats are read-only and fail closed.
+- The owner retains product direction, model choice inside Codex, and advancement.
+- No milestone advances merely because code exists or CI is green.

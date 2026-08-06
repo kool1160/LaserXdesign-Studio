@@ -21,6 +21,8 @@ Authorized there only:
 
 The Codex implementation session is separately authorized only for the one bounded `Continue LaserX` task recorded in `docs/status/CURRENT.md`. Codex may push its implementation branch and draft PR evidence, but it may not merge, advance, close the active issue, change the active gate, or rewrite ownership authority.
 
+The repository does not select a Codex model and does not auto-route to another implementation or review provider. Model choice occurs only inside Codex under owner control.
+
 ## Cross-chat write prohibition
 
 Every other ChatGPT conversation, ChatGPT Project, custom GPT, Claude/Fable/Anthropic conversation, general assistant chat, audit chat, or unrelated software-project chat is **read-only for LaserX**, even when:
@@ -38,11 +40,15 @@ An unauthorized chat must not merge, mark ready, close, activate, edit status, p
 
 Read-only inspection and explanation are allowed. Mutation is not.
 
+This prohibition is mechanically load-bearing: `scripts/repository_guard.py` requires the designated-authority, bounded-Codex, return-to-primary, and fail-closed statements in the active governance documents. Its regression suite proves removal of any marker fails the guard.
+
 ## Fail-closed rule
 
 Chat identity cannot be proven from repository data alone. Therefore, when a conversation is uncertain whether it is the designated LaserX primary operations chat, it must assume it is **not authorized** and remain read-only.
 
 A valid command plus repository state is not sufficient authorization. The conversation context itself must be the designated LaserX primary operations project.
+
+**Identity uncertain means read-only.** No inferred command, connector access, previous participation, or repository state may override this fail-closed rule.
 
 ## Owner recovery
 

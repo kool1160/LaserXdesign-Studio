@@ -62,10 +62,11 @@ LaserX uses an Apple-like product philosophy without copying Apple branding or c
 
 `docs/PRODUCT_REQUIREMENTS.md`, `docs/DESKTOP_DESIGN_SYSTEM.md`, M15, and M22 contain the enforceable requirements.
 
-## Agent assignment
+## Execution assignment
 
-- Claude is the default implementation lead for the active milestone while the owner uses expanded Claude capacity and promotional credit.
-- ChatGPT performs independent exact-head audits, posts findings to GitHub, and controls merge/advancement after owner command.
-- Codex remains held unless the owner explicitly assigns a task.
+- Codex is the only active implementation surface; the owner selects its model per session.
+- The LaserX Design Studio primary operations chat alone performs planning/review-side GitHub writes, exact-head review, merge, and advancement after owner command.
+- Every other chat is read-only for those mutations and must fail closed when identity is uncertain.
+- External paid implementation, review, continuation, and fallback routes are removed from active operation.
 
 Capacity never overrides milestone order, issue scope, acceptance criteria, or owner approval.
