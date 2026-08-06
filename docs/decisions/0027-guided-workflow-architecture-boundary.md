@@ -105,7 +105,10 @@ gaining or reordering steps, and makes a stale persisted snapshot detectable
 instead of silently pointing at a different step.
 
 The machine is deliberately **linear**: one immutable `stepIds` list per run,
-moving forward and back by one step. Conditional experience — the
+moving forward one step and moving Back to the nearest earlier stable step.
+That is normally one step; a completed transient step is crossed without
+reopening it because its in-memory prerequisite has already been consumed.
+Conditional experience — the
 vector/raster presentation split, the sometimes-invisible post-analysis
 checkpoint — is expressed as contextual variants and auto-completing
 checkpoints over that stable list (§3), never as a branch graph, a mid-run
@@ -201,7 +204,8 @@ Three rules hold in every row, and are the reason the matrix exists:
 #### One stable step list per goal — variants and checkpoints, never branches
 
 The reducer is deliberately **linear**: one immutable ordered `stepIds` list
-per run, forward and back by one step, no route action, no successor graph,
+per run, forward one step and Back to the nearest earlier stable step, no route
+action, no successor graph,
 no way to add or remove a step mid-run. Everything conditional in the three
 goals is therefore expressed inside that constraint, by exactly two devices —
 never by mutating or swapping a definition during an active run, never by
@@ -472,8 +476,13 @@ A step is recorded as completed or skipped but never both, so the summary the
 user is shown afterwards is truthful even if they went back and redid a step
 they had skipped.
 
-**Going back reopens the destination step and discards completion/skip records
-from that step forward.** Keeping them would let an interrupted journey resume
+**Going back reopens the nearest earlier stable destination step and discards
+completion/skip records from that step forward.** Stable-to-stable Back still
+moves exactly one step. When the immediately preceding step is transient, Back
+crosses it and uses the same stable recovery route as resume: an accepted
+import/trace preview, accepted AI concept, or completed current-analysis
+checkpoint is never reopened after its in-memory prerequisite has been
+consumed. Keeping later progress would let an interrupted journey resume
 while claiming the step currently being redone -- and every step after it --
 is already finished. If the user returns to change an earlier decision such as
 material or text, any later "completion" is simply false.
@@ -683,7 +692,10 @@ target so G1 can say "we took you back to X" — reopening it with exactly
 the restored record stays truthful. A snapshot open on a transient step with
 no stable predecessor cannot resume at all, and the goal restarts. In every
 refusal or recovery, the document itself is untouched; only guidance
-position is lost.
+position is lost. Live Back navigation follows the same boundary after a
+transient step has completed: it skips that step to the nearest earlier stable
+predecessor and truncates progress from that recovery step forward. Ordinary
+stable-to-stable Back remains a one-step move.
 
 Resume is otherwise **fail-closed**, and validates the full semantic
 invariant rather than only checking that ids are recognizable. Recorded

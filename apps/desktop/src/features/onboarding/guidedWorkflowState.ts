@@ -449,6 +449,17 @@ export function isStepTransient(
   return stepId !== null && definition.transientStepIds.includes(stepId);
 }
 
+function nearestStableStepIdAtOrBefore(
+  definition: GuidedWorkflowDefinition,
+  startIndex: number,
+): string | null {
+  for (let index = startIndex; index >= 0; index -= 1) {
+    const stepId = definition.stepIds[index];
+    if (stepId !== undefined && !isStepTransient(definition, stepId)) return stepId;
+  }
+  return null;
+}
+
 /**
  * The step a snapshot actually resumes to, or `null` when it cannot resume.
  *
@@ -466,11 +477,7 @@ export function resolveResumeStepId(
 ): string | null {
   const currentIndex = definition.stepIds.indexOf(snapshot.currentStepId);
   if (currentIndex < 0) return null;
-  for (let index = currentIndex; index >= 0; index -= 1) {
-    const stepId = definition.stepIds[index];
-    if (stepId !== undefined && !isStepTransient(definition, stepId)) return stepId;
-  }
-  return null;
+  return nearestStableStepIdAtOrBefore(definition, currentIndex);
 }
 
 function stepIndexOf(definition: GuidedWorkflowDefinition, stepId: string | null): number {
@@ -791,9 +798,12 @@ export function reduceGuidedWorkflow(
       if (definition === null) return state;
       const index = stepIndexOf(definition, state.currentStepId);
       if (index <= 0) return state;
-      const previousIndex = index - 1;
-      const previousStepId = definition.stepIds[previousIndex];
-      if (previousStepId === undefined) return state;
+      // A consumed preview or analysis checkpoint cannot be reconstructed by
+      // navigating back to it. Use the same stable recovery boundary as
+      // resume; stable-to-stable Back still moves exactly one step.
+      const previousStepId = nearestStableStepIdAtOrBefore(definition, index - 1);
+      if (previousStepId === null) return state;
+      const previousIndex = definition.stepIds.indexOf(previousStepId);
 
       // Going back reopens the destination step and discards progress from
       // that step forward. Leaving later steps marked complete would let an

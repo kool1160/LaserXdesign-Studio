@@ -86,6 +86,22 @@ const IMPORT_GOAL_DEFINITION: GuidedWorkflowDefinition = {
   transientStepIds: ["prepare-source", "resolve-findings"],
 };
 
+const AI_GOAL_DEFINITION: GuidedWorkflowDefinition = {
+  goal: "describe-with-ai",
+  definitionVersion: 1,
+  stepIds: [
+    "describe-sign",
+    "choose-concept",
+    "make-manufacturable",
+    "analyze-cutability",
+    "resolve-findings",
+    "physical-3d",
+    "export",
+  ],
+  skippableStepIds: [],
+  transientStepIds: ["choose-concept", "resolve-findings"],
+};
+
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     Object.values(value as Record<string, unknown>).forEach(deepFreeze);
@@ -162,7 +178,7 @@ describe("guided workflow -- basic transitions", () => {
     expect(state.completedStepIds).toEqual(DEFINITION.stepIds);
   });
 
-  it("moves back by step id, never past the first step", () => {
+  it("stable-to-stable Back moves exactly one step and never past the first step", () => {
     const second = advanceTo("add-text");
     expect(dispatch(second, "back").currentStepId).toBe("choose-material");
     const first = start();
@@ -1115,6 +1131,19 @@ describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
     });
   }
 
+  function expectAcceptedImportBackRecovery(): void {
+    let state = startImport();
+    state = dispatch(state, "advance");
+    expect(state.currentStepId).toBe("prepare-source");
+    state = dispatch(state, "advance");
+    expect(state.currentStepId).toBe("assign-physical");
+
+    state = dispatch(state, "back");
+    expect(state.currentStepId).toBe("choose-file");
+    expect(state.completedStepIds).toEqual([]);
+    expect(state.skippedStepIds).toEqual([]);
+  }
+
   it("the vector and raster paths traverse the same stable step ids with no branch action and no definition change", () => {
     // The vector/raster split is a contextual presentation variant of the one
     // stable prepare-source step, decided by classifying the selected file --
@@ -1136,6 +1165,44 @@ describe("guided workflow -- stable linear superset (ADR 0027 §3)", () => {
       expect(visited).toEqual([...IMPORT_GOAL_DEFINITION.stepIds]);
       expect(variant).toBeTruthy();
     }
+  });
+
+  it("accepted vector import Back from Assign physical recovers to Choose file", () => {
+    expectAcceptedImportBackRecovery();
+  });
+
+  it("accepted raster trace Back from Assign physical recovers to Choose file", () => {
+    expectAcceptedImportBackRecovery();
+  });
+
+  it("accepted AI concept Back uses its locked stable recovery route", () => {
+    let state = start(AI_GOAL_DEFINITION);
+    state = dispatch(state, "advance");
+    expect(state.currentStepId).toBe("choose-concept");
+    state = dispatch(state, "advance");
+    expect(state.currentStepId).toBe("make-manufacturable");
+
+    state = dispatch(state, "back");
+    expect(state.currentStepId).toBe("describe-sign");
+    expect(state.completedStepIds).toEqual([]);
+    expect(state.skippedStepIds).toEqual([]);
+  });
+
+  it("Back from 3D across a completed transient resolution returns to analysis", () => {
+    let state = startImport();
+    while (state.currentStepId !== "physical-3d" && state.status === "active") {
+      state = dispatch(state, "advance");
+    }
+    expect(state.completedStepIds).toContain("resolve-findings");
+
+    state = dispatch(state, "back");
+    expect(state.currentStepId).toBe("analyze-cutability");
+    expect(state.completedStepIds).toEqual([
+      "choose-file",
+      "prepare-source",
+      "assign-physical",
+    ]);
+    expect(state.skippedStepIds).toEqual([]);
   });
 
   it("the resolution checkpoint is always present and auto-completes through an ordinary advance when nothing is actionable", () => {
