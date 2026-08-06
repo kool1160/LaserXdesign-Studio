@@ -158,9 +158,13 @@ transform/layers), **3D** (physical preview), **Save**, and **Export**
 
 Two rules hold in every row, and are the reason the matrix exists:
 
-- an **advanced/manual escape** is always *available*, never hidden — a guided
-  stage narrows what is prominent, never what is reachable, so a user who
-  knows what they want is never trapped in guidance;
+- an **Exit guidance** action is always reachable from every stage — a single,
+  global affordance to leave guided mode and return to ordinary editing, kept
+  separate from any individual surface's visibility. This is what "a guided
+  stage narrows what is prominent, never what is reachable" actually means: a
+  focused stage (3D, most notably) can legitimately hide every other mounted
+  surface and still satisfy it, because leaving guidance is still one click
+  away. It is not a promise that every panel stays visible;
 - **Save** is always *available* from any stage that has a document.
 
 #### Create My First Sign
@@ -170,24 +174,57 @@ Two rules hold in every row, and are the reason the matrix exists:
 | Choose size and material | Set stock size and material | Physical layer has material and thickness | Editing (layers) | Create, Text, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Add the sign content | Add text or a shape | Document has at least one object on a physical layer | Text | Create, Sign, Editing, Save | Import, Trace, AI, Analyze, 3D, Export |
 | Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Text, Create, Save | Import, Trace, AI, 3D, Export |
-| See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Analyze, Editing, Save | Import, Trace, AI, Create, Text, Export |
-| Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D, Analyze, Editing | Import, Trace, AI, Create, Text, Sign |
+| See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
+| Save and export | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
 #### Import My Own Design
 
+Source classification is a **branch, not a stage**: nothing about it is a
+choice the user makes deliberately, so it never itself becomes a numbered
+step with its own primary action. Before a file is chosen, its type is
+unknown, so neither Import's file-open affordance nor Trace's raster-specific
+preprocessing controls describe the file yet — only the generic "bring in a
+file" action is primary, and Trace stays hidden until a raster file is
+actually selected.
+
 | Stage | Primary action | Completion signal | primary | available | hidden |
 |---|---|---|---|---|---|
-| Choose the file | Pick an SVG, DXF, PNG, or JPEG | A source file is selected | Import | Trace, Save | AI, Analyze, 3D, Export, Create, Text, Sign, Editing |
-| Vector import — review scale and findings | Confirm units, scale, and fit | Import committed or cancelled | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
-| Raster import — trace settings | Adjust preprocessing and trace | Editable paths accepted or rejected | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
-| Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export |
+| Choose the file | Pick a source file | A file is selected and classified as vector (SVG/DXF) or raster (PNG/JPEG) | Import | Save | AI, Analyze, 3D, Export, Create, Text, Sign, Editing, **Trace** |
+| *(branch: vector)* Vector import — review scale and findings | Accept the import | see below | Import | Editing, Save | **Trace**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| *(branch: raster)* Raster import — trace settings | Accept the traced paths | see below | Trace | Editing, Save | **Import**, AI, Analyze, 3D, Export, Create, Text, Sign |
+| Assign physical information | Set material, thickness, and role | Imported layer has manufacturing metadata | Editing (layers) | Create, Text, Save | Import, Trace, AI, 3D, Export, Analyze |
 | Repair what can be fixed | Fix safe problems | Fixed/skipped/remaining reported | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
-| Preview and export | Open 3D, then export | Export written, or an explicit failure | Export | 3D, Save, Analyze, Editing | Import, Trace, AI, Create, Text, Sign |
+| See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
+| Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
-The two bolded cells are the anti-pattern Issue #45 names, stated as a rule
-rather than an example: **the vector-import stage hides Trace outright, and the
-raster stage hides Import outright.** Today both panels are permanently mounted
-side by side.
+The bolded cells are the anti-pattern Issue #45 names, stated as a rule rather
+than an example: **the vector-import stage hides Trace outright, and the
+raster stage hides Import outright**, and neither is presented until source
+classification actually resolves one way or the other. Today both panels are
+permanently mounted side by side, and physical 3D does not exist as a focused
+stage at all.
+
+**Import/trace completion is explicit, not implied.** "Import committed or
+cancelled" and "paths accepted or rejected" named two outcomes but left the
+negative one undefined — G1 would have had to guess whether it advanced,
+looped, or exited. It does neither on its own:
+
+- **Accept** (commit the vector import, or accept the traced paths) advances
+  to *Assign physical information*.
+- **Cancel** (vector) or **Reject** (raster) returns to *Choose the file*,
+  clearing the pending preview so a different file can be tried. This is the
+  same nullable-preview-slot pattern already proven for import/raster/sign-
+  tools/AI previews (§1) — the reducer never marks a cancelled or rejected
+  preview as commit-complete.
+- **Exit guidance** (the global action, §3 rule) is always the other option
+  from either stage, and never implied by cancel/reject.
+
+Required 3D before export, restated as a table rule rather than left to §3's
+prose alone: **every primary path that reaches Export must have passed through
+its own 3D stage first**, with 3D's primary action being the sole primary
+action of that stage and Export never primary until the preview completion
+signal (rendered, or an explicit graceful-unavailable state) is recorded. No
+stage collapses 3D and Export together.
 
 #### Describe What I Want With AI — Optional
 
@@ -199,8 +236,10 @@ rather than a new one (§2).
 |---|---|---|---|---|---|
 | Describe the sign | Enter a prompt and generate | Concepts returned, or an explicit failure | AI | Save | Import, Trace, Analyze, 3D, Export, Create, Text, Sign, Editing |
 | Choose a concept | Accept one concept | Concept accepted into the document | AI | Editing, Text, Save | Import, Trace, Analyze, 3D, Export, Create, Sign |
-| Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Analyze, Save | Import, Trace, AI, 3D, Export |
-| Check, preview, export | Run analysis, preview, export | Export written, or an explicit failure | Export | Analyze, 3D, Save, Editing | Import, Trace, AI, Create, Text, Sign |
+| Make it manufacturable | Set material and thickness | Physical layer has material and thickness | Editing (layers) | Text, Create, Save | Import, Trace, AI, 3D, Export, Analyze |
+| Check it can be cut | Run cutability analysis | Analysis has run and findings are grouped | Analyze | Editing, Save | Import, Trace, AI, 3D, Export, Create, Text, Sign |
+| See it in 3D | Open the physical preview | Preview rendered, or an explicit unavailable state | 3D | Save | Import, Trace, AI, Create, Text, Sign, **Editing**, Analyze, Export |
+| Export the result | Export SVG or DXF | Export written, or an explicit failure | Export | Save, 3D | Import, Trace, AI, Create, Text, Sign, Editing, Analyze |
 
 Accepted AI geometry passes the same import, editing, and cutability
 validation as manual geometry — guidance never routes around a check.
@@ -380,12 +419,34 @@ real module and real configuration both pass, matching
 
 ### 8. Owner-observed ten-minute fixture set
 
-G0 defines, without producing, the fixture the owner-observed usability
-session (G6) will use: a real multi-layer `.laserx` project capable of
-exercising all three first-run goals within the session, following the same
+A single saved project cannot exercise clean first launch, blank-canvas
+creation, vector import, raster tracing, broken-file recovery, or the optional
+AI path — those are different starting states, not different projects. G0
+defines the actual **set**, without producing any of it; producing and wiring
+it is G1/G6 work. Each entry, once produced, follows the same
 provenance-recording convention the M14 G6 owner retest already established
-(exact byte size and SHA-256 recorded alongside the fixture). Producing this
-fixture is G1/G6 work.
+(exact byte size and SHA-256 recorded alongside the fixture).
+
+| Fixture | Starting state | Success signal | Failure/recovery route | Exercises |
+|---|---|---|---|---|
+| Clean install state | No recent projects, no persisted onboarding preferences, no autosave/recovery snapshot | The three goal choices are presented, not a blank professional workspace | n/a — this *is* the first-launch state | Clean first launch |
+| Deterministic first-sign inputs | Empty document | Stock size, material, and text content specified in the fixture produce the same document every run | n/a (deterministic, no AI) | Create My First Sign |
+| Representative SVG | A real multi-object SVG with layers | Import commits with expected units/scale/findings | A deliberately malformed variant returns to *Choose the file* without committing | Import My Own Design (vector) |
+| Representative DXF | A real multi-entity DXF | Same as SVG | Same as SVG | Import My Own Design (vector) |
+| Raster image (PNG or JPEG) | A real photo/scan of sign artwork | Trace accepted, editable paths produced | A degenerate image (blank/solid) is rejected without producing empty paths | Import My Own Design (raster) |
+| Large-finding broken DXF | A file with a large finding count (hundreds+) | Findings are summarized into a small number of grouped categories, not a raw entity-level list | Findings remain grouped even when none are safely auto-fixable | Repair what can be fixed |
+| Multi-layer preview/export project | A real multi-layer `.laserx` project (already used for M14 G6 owner retest) | 3D preview renders exact thickness/holes/layer order; export writes real SVG/DXF | An explicit graceful-unavailable state if WebGL is absent | See it in 3D, Export the result |
+| AI unavailable | `ai.connection.status !== "connected"` (no credential configured) | The AI goal is presented as unavailable, never as broken; manual paths remain fully usable | n/a | Describe What I Want With AI — Optional (disconnected) |
+| AI connected (deterministic/stubbed) | `ai.connection.status === "connected"` via the existing test-mock credential path (`LASERX_TEST_AI_MOCK`/`LASERX_TEST_AI_CREDENTIAL_MODE`, defined in `apps/desktop/tests/e2e/helpers.ts` and already exercised by `ai-generation.spec.ts`) | A concept is generated and accepted deterministically, without a live provider call | A stubbed failure response is shown as an explicit failure, not a hang | Describe What I Want With AI — Optional (connected) |
+
+For each owner-observed session: the fixture defines the **starting state**,
+the session records whether the **success signal** was reached, whether any
+**failure/recovery route** was needed and whether it worked, and whether the
+primary path was completed within the **ten-minute observation target**. A
+usability observation (a control that was hard to find or understand) is
+explicitly valid session output, not a defect report — this is a locked
+requirement from Issue #45's checklist convention (§ owner retest files),
+carried forward rather than reinvented for M15.
 
 ### 9. Accessibility lock
 
