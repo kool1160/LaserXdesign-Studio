@@ -214,6 +214,8 @@ CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "planning/review ChatGPT",
             "Every agent must read GitHub Issues #44 and #37",
             "## M15 gate order",
+            "## M14 completion record",
+            "M14 is complete and accepted.",
         ),
         "docs/status/CURRENT.md",
     ),
@@ -226,8 +228,18 @@ CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "stop at `AWAITING_REVIEW` or `BLOCKED`;",
             "There is no automatic routine merge.",
             "## Current M15 queue",
+            "### G0 — guided-workflow architecture and first-run contract",
+            "### G6 — packaged accessibility and first-session validation",
         ),
         "docs/SOL_EXECUTION_PLAN.md",
+    ),
+    (
+        "docs/FILE_FORMATS.md",
+        (
+            "Native DWG is out of scope.",
+            "Do not rename a DXF file to `.dwg` or claim\nequivalence.",
+        ),
+        "docs/FILE_FORMATS.md",
     ),
     (
         "docs/milestones/M15-guided-onboarding-learn-mode.md",
