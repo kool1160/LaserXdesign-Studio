@@ -6,39 +6,54 @@
 
 - Active issue: **#45**
 - Active milestone specification: `docs/milestones/M15-guided-onboarding-learn-mode.md`
-- Current slice: **G0 — guided-workflow architecture and first-run contract**
-- Implementation model: **SOL High** — owner-selected OpenAI coding model at High reasoning in the Codex coding workspace
+- Current slice: **G1 — Codex-only governance reset and guided-shell activation**
+- Implementation surface: **Codex**
+- Implementation model: **selected by the owner inside Codex for each session; the repository does not choose or auto-route a model**
 - Planning, orchestration, exact-head review, status, holds, and advancement: **planning/review ChatGPT**
 - Owner authority: product direction, model choice, hands-on acceptance, and advancement
-- Claude / Anthropic: **held; no paid Anthropic work without a new explicit owner authorization**
+- Claude, Anthropic, Fable, and other external paid implementation routes: **removed from active operation; no automatic or implied use**
 
-The owner restored the original operator-command workflow on **2026-08-06**:
+The owner explicitly reset the operating model on **2026-08-06**:
 
-> Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence. The owner receives the verdict and next command.
+> Chat decides. GitHub remembers. Codex executes. The owner chooses the Codex model. Pull requests hold the evidence. External paid models do not self-start, continue, review, or repair LaserX.
 
-Only `Continue LaserX` goes to the SOL High implementation thread. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the planning/review chat.
+Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the planning/review chat.
 
-## Current PR state
+## M15 G0 completion record
 
 - Pull request: **#67 — M15 G0 guided-workflow architecture and first-run contract**
-- Exact head: `9cf4458bef5d8cc39814e6b9e94de221fa8228e0`
-- PR state: open, draft, mergeable, unmerged
-- Implementation state: **AWAITING_REVIEW**
-- Exact-head CI: **12 pull-request workflows completed successfully**
-- G1 work: not begun
-- Next valid command: **`Check LaserX`**
+- Reviewed head: `f1109191676766dfeaa833ec327f842bd6eab71b`
+- Squash merge: `90946f7db42ac2cc2be3532bf49bdcdfe0d885ed`
+- Result: **accepted and merged**
+- Exact-head evidence included the canonical repository guard, `pnpm verify`, 312 desktop tests, packaged Windows build, 36 packaged E2E tests, and artifact upload on the reviewed head.
+- Historical milestone workflows that failed or were cancelled before checkout during the GitHub Actions incident were not treated as product-code failures.
 
-No implementation agent should touch PR #67 merely because it is green. The planning/review chat must first issue an exact-head `READY`, `REPAIR`, or `BLOCKED` verdict.
+## Active G1 first task — governance and CI normalization
 
-If the verdict is `REPAIR`, the owner sends `Continue LaserX` to SOL High. If the verdict is `READY`, the owner sends `Advance LaserX` to the planning/review chat.
+Before visible G1 onboarding implementation begins, Codex must perform one bounded governance repair from latest `main`:
+
+1. Make **Codex** the only active implementation surface.
+2. Remove fixed model names from active routing; the owner selects the model inside Codex.
+3. Remove Claude, Anthropic, and Fable from active implementation, review, continuation, and fallback paths. Historical ADRs may remain clearly superseded for audit history, but they carry no execution authority.
+4. Rename or replace model-specific active execution documents so the active contract is Codex-based rather than SOL-, Claude-, Anthropic-, or Fable-based.
+5. Update `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/WORKSTREAM_OWNERSHIP.md`, active execution-plan references, and repository-guard regression coverage to agree.
+6. Restore the intended CI rule: the active gate names its required checks. Completed historical milestone workflows are not permanent independent merge blockers on every later PR.
+7. Consolidate required PR verification around one policy/guard check and one canonical exact-head verification path, with focused packaged Windows checks only when the active gate or changed paths require them. Release/signing workflows remain release-gate checks.
+8. Preserve real regression coverage; do not weaken product, geometry, security, units, persistence, packaging, or accessibility tests.
+9. Do not begin visible onboarding UI, persistence-store implementation, IPC, grouped repair, or later G1 product work in this governance pass.
+10. Open one focused draft PR, record exact verification, and stop at `AWAITING_REVIEW`.
 
 ## One repo, one active gate, one next command
 
-- M15 G0 is the only active implementation gate.
-- G1 through G6 remain held.
+- G0 is merged and closed.
+- The governance/CI normalization task above is the only active implementation target.
+- Visible G1 product implementation is held until that governance PR is reviewed, merged, and explicitly advanced.
+- G2 through G6 remain held.
 - M16 and later milestones remain blocked.
-- No background agent, heartbeat, scheduled polling, or self-waking implementation session is authorized.
-- No automatic routine merge is authorized. `Advance LaserX` is required after `READY`.
+- No background agent, heartbeat, scheduled polling, self-waking session, or paid external-model continuation is authorized.
+- No implementation agent merges, advances, or starts another task on its own.
+- One `Continue LaserX` command authorizes one bounded Codex pass, then Codex stops.
+- Next valid command: **`Continue LaserX`**
 
 ## Mandatory product interpretation
 
@@ -58,42 +73,22 @@ Locked interpretation:
 - premium experience and generous pricing are product requirements;
 - research reduces uncertainty but does not authorize wholesale merges or establish priority by itself.
 
-## Active M15 G0 contract
-
-G0 is architecture and contract lock only. It must make later user-facing slices coherent without beginning a broad visual rewrite.
-
-Required outcome:
-
-- inventory the current first-launch, empty-state, create, vector-import, raster-trace, repair, 3D, save, and export flows;
-- record a guided-workflow state-machine boundary separated from feature logic and authoritative project state;
-- lock **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
-- define a contextual-control matrix and one clear primary action per guided step whenever practical;
-- define skip, back, resume, replay, cancel, failure, and recovery behavior that cannot trap the user;
-- define local/privacy-respecting first-session evidence and the owner-observed ten-minute fixture set;
-- lock keyboard, focus, high-DPI, reduced-motion, screen-reader, and non-color-only guidance requirements;
-- document boundaries against authoritative geometry, cutability, save, export, security, and physical-preview systems;
-- add an ADR and mechanical checks where they genuinely prevent drift;
-- make only the smallest implementation or harness change needed to prove the architecture;
-- stop at `AWAITING_REVIEW` before visible G1 implementation.
-
-G0 does not authorize onboarding UI, the persistence store, grouped repair implementation, material expansion, process profiles, export profiles, new AI capability, licensing, public beta, CAD/CAM, or machine control.
-
 ## M15 gate order
 
-1. **G0 — guided-workflow architecture and first-run contract** — active, awaiting review
-2. **G1 — first-launch goal chooser and resumable guidance shell** — held
+1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted
+2. **G1 — first-launch goal chooser and resumable guidance shell** — active, beginning with governance/CI normalization
 3. **G2 — Create My First Sign guided vertical slice** — held
 4. **G3 — vector import and raster trace contextual guidance** — held
 5. **G4 — grouped repair decisions and Fix safe problems workflow** — held
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held
 
-Each gate requires `Check LaserX`, a `READY` verdict, and explicit owner `Advance LaserX` before the next gate is activated. Activation does not start implementation; a later `Continue LaserX` does.
+Each gate requires exact-head review and explicit owner advancement before the next gate becomes active. Activation does not authorize implementation beyond the one bounded task recorded here.
 
 ## Open planning and maintenance PRs
 
-- **PR #69** — workflow-first M15/M22 planning amendment — remains draft and held. It does not activate G1. Before merge, its execution-plan references must be migrated from the superseded Claude plan to `docs/SOL_EXECUTION_PLAN.md` and reviewed under the restored command workflow.
-- **PR #68** — grouped dependency update — remains held outside active M15 G0. Do not mix it into PR #67.
+- **PR #69** — workflow-first M15/M22 planning amendment — remains draft and held. It must be updated to Codex-only terminology before review or merge.
+- **PR #68** — grouped dependency update — remains held outside active M15 work.
 
 ## M14 completion record
 
@@ -101,4 +96,4 @@ M14 is complete and accepted. Issue #30 contains the exact component merges, Win
 
 ## Private-testing boundary
 
-LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in M15 G0.
+LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in the active G1 governance pass.
