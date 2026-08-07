@@ -58,6 +58,7 @@ import {
   openAiAccountPageRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
+  onboardingActionRequestSchema,
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -92,10 +93,21 @@ let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
 let handlingFatalFailure = false;
+let menuGuidanceSurface:
+  | DesktopState["onboarding"]["workflow"]["surface"]
+  | undefined;
 let rejectNextGetState =
   process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
 function emitState(state: DesktopState): void {
+  const guidanceSurface =
+    state.onboarding.workflow.status === "active"
+      ? state.onboarding.workflow.surface
+      : null;
+  if (menuGuidanceSurface !== guidanceSurface) {
+    menuGuidanceSurface = guidanceSurface;
+    buildMenu(guidanceSurface);
+  }
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.stateChanged, state);
     mainWindow.setTitle(
@@ -585,9 +597,18 @@ function registerIpc(): void {
     const validated = resolveRecoveryRequestSchema.parse(request);
     return requireController().resolveRecovery(validated);
   });
+  ipcMain.handle(IPC_CHANNELS.onboardingAction, (_event, request: unknown) => {
+    const validated = onboardingActionRequestSchema.parse(request);
+    return requireController().onboardingAction(validated);
+  });
 }
 
-function buildMenu(): void {
+function buildMenu(
+  guidanceSurface: DesktopState["onboarding"]["workflow"]["surface"],
+): void {
+  const guidanceActive = guidanceSurface !== null;
+  const importAvailable = !guidanceActive || guidanceSurface === "import";
+  const exportAvailable = !guidanceActive || guidanceSurface === "output";
   const template: MenuItemConstructorOptions[] = [
     {
       label: "File",
@@ -595,15 +616,21 @@ function buildMenu(): void {
         {
           label: "New Project",
           accelerator: "CmdOrCtrl+N",
+          enabled: !guidanceActive,
+          visible: !guidanceActive,
           click: () => void requireController().newProject(),
         },
         {
           label: "Open…",
           accelerator: "CmdOrCtrl+O",
+          enabled: !guidanceActive,
+          visible: !guidanceActive,
           click: () => void requireController().openProject(),
         },
         {
           label: "Import SVG/DXF...",
+          enabled: importAvailable,
+          visible: importAvailable,
           click: () =>
             void requireController().previewVectorImport({
               unitlessDxfUnit: null,
@@ -611,6 +638,8 @@ function buildMenu(): void {
         },
         {
           label: "Trace PNG/JPEG...",
+          enabled: importAvailable,
+          visible: importAvailable,
           click: () =>
             void requireController().previewRasterTrace({
               operationId: randomUUID(),
@@ -646,11 +675,15 @@ function buildMenu(): void {
         { type: "separator" },
         {
           label: "Export SVG...",
+          enabled: exportAvailable,
+          visible: exportAvailable,
           click: () =>
             void requireController().exportVector({ format: "svg" }),
         },
         {
           label: "Export DXF...",
+          enabled: exportAvailable,
+          visible: exportAvailable,
           click: () =>
             void requireController().exportVector({ format: "dxf" }),
         },
@@ -853,7 +886,8 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     registerIpc();
-    buildMenu();
+    menuGuidanceSurface = null;
+    buildMenu(null);
     await createWindow();
   });
 }

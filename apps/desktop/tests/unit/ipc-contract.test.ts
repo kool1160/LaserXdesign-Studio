@@ -10,6 +10,7 @@ import {
   editorActionRequestSchema,
   fontCatalogSchema,
   openRecentRequestSchema,
+  onboardingActionRequestSchema,
   rasterTraceRequestSchema,
   setManufacturingSettingsRequestSchema,
   setDisplayUnitRequestSchema,
@@ -22,6 +23,43 @@ import {
 } from "../../electron/ipc-contract.js";
 
 describe("typed IPC validation", () => {
+  it("rejects unscoped and malformed onboarding actions", () => {
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "start",
+        goal: "create-first-sign",
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "advance",
+        expectedStepId: "resolve-findings",
+        runToken: "run-1",
+        completion: {
+          kind: "resolution",
+          trigger: "user",
+          counts: {
+            safeFixableCount: 0,
+            needsDecisionCount: 1,
+            blockingCount: 0,
+          },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "advance",
+        completion: { kind: "step" },
+      }).success,
+    ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "start",
+        goal: "make-anything",
+      }).success,
+    ).toBe(false);
+  });
+
   it("keeps vector paths and file contents out of renderer requests", () => {
     expect(
       vectorImportPreviewRequestSchema.safeParse({
@@ -282,6 +320,26 @@ describe("typed IPC validation", () => {
       recovered: false,
       recentProjects: [],
       recovery: null,
+      onboarding: {
+        preferences: {
+          schemaVersion: 1,
+          completedGoals: [],
+          dismissed: false,
+          activeWorkflow: null,
+        },
+        workflow: {
+          status: "idle",
+          goal: null,
+          runToken: null,
+          currentStepId: null,
+          surface: null,
+          completedStepIds: [],
+          skippedStepIds: [],
+          failureReason: null,
+        },
+        resumeEligibility: "none",
+        recoveryNotice: null,
+      },
       interchange: { exportSummary: null },
       production: { preview: null, exportSummary: null },
       raster: { job: null, preview: null },

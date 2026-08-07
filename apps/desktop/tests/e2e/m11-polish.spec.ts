@@ -51,6 +51,8 @@ test("packaged M11 shell is discoverable and stable at common display sizes", as
   const launched = await launchPackaged();
   try {
     const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-create-first-sign").click();
+    await page.getByTestId("guidance-exit").click();
     await expect(page.getByTestId("viewport")).toBeVisible();
     await expect(page.locator(".brand-mark")).toBeVisible();
     await expect(page.getByTestId("workflow-navigation")).toBeVisible();
@@ -154,6 +156,8 @@ test("packaged M11 shell remains usable at 150 percent scaling", async () => {
   });
   try {
     const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-create-first-sign").click();
+    await page.getByTestId("guidance-exit").click();
     await expect(page.getByTestId("viewport")).toBeVisible();
     await setContentSize(launched, 1366, 768);
     await expectShellFits(page);

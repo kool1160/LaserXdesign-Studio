@@ -38,6 +38,11 @@ import { SignToolsPanel } from "../components/SignToolsPanel.js";
 import { AiGenerationPanel } from "../components/AiGenerationPanel.js";
 import { PhysicalPreviewErrorBoundary } from "../features/physical-preview/PhysicalPreviewErrorBoundary.js";
 import {
+  guidedGoal,
+  guidedStep,
+} from "../features/onboarding/guidedWorkflowDefinitions.js";
+import { isStepSkippable } from "../features/onboarding/guidedWorkflowState.js";
+import {
   centerGuideCommand,
   displayScalar,
   exactBoundsCommand,
@@ -602,6 +607,32 @@ export function App() {
     state.editor.rasterTracePreview === null &&
     state.editor.signToolPreview === null &&
     state.editor.aiConceptPreview === null;
+  const guidance = state.onboarding.workflow;
+  const guidanceActive = guidance.status === "active";
+  const guidanceGoal = guidance.goal === null ? null : guidedGoal(guidance.goal);
+  const guidanceStep =
+    guidance.goal === null || guidance.currentStepId === null
+      ? null
+      : guidedStep(guidance.goal, guidance.currentStepId);
+  const guidanceStepIndex =
+    guidanceGoal === null || guidance.currentStepId === null
+      ? -1
+      : guidanceGoal.definition.stepIds.indexOf(guidance.currentStepId);
+  const guidanceCanSkip =
+    guidanceGoal !== null &&
+    isStepSkippable(guidanceGoal.definition, guidance.currentStepId);
+  const guidanceResolutionCounts = {
+    safeFixableCount: 0,
+    needsDecisionCount: cutability?.warningCount ?? 0,
+    blockingCount: cutability?.errorCount ?? 0,
+  };
+  const showGoalChooser =
+    workspaceIsEmpty &&
+    guidance.status === "idle" &&
+    !state.onboarding.preferences.dismissed;
+  const showResumeGuidance =
+    guidance.status === "idle" &&
+    state.onboarding.resumeEligibility === "available";
 
   const updateActiveLayerManufacturing = (
     updates: Partial<ManufacturingLayerMetadata>,
@@ -695,7 +726,10 @@ export function App() {
   };
 
   return (
-    <div className="app-shell" aria-busy={busy}>
+    <div
+      className={`app-shell${guidanceActive ? ` guidance-active guidance-${guidanceStep?.surface ?? "create"}` : ""}`}
+      aria-busy={busy}
+    >
       <a className="skip-link" href="#design-workspace">
         Skip to design workspace
       </a>
@@ -735,12 +769,14 @@ export function App() {
         <div className="command-group project-command-group">
           <span className="command-group-label">Project</span>
           <div className="command-group-actions">
+            <div className="project-replacement-controls" hidden={guidanceActive}>
             <button type="button" className="command-primary" disabled={busy} title="Start a new LaserX project" onClick={() => void run(() => window.laserx.newProject())}>
               <span className="command-icon" aria-hidden="true">+</span><span>New Design</span>
             </button>
             <button type="button" disabled={busy} title="Open an existing .laserx project" onClick={() => void run(() => window.laserx.openProject())}>
               <span className="command-icon" aria-hidden="true">↗</span><span>Open Project</span>
             </button>
+            </div>
             <button type="button" disabled={busy} title="Save this .laserx project" onClick={() => void run(() => window.laserx.saveProject())}>
               <span className="command-icon" aria-hidden="true">↓</span><span>Save</span>
             </button>
@@ -756,27 +792,37 @@ export function App() {
             <button type="button" disabled={busy || !state.editor.clipboardHasContent} title="Paste (Ctrl+V)" aria-keyshortcuts="Control+V" onClick={() => dispatchEditorAction({ type: "clipboard.paste" })}>Paste</button>
           </div>
         </div>
-        <div className="command-group artwork-command-group">
-          <span className="command-group-label">Bring in artwork</span>
-          <div className="command-group-actions">
-            <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
-              <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
-            </button>
-            <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
-              <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
-            </button>
+        {(!guidanceActive || guidance.surface === "import") && (
+          <div className="command-group artwork-command-group">
+            <span className="command-group-label">Bring in artwork</span>
+            <div className="command-group-actions">
+              <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
+                <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
+              </button>
+              <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
+                <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="command-group output-command-group">
-          <span className="command-group-label">Output</span>
-          <div className="command-group-actions">
-            <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
-            <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
-            <button type="button" data-testid="open-physical-preview" disabled={busy} title="Open a read-only 3D preview of the physical layers" onClick={() => void openPhysicalPreview()}>
-              <span className="command-icon" aria-hidden="true">▦</span><span>3D Preview</span>
-            </button>
+        )}
+        {(!guidanceActive || guidance.surface === "preview" || guidance.surface === "output") && (
+          <div className="command-group output-command-group">
+            <span className="command-group-label">Output</span>
+            <div className="command-group-actions">
+              {(!guidanceActive || guidance.surface === "output") && (
+                <>
+                  <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
+                  <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
+                </>
+              )}
+              {(!guidanceActive || guidance.surface === "preview") && (
+                <button type="button" data-testid="open-physical-preview" disabled={busy} title="Open a read-only 3D preview of the physical layers" onClick={() => void openPhysicalPreview()}>
+                  <span className="command-icon" aria-hidden="true">▦</span><span>3D Preview</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         <span className="shell-badge">Precision workspace</span>
       </nav>
 
@@ -828,6 +874,99 @@ export function App() {
             Dismiss
           </button>
         </div>
+      )}
+
+      {state.onboarding.recoveryNotice !== null && (
+        <div className="guidance-notice" role="status" data-testid="guidance-recovery-notice">
+          {state.onboarding.recoveryNotice}
+        </div>
+      )}
+
+      {guidanceActive && guidanceGoal !== null && guidanceStep !== null && guidance.runToken !== null && (
+        <section className="guidance-shell" aria-labelledby="guidance-step-title" data-testid="guidance-shell">
+          <div className="guidance-orientation">
+            <span className="eyebrow">{guidanceGoal.title}</span>
+            <strong>
+              Step {String(guidanceStepIndex + 1)} of {String(guidanceGoal.steps.length)}
+            </strong>
+            <progress max={guidanceGoal.steps.length} value={guidanceStepIndex + 1} />
+          </div>
+          <div className="guidance-copy">
+            <h2 id="guidance-step-title">{guidanceStep.title}</h2>
+            <p>{guidanceStep.description}</p>
+            {guidanceStep.id === "resolve-findings" && cutability === null && (
+              <small>Run the design check before continuing.</small>
+            )}
+          </div>
+          <div className="guidance-actions">
+            {guidanceStepIndex > 0 && (
+              <button
+                type="button"
+                className="quiet"
+                disabled={busy}
+                data-testid="guidance-back"
+                onClick={() => void run(() => window.laserx.onboardingAction({
+                  type: "back",
+                  expectedStepId: guidanceStep.id,
+                  runToken: guidance.runToken as string,
+                }))}
+              >
+                Back
+              </button>
+            )}
+            {guidanceCanSkip && (
+              <button
+                type="button"
+                className="quiet"
+                disabled={busy}
+                data-testid="guidance-skip"
+                onClick={() => void run(() => window.laserx.onboardingAction({
+                  type: "skip",
+                  expectedStepId: guidanceStep.id,
+                  runToken: guidance.runToken as string,
+                }))}
+              >
+                Skip
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={
+                busy ||
+                (guidanceStep.id === "resolve-findings" &&
+                  (cutability === null || guidanceResolutionCounts.blockingCount > 0))
+              }
+              data-testid="guidance-continue"
+              onClick={() => void run(() => window.laserx.onboardingAction({
+                type: "advance",
+                expectedStepId: guidanceStep.id,
+                runToken: guidance.runToken as string,
+                completion:
+                  guidanceStep.id === "resolve-findings"
+                    ? {
+                        kind: "resolution",
+                        trigger: "user",
+                        counts: guidanceResolutionCounts,
+                      }
+                    : { kind: "step" },
+              }))}
+            >
+              Continue
+            </button>
+            <button
+              type="button"
+              className="guidance-exit"
+              disabled={busy}
+              data-testid="guidance-exit"
+              onClick={() => void run(() => window.laserx.onboardingAction({
+                type: "exit",
+                runToken: guidance.runToken as string,
+              }))}
+            >
+              Exit guidance
+            </button>
+          </div>
+        </section>
       )}
 
       <div className="content-grid">
@@ -1700,7 +1839,7 @@ export function App() {
             <AiGenerationPanel state={state} busy={busy} run={run} />
           </div>
 
-          <section>
+          <section id="workflow-document">
             <span className="section-label">New exact document</span>
             <form className="document-form" onSubmit={createExactDocument}>
               <label>
@@ -1748,7 +1887,7 @@ export function App() {
             </form>
           </section>
 
-          <section>
+          <section id="workflow-display">
             <span className="section-label">Display units</span>
             <div className="segmented" aria-label="Display units">
               {(["millimeters", "inches"] as const).map((displayUnit) => (
@@ -1776,7 +1915,7 @@ export function App() {
             </div>
           </section>
 
-          <section>
+          <section id="workflow-viewport">
             <span className="section-label">Viewport & snapping</span>
             <div className="preference-list">
               {([
@@ -1945,7 +2084,80 @@ export function App() {
             }
             onEditorAction={dispatchEditorAction}
           />
-          {workspaceIsEmpty && (
+          {showGoalChooser && (
+            <section className="goal-chooser" aria-labelledby="goal-chooser-title" data-testid="goal-chooser">
+              <img src="./laserx-mark.svg" alt="" />
+              <span className="eyebrow">Welcome to LaserX</span>
+              <h1 id="goal-chooser-title">What would you like to make?</h1>
+              <p>Choose a goal. LaserX will keep the important controls in view and save your place.</p>
+              {showResumeGuidance && state.onboarding.preferences.activeWorkflow !== null && (
+                <button
+                  type="button"
+                  className="resume-guidance"
+                  disabled={busy}
+                  data-testid="resume-guidance"
+                  onClick={() => void run(() => window.laserx.onboardingAction({ type: "resume" }))}
+                >
+                  Resume {guidedGoal(state.onboarding.preferences.activeWorkflow.goal).title}
+                </button>
+              )}
+              <div className="goal-options">
+                {([
+                  "create-first-sign",
+                  "import-own-design",
+                  "describe-with-ai",
+                ] as const).map((goalId) => {
+                  const option = guidedGoal(goalId);
+                  const unavailable =
+                    goalId === "describe-with-ai" &&
+                    state.ai.connection.status !== "connected";
+                  return (
+                    <button
+                      type="button"
+                      key={goalId}
+                      disabled={busy || unavailable}
+                      data-testid={`start-${goalId}`}
+                      onClick={() => void run(() => window.laserx.onboardingAction({
+                        type: "start",
+                        goal: goalId,
+                      }))}
+                    >
+                      <strong>{option.title}</strong>
+                      <span>{option.description}</span>
+                      {unavailable && <small>Optional — connect AI to use this path.</small>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+          {showResumeGuidance &&
+            !showGoalChooser &&
+            state.onboarding.preferences.activeWorkflow !== null && (
+              <section
+                className="resume-guidance-card"
+                aria-labelledby="resume-guidance-title"
+                data-testid="resume-guidance-card"
+              >
+                <span className="eyebrow">Saved guidance</span>
+                <h2 id="resume-guidance-title">
+                  Continue where you left off
+                </h2>
+                <p>
+                  Resume {guidedGoal(state.onboarding.preferences.activeWorkflow.goal).title} against this exact project.
+                </p>
+                <button
+                  type="button"
+                  className="resume-guidance"
+                  disabled={busy}
+                  data-testid="resume-guidance"
+                  onClick={() => void run(() => window.laserx.onboardingAction({ type: "resume" }))}
+                >
+                  Resume guidance
+                </button>
+              </section>
+            )}
+          {workspaceIsEmpty && !showGoalChooser && !guidanceActive && (
             <section className="workspace-welcome" aria-labelledby="workspace-welcome-title" data-testid="workspace-welcome">
               <img src="./laserx-mark.svg" alt="" />
               <span className="eyebrow">Ready to design</span>

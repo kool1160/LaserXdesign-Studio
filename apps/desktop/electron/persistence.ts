@@ -15,6 +15,8 @@ import {
 } from "@laserx/project-format";
 import { z } from "zod";
 
+import type { OnboardingPreferences } from "../src/features/onboarding/guidedWorkflowState.js";
+
 const recentProjectSchema = z.strictObject({
   filePath: z.string(),
   name: z.string().min(1),
@@ -26,6 +28,30 @@ const recoveryEnvelopeSchema = z.strictObject({
   originalPath: z.string().nullable(),
   project: z.unknown(),
 });
+const guidedGoalSchema = z.enum([
+  "create-first-sign",
+  "import-own-design",
+  "describe-with-ai",
+]);
+const onboardingWorkflowSnapshotSchema = z.strictObject({
+  goal: guidedGoalSchema,
+  definitionVersion: z.number().int().positive(),
+  currentStepId: z.string().trim().min(1),
+  completedStepIds: z.array(z.string().trim().min(1)),
+  skippedStepIds: z.array(z.string().trim().min(1)),
+  projectBinding: z.strictObject({
+    projectId: z.string().trim().min(1),
+    documentId: z.string().trim().min(1),
+    fingerprint: z.string().trim().min(1),
+  }),
+});
+const onboardingPreferencesSchema: z.ZodType<OnboardingPreferences> =
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    completedGoals: z.array(guidedGoalSchema),
+    dismissed: z.boolean(),
+    activeWorkflow: onboardingWorkflowSnapshotSchema.nullable(),
+  });
 
 export interface RecentProject {
   filePath: string;
@@ -118,5 +144,38 @@ export class RecoveryStore implements RecoveryStorePort {
 
   public async remove(): Promise<void> {
     await unlink(this.filePath).catch(() => undefined);
+  }
+}
+
+export interface OnboardingPreferencesStorePort {
+  load(): Promise<OnboardingPreferences | null>;
+  save(preferences: OnboardingPreferences): Promise<void>;
+}
+
+export class OnboardingPreferencesStore
+  implements OnboardingPreferencesStorePort
+{
+  public readonly filePath: string;
+
+  public constructor(userDataPath: string) {
+    this.filePath = join(userDataPath, "onboarding-preferences.json");
+  }
+
+  public async load(): Promise<OnboardingPreferences | null> {
+    try {
+      const parsed = onboardingPreferencesSchema.safeParse(
+        JSON.parse(await readFile(this.filePath, "utf8")) as unknown,
+      );
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  public async save(preferences: OnboardingPreferences): Promise<void> {
+    await atomicWriteJson(
+      this.filePath,
+      onboardingPreferencesSchema.parse(preferences),
+    );
   }
 }

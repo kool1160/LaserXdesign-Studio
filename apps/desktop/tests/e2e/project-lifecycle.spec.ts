@@ -168,6 +168,8 @@ test("malformed project open reports failure without presenting empty success", 
   const launched = await launchPackaged(directory, "discard");
   try {
     const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-create-first-sign").click();
+    await page.getByTestId("guidance-exit").click();
     const before = await page.evaluate(async () => window.laserx.getState());
     await page.getByRole("button", { name: "Open Project", exact: true }).click();
     await expect(page.getByTestId("error-message")).toContainText(

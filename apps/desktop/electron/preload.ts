@@ -25,6 +25,7 @@ import {
   openAiAccountPageRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
+  onboardingActionRequestSchema,
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -63,6 +64,7 @@ import {
   type SaveSignTemplateRequest,
   type SelectAiConceptRequest,
   type ResolveRecoveryRequest,
+  type OnboardingActionRequest,
   type SetDisplayUnitRequest,
   type SetManufacturingSettingsRequest,
   type SetViewportPreferencesRequest,
@@ -412,6 +414,12 @@ const api: LaserxDesktopApi = Object.freeze({
     const validated = resolveRecoveryRequestSchema.parse(request);
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.resolveRecovery, validated),
+    );
+  },
+  async onboardingAction(request: OnboardingActionRequest) {
+    const validated = onboardingActionRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.onboardingAction, validated),
     );
   },
   onStateChanged(listener: (state: DesktopState) => void) {
