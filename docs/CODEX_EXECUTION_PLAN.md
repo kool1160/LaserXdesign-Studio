@@ -30,16 +30,23 @@ Codex's bounded implementation authority permits branch pushes and draft-PR evid
 
 ## Active M15 G1 task
 
-The first G1 task is governance and CI normalization only:
+Implement **G1 — first-launch goal chooser and resumable guidance shell** from current `main`.
 
-- replace fixed-model and external-provider routing with this Codex contract;
-- make cross-chat write prohibition mechanically load-bearing;
-- consolidate required PR checks around Repository Guard and Canonical Verification;
-- make completed milestone workflows manual historical evidence;
-- run packaged Windows verification only when the active gate or changed product paths require it;
-- keep release and signing workflows as explicit release gates.
+Required scope:
 
-Visible onboarding UI, stores, IPC, grouped repair, and later G1 product work are excluded.
+- wire `guidedWorkflowState.ts` into the desktop application without moving authoritative project/geometry behavior into React;
+- implement the versioned, validated, atomic `OnboardingPreferences` store through the existing Electron desktop-state boundary;
+- present the three locked first-run goals on clean first launch / appropriate empty-workspace entry;
+- make the AI goal clearly optional and reuse existing provider-connected state;
+- implement the focused guidance shell with progress/orientation, Back, permitted Skip, and globally reachable Exit guidance;
+- enforce the contextual shell rules already locked by ADR 0027, including hidden project-replacement controls and Save availability when a document exists;
+- satisfy the app-layer run-token, project-replaced, project/document/fingerprint binding, transient-resume, and resolution-checkpoint obligations locked in ADR 0027;
+- add app-layer regression tests and packaged Windows E2E for first launch, exit, persistence/resume, project replacement, and non-trapping recovery;
+- open one focused draft PR and stop at `AWAITING_REVIEW`.
+
+Do not begin G2's complete Create My First Sign journey, G3 vector/raster guided integration, G4 grouped repair/Fix safe problems, G5 full Learn Mode content, or G6 owner usability validation. Do not add new AI capability, material expansion, process profiles, export profiles, licensing, public beta, CAD/CAM, or machine control.
+
+Historical completion note: during the now-merged governance-normalization prerequisite, the explicit boundary was: **Visible onboarding UI, stores, IPC, grouped repair, and later G1 product work are excluded.** That sentence is retained only as evidence of the completed PR #70 boundary; it is not the active G1 scope.
 
 ## `Continue LaserX` algorithm
 
