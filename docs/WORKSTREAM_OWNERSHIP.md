@@ -14,11 +14,11 @@ This assignment supersedes ADR 0026's Claude implementation assignment and the l
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G1 — first-launch goal chooser and resumable guidance shell**
-- Active task: wire the G0 state-machine contract into the real desktop shell, implement locked onboarding persistence, and prove first-launch/resume/recovery behavior.
-- G2 Create My First Sign, G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
+- Active slice: **G2 — Create My First Sign guided vertical slice**
+- Active task: turn the accepted G1 shell into one truthful deterministic first-sign path through real size/material, content, cutability, resolution, physical 3D, and save/export outcomes.
+- G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
 
-PR #70 completed and merged the governance/CI prerequisite at `84a3ffad4973ed8830c1e9fc2e1f026183a1a30c`. The current G1 product task begins from later current `main`, not from the PR #70 branch.
+PR #71 completed and merged G1 at `41e572a017a82f66f9586ab6e34253d914bc31e2` after exact-head READY review of `ae7c4e79509611a0704649d9c667886a98bcdcbd` with Repository Guard and Canonical Verification green.
 
 ## Owner authority
 
@@ -46,7 +46,9 @@ Codex is the sole active implementation surface. The repository does not choose 
 
 Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
 
-For active G1, Codex must follow ADR 0027's caller obligations for fresh run tokens, synchronous `project-replaced`, project/document/fingerprint snapshot binding, transient-step recovery, resolution-checkpoint completion rules, contextual controls, and non-mutation of authoritative project state.
+For active G2, Codex must use the existing authoritative document, manufacturing, cutability, physical-preview, save, and export systems. Guidance may coordinate those systems and observe their real success signals; it must not create a parallel project model, silently mutate geometry, bypass validation, or claim a step completed when the corresponding product outcome did not occur.
+
+Codex must preserve ADR 0027 and G1 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, and non-trapping Exit guidance.
 
 Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
