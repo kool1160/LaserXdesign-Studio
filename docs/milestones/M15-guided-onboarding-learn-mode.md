@@ -6,15 +6,9 @@
 
 Active issue: #45.
 
-Current slice: **G1 — first-launch goal chooser and resumable guidance shell**.
+Current slice: **G2 — Create My First Sign guided vertical slice**.
 
-G0 architecture/contract work is accepted and merged through PR #67. The G1 governance/CI prerequisite is accepted and merged through PR #70. PR #71's G1 implementation is merged and technically READY, but owner acceptance is pending because no explicit `Advance LaserX` was issued in the designated primary operations chat.
-
-## Governance hold
-
-PR #71 reviewed head `ae7c4e79509611a0704649d9c667886a98bcdcbd` was squash-merged as `41e572a017a82f66f9586ab6e34253d914bc31e2` before the primary operations chat completed its READY verdict and before the owner issued `Advance LaserX` there. Later records that claimed G1 acceptance and activated G2 were unauthorized and are superseded.
-
-G1 remains the current slice on an owner-acceptance hold. G2 is held. No implementation is authorized until the owner explicitly advances from the designated primary operations chat.
+G0 architecture/contract work is accepted and merged through PR #67. The G1 governance/CI prerequisite is accepted and merged through PR #70. The G1 first-launch/resumable guidance shell is accepted through PR #71 at `41e572a017a82f66f9586ab6e34253d914bc31e2` after the owner explicitly resolved the post-merge acceptance hold with `Advance LaserX` in the designated primary operations chat on 2026-08-07.
 
 ## User-visible outcome
 
@@ -30,7 +24,7 @@ LaserX should feel simple and obvious despite the depth of the underlying geomet
 - **Import My Own Design**
 - **Describe What I Want With AI — Optional**
 
-Guided steps highlight the exact control, explain what it does and why it matters, dim or hide unrelated areas, confirm completion, and preserve orientation between screens.
+Guided steps highlight the exact control, explain what it does and why it matters, dim or hide unrelated areas, confirm real completion, and preserve orientation between screens.
 
 ### Workflow-first interface
 
@@ -75,8 +69,8 @@ Safe eligibility requires deterministic rules and regression tests. Initial expe
 ## Approved implementation gates
 
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted.
-2. **G1 — first-launch goal chooser and resumable guidance shell** — merged, technically READY, awaiting owner acceptance.
-3. **G2 — Create My First Sign guided vertical slice** — held.
+2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted.
+3. **G2 — Create My First Sign guided vertical slice** — **active**.
 4. **G3 — vector import and raster trace contextual guidance** — held.
 5. **G4 — grouped repair decisions and Fix safe problems workflow** — held.
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held.
@@ -84,56 +78,99 @@ Safe eligibility requires deterministic rules and regression tests. Initial expe
 
 Each gate requires exact-head review and explicit owner advancement before the next gate becomes active. A merge alone does not advance a gate.
 
-## G0 completion record
+## Completion records
+
+### G0
 
 G0 locked the architecture and first-run contract in ADR 0027 and implemented the pure guided-workflow state machine without visible onboarding UI. PR #67 was accepted and merged at `90946f7db42ac2cc2be3532bf49bdcdfe0d885ed`.
 
+### G1 prerequisite
+
+PR #70 normalized Codex-only execution, primary-chat write authority, and required CI. It was accepted and merged at `84a3ffad4973ed8830c1e9fc2e1f026183a1a30c`.
+
+### G1
+
+PR #71 implemented the clean first-launch three-goal chooser, atomic onboarding preferences, resumable/exact-project guidance, contextual shell visibility, native-menu gating, project-replacement invalidation, and packaged recovery coverage.
+
+- Reviewed head: `ae7c4e79509611a0704649d9c667886a98bcdcbd`
+- Squash merge: `41e572a017a82f66f9586ab6e34253d914bc31e2`
+- Exact-head Repository Guard: success
+- Exact-head Canonical Verification: success, including packaged Windows verification
+- Result: accepted after READY review and explicit owner `Advance LaserX` in the designated primary operations chat on 2026-08-07
+- Governance note: the explicit owner command resolved the post-merge owner-acceptance hold; earlier premature G2 activation records remain superseded.
+
 ADR 0027 remains binding for the three goals, linear step definitions, contextual-control matrix, skip/back/resume/replay/cancel/failure semantics, run identity, project replacement, transient recovery, resolution checkpoint behavior, persistence shape, and non-mutation boundary.
 
-## G1 candidate record
+## Active G2 contract — Create My First Sign guided vertical slice
 
-PR #71 implements the clean first-launch chooser, atomic onboarding persistence, exact-project resume, transient recovery, contextual shell visibility, native-menu gating, project-replacement invalidation, and packaged regression coverage.
+G2 proves one complete deterministic user journey through real LaserX features. The guidance layer must coordinate and observe existing authoritative behavior; it must never create a parallel project model or treat a button press as proof that the underlying product outcome succeeded.
 
-- Reviewed implementation head: `ae7c4e79509611a0704649d9c667886a98bcdcbd`
-- Squash merge: `41e572a017a82f66f9586ab6e34253d914bc31e2`
-- Repository Guard: success
-- Canonical Verification: success, including packaged Windows verification
-- Post-merge technical verdict: **READY**
-- Gate acceptance: **pending explicit owner `Advance LaserX`**
+### Required journey
 
-## G1 contract and acceptance boundary
+1. **Start**
+   - Begin from **Create My First Sign** in the G1 chooser.
+   - Preserve current run token, resume, Back, Exit guidance, project-replacement, and contextual-control behavior.
 
-G1 implements the first real shell around the G0 contract. It must make first launch and interrupted guidance usable without prematurely implementing the later complete goal workflows.
+2. **Choose size and material**
+   - Use the existing document/stock-size path and existing manufacturing material/thickness state.
+   - The step completes only when real authoritative state satisfies the requirement.
+   - Do not add a material-catalog expansion in G2.
 
-Required outcome:
+3. **Add the sign content**
+   - Reuse existing Create, Text, and Sign capabilities.
+   - The step completes only after at least one real document object exists.
+   - No hidden geometry creation or duplicate editor state.
 
-- wire `apps/desktop/src/features/onboarding/guidedWorkflowState.ts` into the real desktop application through a bounded app-layer integration;
-- implement the versioned `OnboardingPreferences` persistence shape from ADR 0027 in Electron `userData`, using validated atomic writes and the existing desktop-state/security boundary;
-- on clean first launch or the appropriate empty-workspace state, present exactly **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
-- reuse existing AI connection state so the AI goal is clearly optional/unavailable rather than required or broken when no provider is connected;
-- render a focused guidance shell with current-step orientation, progress, Back where allowed, Skip only where `skippableStepIds` permits it, and a globally reachable **Exit guidance** action;
-- enforce the ADR 0027 contextual shell rules: project replacement controls hidden during active guidance, Save available when a document exists, and unrelated tool categories hidden or visually subordinate to the active guided stage;
-- mint a fresh unique run token for every `start`, `resume`, and `replay`;
-- derive persistence binding from the current project/document/fingerprint at snapshot time and validate it again at resume time;
-- dispatch `project-replaced` synchronously for true open-session replacement paths before replacement state is observable; do not dispatch it for `project.create-document`, Save, Save As, or ordinary edits;
-- recover transient steps to their nearest earlier stable step, preserve stable-step resume exactly, explain recovery to the user, and refuse stale/incompatible snapshots without mutating the document;
-- obey the resolution-checkpoint caller contract: unseen advance only when `shouldAutoCompleteResolution` is true and visible user Continue only when `canCompleteResolution` permits it;
-- add regression coverage for those caller obligations and packaged Windows E2E for clean first launch, start/exit, persistence/resume, project replacement, and at least one non-trapping recovery path;
-- preserve keyboard/focus/high-DPI/screen-reader/non-color-only conventions already locked for M15 even though the final accessibility validation gate is G6;
-- open one focused draft PR and stop at `AWAITING_REVIEW`.
+4. **Check the design**
+   - Run the existing cutability analysis.
+   - Only a current analysis matching the exact document may satisfy the checkpoint.
+   - Stale analysis must not unlock progression.
 
-The merged G1 candidate has satisfied this bounded contract technically. No additional G1 implementation is authorized while owner acceptance is pending.
+5. **Resolve findings**
+   - Keep the ADR 0027 resolution checkpoint.
+   - Auto-complete unseen only when `shouldAutoCompleteResolution` is true — nothing actionable remains.
+   - User Continue is allowed only when `canCompleteResolution` permits it — no blocking findings remain.
+   - G2 must not invent G4's safe-fix classifier, grouped-repair engine, batch repair, or **Fix safe problems** implementation.
 
-### G1 non-goals
+6. **Review the 3D result**
+   - Use the existing physical 3D preview system.
+   - The checkpoint completes only after a real rendered preview or a truthful explicit unavailable/failure state defined by the existing system.
+   - The 3D checkpoint remains required and non-skippable.
 
-G1 does not implement the complete Create My First Sign workflow (G2), vector/raster guided workflow integration (G3), grouped repair/Fix safe problems (G4), full Learn Mode content and replay UX (G5), or owner-observed first-session validation (G6).
+7. **Save and export**
+   - Use existing Save/Save As and SVG/DXF export behavior.
+   - Expose actual export success/failure.
+   - Mark the `create-first-sign` goal completed only after a real successful export.
 
-G1 does not add new AI capability, material expansion, process profiles, export profiles, licensing, public beta, analytics, CAD/CAM, or machine control.
+### G2 integration rules
+
+- Step progression must be tied to actual feature outcomes/state transitions. A generic Continue action must not falsely claim a required product action happened.
+- Existing security, IPC validation, geometry, units, undo/history, cutability, physical-preview, save, and export boundaries remain authoritative.
+- No hidden destructive edits.
+- No bypass of existing validation.
+- No change to native project/file semantics merely for tutorial convenience.
+- Save remains available when a document exists; Exit guidance remains globally reachable.
+- Resume must remain exact-project/document/fingerprint aware.
+- A true project replacement ends guidance before replacement state is observable to queued guidance work.
+
+### G2 verification
+
+Required evidence includes:
+
+- focused unit/integration tests for truthful completion signals and stale-state refusal;
+- packaged Windows E2E from clean first launch through a deterministic first sign, size/material, content, cutability, resolution, physical 3D, save/export, and completed guidance;
+- at least one packaged negative/non-trapping test proving a required checkpoint cannot be falsely advanced;
+- exact-head Repository Guard and Canonical Verification;
+- one focused draft PR that stops at `AWAITING_REVIEW`.
+
+### G2 non-goals
+
+No G3 vector/raster guided integration, G4 grouped repair/**Fix safe problems**, G5 full Learn Mode/replay content, G6 owner-observed usability validation, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics, CAD/CAM, or machine control.
 
 ## Milestone acceptance tests
 
 1. A clean first launch presents the three clear goal paths without exposing a blank unexplained workspace as the only choice.
-2. A user can complete a deterministic first sign through dimensions, text, material, cutability, physical 3D preview, save, and export.
+2. A user can complete a deterministic first sign through dimensions, text/content, material, cutability, physical 3D preview, save, and export.
 3. SVG/DXF import shows scale, units, layers, grouped conversion/repair findings, preview, and accept/cancel without exposing raster trace controls.
 4. PNG/JPEG import shows preprocessing and trace controls only after raster input is selected.
 5. A representative broken DXF with a large finding count is summarized into a small number of repair categories rather than an unstructured entity-level list.
