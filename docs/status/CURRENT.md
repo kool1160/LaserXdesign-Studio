@@ -6,7 +6,7 @@
 
 - Active issue: **#45**
 - Active milestone specification: `docs/milestones/M15-guided-onboarding-learn-mode.md`
-- Current slice: **G2 — Create My First Sign guided vertical slice**
+- Current slice: **G1 — first-launch goal chooser and resumable guidance shell**
 - Implementation surface: **Codex**
 - Implementation model: **selected by the owner inside Codex for each session; the repository does not choose or auto-route a model**
 - Planning, orchestration, exact-head review, status, holds, and advancement: **LaserX Design Studio primary operations chat only**
@@ -14,6 +14,23 @@
 - Claude, Anthropic, Fable, and other external paid implementation routes: **removed from active operation; no automatic or implied use**
 
 Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `Check LaserX`, `Status LaserX`, `Hold LaserX`, and `Advance LaserX` remain in the LaserX Design Studio primary operations chat. `docs/CHAT_AUTHORITY.md` is binding; other chats are read-only and fail closed when identity is uncertain.
+
+## G1 post-merge audit and governance hold
+
+PR **#71 — M15 G1 first-launch guidance shell** was squash-merged while the designated primary operations chat was performing `Check LaserX`.
+
+- Final implementation head: `ae7c4e79509611a0704649d9c667886a98bcdcbd`
+- Squash merge now on `main`: `41e572a017a82f66f9586ab6e34253d914bc31e2`
+- Required exact-head checks: **Repository Guard — success; Canonical Verification — success**, including packaged Windows verification
+- Post-merge exact-head audit: **READY**
+- Technical blockers: **none found within the bounded G1 contract**
+- Governance state: **not yet owner-accepted and not advanced**
+
+The merge occurred before the READY verdict and without an explicit owner `Advance LaserX` in the designated primary operations chat. The subsequent G2 activation records were also unauthorized and are superseded by this hold. A merge alone never advances a gate.
+
+**Hold:** no Codex implementation is authorized while owner acceptance is pending. Do not reopen G1 implementation, begin G2, alter the merged code, or treat the merge as implicit advancement.
+
+**Next valid command: `Advance LaserX`** in the LaserX Design Studio primary operations chat.
 
 ## M15 completion record so far
 
@@ -30,69 +47,63 @@ Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `C
 - Reviewed head: `4fff7f73542ca16b3e9548a9674a88e5883b518e`
 - Squash merge: `84a3ffad4973ed8830c1e9fc2e1f026183a1a30c`
 - Required exact-head checks: **Repository Guard — success; Canonical Verification — success**
-- Result: **accepted and merged**
+- Result: **accepted and merged on explicit owner `Advance LaserX`**
+- Codex-only execution, primary-chat write authority, and consolidated CI are active repository policy.
 
 ### G1 — first-launch goal chooser and resumable guidance shell
 
 - PR **#71**
-- Reviewed head: `ae7c4e79509611a0704649d9c667886a98bcdcbd`
+- Reviewed implementation head: `ae7c4e79509611a0704649d9c667886a98bcdcbd`
 - Squash merge: `41e572a017a82f66f9586ab6e34253d914bc31e2`
-- Required exact-head checks: **Repository Guard — success; Canonical Verification — success, including packaged Windows verification**
-- Review result: **READY**, no unresolved review threads
-- Result: **accepted and merged on explicit owner `Advance LaserX` on 2026-08-07**
-- Delivered: clean first-launch three-goal chooser, validated atomic onboarding persistence, exact-project resume/recovery, fresh run tokens, contextual shell visibility, native-menu gating, project-replacement invalidation, and packaged regression coverage.
+- Exact-head audit result: **READY**
+- Acceptance state: **awaiting explicit owner `Advance LaserX`**
 
-## Active G2 contract — Create My First Sign guided vertical slice
+## Accepted candidate result
 
-G2 makes the already-shipped `create-first-sign` shell truthful and complete as one deterministic end-to-end user workflow. It must use existing authoritative LaserX commands and state; guidance observes and coordinates real work rather than creating a parallel editor or claiming completion before the product action succeeds.
+The merged G1 candidate implements the bounded shell against ADR 0027:
 
-Required outcome:
+- a clean first launch presents exactly **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
+- AI remains optional and follows the existing provider connection state;
+- guidance has current-step orientation, progress, Back, definition-controlled Skip, and a global **Exit guidance** action;
+- `OnboardingPreferences` is versioned, validated, and atomically persisted in Electron `userData`;
+- snapshots bind to current project, document, and fingerprint and resume with a fresh run token;
+- wrong-project resume is not offered and does not destroy a valid saved snapshot;
+- stable stages resume exactly and transient stages recover to the nearest stable checkpoint with a notice;
+- true project replacement invalidates the live run, while `project.create-document`, Save, Save As, and ordinary edits do not;
+- representative hidden surfaces are suppressed across the renderer and native File menu during guidance, while Save and Exit guidance remain reachable;
+- the resolution checkpoint follows the G0 caller rules without inventing G4 safe-repair classification;
+- packaged Windows regression coverage proves clean launch, start/exit, persistence/resume, project replacement, contextual visibility, and non-trapping recovery.
 
-1. Start from **Create My First Sign** in the G1 chooser and keep the existing focused guidance shell, resume, Back, and Exit behavior.
-2. **Choose size and material:** require real stock/document dimensions and real manufacturing material/thickness state before the step can complete.
-3. **Add the sign content:** require at least one real object in the document before advancing; reuse existing Create, Text, and Sign capabilities.
-4. **Check the design:** invoke the existing cutability analysis and advance only from current, non-stale analysis for the exact document.
-5. **Resolve findings:** obey ADR 0027 exactly. Auto-complete unseen only when nothing is actionable. User Continue is allowed only when no blocking findings remain. G2 must not invent G4 safe-fix classification, grouped repair, or hidden repairs.
-6. **Review the 3D result:** require the existing physical preview to render successfully or present a truthful unavailable/failure route. This checkpoint is required and cannot be skipped.
-7. **Save or export:** use existing Save and SVG/DXF export behavior, expose real success/failure, and mark the guided goal completed only after a real successful export.
-8. Wire progression to actual feature outcomes/state changes instead of a generic manual Continue that can falsely mark a checkpoint complete.
-9. Preserve run-token protection, exact-project/document/fingerprint resume rules, synchronous project-replacement invalidation, contextual-control visibility, security boundaries, undo/history behavior, and non-mutation guarantees from G1/ADR 0027.
-10. Add focused unit/integration coverage plus packaged Windows E2E proving a deterministic first sign can move from first launch through size/material, content, cutability, resolution, physical 3D, save/export, and completed guidance.
-11. Add at least one packaged negative/non-trapping path proving a required checkpoint cannot be falsely advanced.
-12. Open one focused draft PR, record exact-head evidence, and stop at `AWAITING_REVIEW`.
-
-## G2 non-goals
-
-No G3 vector/raster guided integration, G4 grouped repair or **Fix safe problems**, G5 full Learn Mode/replay content, G6 owner-observed usability validation, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, CAD/CAM, or machine control.
+G1 does **not** implement the complete Create My First Sign journey, vector/raster guided automation, grouped repair, full Learn Mode, owner-observed usability validation, new AI capability, material expansion, process profiles, export profiles, licensing, public beta, CAD/CAM, or machine control.
 
 ## One repo, one active gate, one next command
 
-- G2 is the only active implementation target.
-- G3 through G6 remain held.
+- G1 is merged and technically READY but remains on an owner-acceptance hold.
+- G2 through G6 remain held.
 - M16 and later milestones remain blocked.
-- PR #69 remains draft/held planning input and is not authority for the active gate.
+- PR #69 remains draft and held planning input; it is not authority for active work and must be reconciled with current Codex governance before any later review.
 - PR #68 remains held outside active M15 work.
 - No implementation agent merges, advances, changes the active gate, or starts another task on its own.
-- One `Continue LaserX` command authorizes one bounded Codex pass, then Codex stops.
-- Next valid command: **`Continue LaserX`**
+- No `Continue LaserX` implementation pass is authorized until the owner resolves the G1 acceptance hold.
+- Next valid command: **`Advance LaserX`**
 
 ## Mandatory product interpretation
 
 Every agent must read GitHub Issues #44 and #37 before planning or implementing post-M13 work.
 
-LaserX remains an affordable, premium-feeling, machine-independent idea-to-manufacturable-product platform. First-time usability is central; deterministic sign creation works without AI; AI is optional and user-supplied; physical 3D is a major derived, non-mutating feature; the interface is workflow-first with progressive disclosure; and large finding sets become understandable repair decisions instead of raw tool walls.
+LaserX remains an affordable, premium-feeling, machine-independent idea-to-manufacturable-product platform. First-time usability is central; deterministic sign creation works without AI; AI is optional and user-supplied; physical 3D is a major derived, non-mutating feature; Inkscape and downstream machine software are companions; the interface is workflow-first with progressive disclosure; and large finding sets become understandable repair decisions instead of raw tool walls.
 
 ## M15 gate order
 
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted
-2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted
-3. **G2 — Create My First Sign guided vertical slice** — **active**
+2. **G1 — first-launch goal chooser and resumable guidance shell** — merged, technically READY, awaiting owner acceptance
+3. **G2 — Create My First Sign guided vertical slice** — held
 4. **G3 — vector import and raster trace contextual guidance** — held
 5. **G4 — grouped repair decisions and Fix safe problems workflow** — held
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held
 
-Each gate requires exact-head `Check LaserX`, a `READY` verdict, and explicit owner `Advance LaserX` from the designated primary operations chat before the next gate becomes active.
+Each gate requires exact-head `Check LaserX`, a `READY` verdict, and explicit owner `Advance LaserX` from the designated primary operations chat before the next gate becomes active. A merge alone never advances the gate.
 
 ## M14 completion record
 
@@ -100,4 +111,4 @@ M14 is complete and accepted. Issue #30 contains the exact component merges, Win
 
 ## Private-testing boundary
 
-LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in G2.
+LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in G1.
