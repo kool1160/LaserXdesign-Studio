@@ -14,9 +14,11 @@ This assignment supersedes ADR 0026's Claude implementation assignment and the l
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G1 — Codex-only governance reset and guided-shell activation**
-- Active task: **governance and CI normalization only**
-- Visible onboarding UI, stores, IPC, grouped repair, and later G1 product work remain held.
+- Active slice: **G1 — first-launch goal chooser and resumable guidance shell**
+- Active task: wire the G0 state-machine contract into the real desktop shell, implement locked onboarding persistence, and prove first-launch/resume/recovery behavior.
+- G2 Create My First Sign, G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
+
+PR #70 completed and merged the governance/CI prerequisite at `84a3ffad4973ed8830c1e9fc2e1f026183a1a30c`. The current G1 product task begins from later current `main`, not from the PR #70 branch.
 
 ## Owner authority
 
@@ -32,7 +34,7 @@ The **LaserX Design Studio primary operations chat** is the only conversation au
 - exact-head review through `Check LaserX`;
 - durable findings and decisions on GitHub;
 - `Status LaserX` and `Hold LaserX`;
-- merge, issue closure, status recording, and next-gate activation after the owner issues `Advance LaserX` there.
+- merge, issue closure when appropriate, status recording, and next-gate activation after the owner issues `Advance LaserX` there.
 
 Every other chat is read-only for those mutations. When chat identity is uncertain, the conversation must fail closed. `docs/CHAT_AUTHORITY.md` contains the binding prohibition and recovery rule.
 
@@ -43,6 +45,8 @@ There is no automatic routine merge.
 Codex is the sole active implementation surface. The repository does not choose or auto-route the model; the owner selects it inside Codex for each session.
 
 Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
+
+For active G1, Codex must follow ADR 0027's caller obligations for fresh run tokens, synchronous `project-replaced`, project/document/fingerprint snapshot binding, transient-step recovery, resolution-checkpoint completion rules, contextual controls, and non-mutation of authoritative project state.
 
 Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
