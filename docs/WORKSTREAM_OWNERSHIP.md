@@ -14,17 +14,18 @@ This assignment supersedes ADR 0026's Claude implementation assignment and the l
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G2 — Create My First Sign guided vertical slice**
-- Active task: turn the accepted G1 shell into one truthful deterministic first-sign path through real size/material, content, cutability, resolution, physical 3D, and save/export outcomes.
-- G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
+- Active slice: **G1 — first-launch goal chooser and resumable guidance shell**
+- Current state: PR #71 is merged and technically READY, but owner acceptance is pending.
+- Active task: **none — owner-acceptance hold**
+- G2 Create My First Sign, G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
 
-PR #71 completed and merged G1 at `41e572a017a82f66f9586ab6e34253d914bc31e2` after exact-head READY review of `ae7c4e79509611a0704649d9c667886a98bcdcbd` with Repository Guard and Canonical Verification green.
+PR #71's reviewed head `ae7c4e79509611a0704649d9c667886a98bcdcbd` was squash-merged as `41e572a017a82f66f9586ab6e34253d914bc31e2` before an explicit owner `Advance LaserX` in the designated primary operations chat. The later G2 activation records were unauthorized and are superseded by the current G1 hold.
 
 ## Owner authority
 
 The owner controls product direction, milestone and gate order, pricing and trial philosophy, model selection inside Codex, hands-on acceptance, and explicit advancement through `Advance LaserX`.
 
-A `READY` verdict is required before advancement, but it does not replace the owner command.
+A `READY` verdict is required before advancement, but it does not replace the owner command. A merge also does not replace the owner command.
 
 ## Primary operations chat ownership
 
@@ -46,9 +47,7 @@ Codex is the sole active implementation surface. The repository does not choose 
 
 Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
 
-For active G2, Codex must use the existing authoritative document, manufacturing, cutability, physical-preview, save, and export systems. Guidance may coordinate those systems and observe their real success signals; it must not create a parallel project model, silently mutate geometry, bypass validation, or claim a step completed when the corresponding product outcome did not occur.
-
-Codex must preserve ADR 0027 and G1 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, and non-trapping Exit guidance.
+While the G1 owner-acceptance hold is active, Codex has no implementation assignment. A `Continue LaserX` command issued before the hold is resolved must return `BLOCKED`; Codex must not reopen G1, begin G2, create a branch or PR, or mutate governance.
 
 Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
@@ -64,13 +63,13 @@ Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, crede
 
 1. Owner discusses direction with `Plan LaserX: <idea>` in the primary operations chat.
 2. The primary operations chat records it with `Lock that into LaserX`.
-3. Owner sends `Continue LaserX` to Codex.
+3. Owner sends `Continue LaserX` to Codex only when an active task exists.
 4. Codex implements or repairs the bounded active gate and stops.
 5. Owner sends `Check LaserX` in the primary operations chat.
 6. If `REPAIR`, owner sends `Continue LaserX` to Codex.
 7. If `READY`, owner sends `Advance LaserX` in the primary operations chat.
-8. The primary operations chat merges, records, activates the next gate, and stops.
+8. The primary operations chat merges when needed, records acceptance, activates the next gate, and stops.
 
 ## Explicit exclusions
 
-No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, or public beta work becomes active merely because an agent has capacity or a draft branch exists.
+No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, or public beta work becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
