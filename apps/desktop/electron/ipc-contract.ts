@@ -76,6 +76,7 @@ export const IPC_CHANNELS = {
   runPhysicalPreview: "laserx:physical-preview:build",
   cancelPhysicalPreview: "laserx:physical-preview:cancel",
   savePhysicalPreviewCapture: "laserx:physical-preview:save-capture",
+  onboardingAction: "laserx:onboarding:action",
   stateChanged: "laserx:state:changed",
 } as const;
 
@@ -83,6 +84,36 @@ export const displayUnitSchema = z.enum(["millimeters", "inches"]);
 const finiteNumber = z.number();
 const positiveNumber = finiteNumber.positive();
 const nonnegativeNumber = finiteNumber.nonnegative();
+const guidedGoalSchema = z.enum([
+  "create-first-sign",
+  "import-own-design",
+  "describe-with-ai",
+]);
+const guidedWorkflowStatusSchema = z.enum([
+  "idle",
+  "active",
+  "completed",
+  "dismissed",
+  "failed",
+]);
+const onboardingWorkflowSnapshotSchema = z.strictObject({
+  goal: guidedGoalSchema,
+  definitionVersion: z.number().int().positive(),
+  currentStepId: z.string().min(1),
+  completedStepIds: z.array(z.string().min(1)),
+  skippedStepIds: z.array(z.string().min(1)),
+  projectBinding: z.strictObject({
+    projectId: z.string().min(1),
+    documentId: z.string().min(1),
+    fingerprint: z.string().min(1),
+  }),
+});
+const onboardingPreferencesSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  completedGoals: z.array(guidedGoalSchema),
+  dismissed: z.boolean(),
+  activeWorkflow: onboardingWorkflowSnapshotSchema.nullable(),
+});
 const manufacturingProcessSchema = z.enum(["laser", "plasma", "waterjet", "router"]);
 const objectIdsSchema = z.array(z.uuid()).min(1);
 const pointSchema = z.strictObject({
@@ -837,6 +868,35 @@ export const resolveRecoveryRequestSchema = z.strictObject({
   action: z.enum(["recover", "discard"]),
 });
 
+const guidedStepIdentitySchema = {
+  expectedStepId: z.string().min(1),
+  runToken: z.string().min(1),
+};
+const resolutionFindingCountsSchema = z.strictObject({
+  safeFixableCount: z.number().int().nonnegative(),
+  needsDecisionCount: z.number().int().nonnegative(),
+  blockingCount: z.number().int().nonnegative(),
+});
+export const onboardingActionRequestSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("start"), goal: guidedGoalSchema }),
+  z.strictObject({ type: z.literal("resume") }),
+  z.strictObject({ type: z.literal("back"), ...guidedStepIdentitySchema }),
+  z.strictObject({ type: z.literal("skip"), ...guidedStepIdentitySchema }),
+  z.strictObject({ type: z.literal("exit"), runToken: z.string().min(1) }),
+  z.strictObject({
+    type: z.literal("advance"),
+    ...guidedStepIdentitySchema,
+    completion: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("step") }),
+      z.strictObject({
+        kind: z.literal("resolution"),
+        trigger: z.enum(["automatic", "user"]),
+        counts: resolutionFindingCountsSchema,
+      }),
+    ]),
+  }),
+]);
+
 export const vectorImportPreviewRequestSchema = z.strictObject({
   unitlessDxfUnit: z.enum(["millimeters", "inches"]).nullable(),
 });
@@ -1162,6 +1222,19 @@ export const desktopStateSchema = z.strictObject({
       projectName: z.string(),
     })
     .nullable(),
+  onboarding: z.strictObject({
+    preferences: onboardingPreferencesSchema,
+    workflow: z.strictObject({
+      status: guidedWorkflowStatusSchema,
+      goal: guidedGoalSchema.nullable(),
+      runToken: z.string().min(1).nullable(),
+      currentStepId: z.string().min(1).nullable(),
+      completedStepIds: z.array(z.string().min(1)),
+      skippedStepIds: z.array(z.string().min(1)),
+      failureReason: z.string().nullable(),
+    }),
+    recoveryNotice: z.string().nullable(),
+  }),
   interchange: z.strictObject({
     exportSummary: vectorExportSummarySchema.nullable(),
   }),
@@ -1457,6 +1530,9 @@ export type BridgeProposalRequestDto = z.infer<
 export type ResolveRecoveryRequest = z.infer<
   typeof resolveRecoveryRequestSchema
 >;
+export type OnboardingActionRequest = z.infer<
+  typeof onboardingActionRequestSchema
+>;
 export type TextLayoutRequestDto = z.infer<typeof textLayoutRequestSchema>;
 export type TextUpdateRequestDto = z.infer<typeof textUpdateRequestSchema>;
 export type GeometryOperationRequestDto = z.infer<
@@ -1566,6 +1642,7 @@ export interface LaserxDesktopApi {
     request: TextUpdateRequestDto,
   ): Promise<CommandResult>;
   resolveRecovery(request: ResolveRecoveryRequest): Promise<CommandResult>;
+  onboardingAction(request: OnboardingActionRequest): Promise<CommandResult>;
   runPhysicalPreview(request: RunPhysicalPreviewRequest): Promise<CommandResult>;
   cancelPhysicalPreview(
     request: CancelPhysicalPreviewRequest,

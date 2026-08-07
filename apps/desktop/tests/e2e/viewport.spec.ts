@@ -18,6 +18,8 @@ test("pan, zoom, fit, rulers, grid, and exact readout work at high DPI", async (
   );
   try {
     const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-create-first-sign").click();
+    await page.getByTestId("guidance-exit").click();
     await page.getByRole("button", { name: "Create document" }).click();
     await expect(page.getByTestId("document-dimensions")).toHaveText(
       "24 × 12 in",

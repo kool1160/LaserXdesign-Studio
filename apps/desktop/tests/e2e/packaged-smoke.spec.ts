@@ -63,6 +63,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "getState",
       "newProject",
       "onStateChanged",
+      "onboardingAction",
       "openAiAccountPage",
       "openProject",
       "openRecent",

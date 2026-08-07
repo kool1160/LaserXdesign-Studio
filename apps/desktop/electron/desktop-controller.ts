@@ -88,7 +88,24 @@ import type {
   FocusVectorImportFindingRequest,
   ProductionExportRequest,
   SavePhysicalPreviewCaptureRequest,
+  OnboardingActionRequest,
 } from "./ipc-contract.js";
+import {
+  canCompleteResolution,
+  canResumeSnapshot,
+  initialGuidedWorkflowState,
+  initialOnboardingPreferences,
+  isStepSkippable,
+  reduceGuidedWorkflow,
+  resolveResumeStepId,
+  shouldAutoCompleteResolution,
+  toWorkflowSnapshot,
+  type GuidedProjectBinding,
+  type GuidedWorkflowState,
+  type OnboardingPreferences,
+  type ResolutionFindingCounts,
+} from "../src/features/onboarding/guidedWorkflowState.js";
+import { guidedGoal } from "../src/features/onboarding/guidedWorkflowDefinitions.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
 import {
@@ -140,8 +157,10 @@ import {
 import {
   RecentProjectsStore,
   RecoveryStore,
+  OnboardingPreferencesStore,
   type RecentProject,
   type RecoveryStorePort,
+  type OnboardingPreferencesStorePort,
 } from "./persistence.js";
 import { ProjectStorage, validateProjectPath } from "./project-storage.js";
 import {
@@ -171,6 +190,26 @@ const MINIMUM_CAPTURE_PNG_BYTES = 64;
 
 const UNTITLED_PROJECT_NAME = "Untitled";
 const MAX_PROJECT_NAME_LENGTH = 200;
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function guidedDocumentFingerprint(document: LaserxProject["document"]): string {
+  return canonicalJson(document);
+}
 
 function projectNameForPath(currentName: string, filePath: string): string {
   if (currentName !== UNTITLED_PROJECT_NAME) {
@@ -206,6 +245,7 @@ export interface DesktopControllerOptions {
   autosaveScheduler?: AutosaveScheduler;
   projectStorage?: ProjectFileService;
   recoveryStore?: RecoveryStorePort;
+  onboardingPreferencesStore?: OnboardingPreferencesStorePort;
   fontEngine?: FontEngine;
   geometryWorker?: GeometryWorkerPort;
   vectorStorage?: VectorFileService;
@@ -348,6 +388,7 @@ export class DesktopController {
   readonly #storage: ProjectFileService;
   readonly #recentStore: RecentProjectsStore;
   readonly #recoveryStore: RecoveryStorePort;
+  readonly #onboardingPreferencesStore: OnboardingPreferencesStorePort;
   readonly #logger: AppLogger;
   readonly #dialogs: DesktopDialogs;
   readonly #onStateChanged: (state: DesktopState) => void;
@@ -379,6 +420,9 @@ export class DesktopController {
   #credentialAbortController: AbortController | null = null;
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
+  #guidedWorkflow: GuidedWorkflowState = initialGuidedWorkflowState;
+  #onboardingPreferences: OnboardingPreferences = initialOnboardingPreferences;
+  #onboardingRecoveryNotice: string | null = null;
   #stopAutosave: (() => void) | null = null;
   #autosaveInFlight: Promise<void> | null = null;
   #lastExportSummary: VectorExportSummary | null = null;
@@ -452,6 +496,9 @@ export class DesktopController {
     this.#recentStore = new RecentProjectsStore(options.userDataPath);
     this.#recoveryStore =
       options.recoveryStore ?? new RecoveryStore(options.userDataPath);
+    this.#onboardingPreferencesStore =
+      options.onboardingPreferencesStore ??
+      new OnboardingPreferencesStore(options.userDataPath);
     this.#logger = new AppLogger(options.userDataPath);
     this.#dialogs = options.dialogs;
     this.#onStateChanged = options.onStateChanged;
@@ -504,6 +551,9 @@ export class DesktopController {
   public async initialize(): Promise<void> {
     this.#recentProjects = await this.#recentStore.load();
     this.#pendingRecovery = await this.#recoveryStore.load();
+    this.#onboardingPreferences =
+      (await this.#onboardingPreferencesStore.load()) ??
+      initialOnboardingPreferences;
     try {
       const credential = await this.#credentialVault.read(this.#aiProvider.id);
       if (credential !== null) {
@@ -546,6 +596,21 @@ export class DesktopController {
               originalPath: this.#pendingRecovery.originalPath,
               projectName: this.#pendingRecovery.project.project.name,
             },
+      onboarding: {
+        preferences: structuredClone(
+          this.#onboardingPreferences,
+        ) as DesktopState["onboarding"]["preferences"],
+        workflow: {
+          status: this.#guidedWorkflow.status,
+          goal: this.#guidedWorkflow.definition?.goal ?? null,
+          runToken: this.#guidedWorkflow.runToken,
+          currentStepId: this.#guidedWorkflow.currentStepId,
+          completedStepIds: [...this.#guidedWorkflow.completedStepIds],
+          skippedStepIds: [...this.#guidedWorkflow.skippedStepIds],
+          failureReason: this.#guidedWorkflow.failureReason,
+        },
+        recoveryNotice: this.#onboardingRecoveryNotice,
+      },
       interchange: {
         exportSummary:
           this.#lastExportSummary === null
@@ -646,6 +711,7 @@ export class DesktopController {
   public async newProject(): Promise<CommandResult> {
     return this.#run(async () => {
       if (await this.#confirmReplacement()) {
+        await this.#invalidateGuidanceForProjectReplacement();
         this.#session.dispatch({ type: "project.new" });
         this.#clearRasterState();
         await this.#settleAutosaveAndClearRecovery();
@@ -2139,6 +2205,7 @@ export class DesktopController {
   ): Promise<CommandResult> {
     return this.#run(async () => {
       if (request.action === "recover" && this.#pendingRecovery !== null) {
+        await this.#invalidateGuidanceForProjectReplacement();
         this.#session.recover(this.#pendingRecovery);
         this.#clearRasterState();
         await this.#logger.info("recovery-restored");
@@ -2147,6 +2214,151 @@ export class DesktopController {
         await this.#logger.info("recovery-discarded");
       }
       this.#pendingRecovery = null;
+    });
+  }
+
+  public async onboardingAction(
+    request: OnboardingActionRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      this.#onboardingRecoveryNotice = null;
+
+      if (request.type === "start") {
+        if (
+          request.goal === "describe-with-ai" &&
+          this.#aiConnection.status !== "connected"
+        ) {
+          throw new Error(
+            "AI guidance is optional and is available after an AI account is connected.",
+          );
+        }
+        const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "start",
+          definition: guidedGoal(request.goal).definition,
+          runToken: randomUUID(),
+          projectId: this.#session.state.project.project.id,
+        });
+        await this.#applyGuidedWorkflow(next, { dismissed: false });
+        return;
+      }
+
+      if (request.type === "resume") {
+        const snapshot = this.#onboardingPreferences.activeWorkflow;
+        if (snapshot === null) {
+          throw new Error("There is no saved guidance session to resume.");
+        }
+        const definition = guidedGoal(snapshot.goal).definition;
+        const liveBinding = this.#liveGuidedBinding();
+        if (!canResumeSnapshot(definition, snapshot, liveBinding)) {
+          await this.#replaceOnboardingPreferences({
+            ...this.#onboardingPreferences,
+            activeWorkflow: null,
+          });
+          this.#onboardingRecoveryNotice =
+            "Saved guidance did not match this exact project and was not resumed. Your design was not changed.";
+          return;
+        }
+        const resumeStepId = resolveResumeStepId(definition, snapshot);
+        const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "resume",
+          definition,
+          snapshot,
+          runToken: randomUUID(),
+          liveBinding,
+        });
+        if (resumeStepId !== snapshot.currentStepId) {
+          this.#onboardingRecoveryNotice =
+            "LaserX returned to the nearest saved checkpoint because the previous preview or analysis was temporary.";
+        }
+        await this.#applyGuidedWorkflow(next, { dismissed: false });
+        return;
+      }
+
+      if (request.type === "exit") {
+        await this.#applyGuidedWorkflow(
+          reduceGuidedWorkflow(this.#guidedWorkflow, {
+            type: "dismiss",
+            runToken: request.runToken,
+          }),
+        );
+        return;
+      }
+
+      if (request.type === "back") {
+        await this.#applyGuidedWorkflow(
+          reduceGuidedWorkflow(this.#guidedWorkflow, {
+            type: "back",
+            expectedStepId: request.expectedStepId,
+            runToken: request.runToken,
+          }),
+        );
+        return;
+      }
+
+      if (request.type === "skip") {
+        if (
+          this.#guidedWorkflow.definition === null ||
+          !isStepSkippable(
+            this.#guidedWorkflow.definition,
+            this.#guidedWorkflow.currentStepId,
+          )
+        ) {
+          throw new Error("This guidance step is required and cannot be skipped.");
+        }
+        await this.#applyGuidedWorkflow(
+          reduceGuidedWorkflow(this.#guidedWorkflow, {
+            type: "skip-step",
+            expectedStepId: request.expectedStepId,
+            runToken: request.runToken,
+          }),
+        );
+        return;
+      }
+
+      const isResolutionStep =
+        this.#guidedWorkflow.currentStepId === "resolve-findings";
+      if (isResolutionStep) {
+        if (request.completion.kind !== "resolution") {
+          throw new Error(
+            "The findings checkpoint can only continue through its guarded resolution action.",
+          );
+        }
+        const liveCounts = this.#currentResolutionCounts();
+        if (
+          liveCounts === null ||
+          JSON.stringify(liveCounts) !== JSON.stringify(request.completion.counts)
+        ) {
+          throw new Error(
+            "The findings changed. Review the current analysis before continuing.",
+          );
+        }
+        const permitted =
+          request.completion.trigger === "automatic"
+            ? shouldAutoCompleteResolution(liveCounts)
+            : canCompleteResolution(liveCounts);
+        if (!permitted) {
+          throw new Error("Blocking findings must be resolved before continuing.");
+        }
+      } else if (request.completion.kind !== "step") {
+        throw new Error("Resolution completion is only valid at the findings checkpoint.");
+      }
+
+      let next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+        type: "advance",
+        expectedStepId: request.expectedStepId,
+        runToken: request.runToken,
+      });
+      if (next.status === "active" && next.currentStepId === "resolve-findings") {
+        const counts = this.#currentResolutionCounts();
+        if (counts !== null && shouldAutoCompleteResolution(counts)) {
+          next = reduceGuidedWorkflow(next, {
+            type: "advance",
+            expectedStepId: "resolve-findings",
+            runToken: next.runToken as string,
+          });
+        }
+      }
+      await this.#applyGuidedWorkflow(next);
     });
   }
 
@@ -2194,6 +2406,7 @@ export class DesktopController {
     const normalized = validateProjectPath(filePath);
     const project = await this.#storage.read(normalized);
     project.project.name = projectNameForPath(project.project.name, normalized);
+    await this.#invalidateGuidanceForProjectReplacement();
     this.#session.open(project, normalized);
     this.#clearRasterState();
     await this.#settleAutosaveAndClearRecovery();
@@ -2699,9 +2912,123 @@ export class DesktopController {
     this.#bridgeProposal = null;
   }
 
+  #liveGuidedBinding(): GuidedProjectBinding {
+    const project = this.#session.state.project;
+    return {
+      projectId: project.project.id,
+      documentId: project.document.id,
+      fingerprint: guidedDocumentFingerprint(project.document),
+    };
+  }
+
+  #currentResolutionCounts(): ResolutionFindingCounts | null {
+    const analysis = this.#cutabilityProjection?.cutability ?? null;
+    if (
+      analysis === null ||
+      analysis.documentFingerprint !==
+        fingerprintCutabilityDocument(this.#session.state.project.document)
+    ) {
+      return null;
+    }
+    return {
+      // G4 owns safe-repair classification. Until that engine exists, G1
+      // truthfully reports none instead of guessing which finding is safe.
+      safeFixableCount: 0,
+      needsDecisionCount: analysis.warningCount,
+      blockingCount: analysis.errorCount,
+    };
+  }
+
+  async #replaceOnboardingPreferences(
+    preferences: OnboardingPreferences,
+  ): Promise<void> {
+    const previous = this.#onboardingPreferences;
+    this.#onboardingPreferences = preferences;
+    try {
+      await this.#onboardingPreferencesStore.save(preferences);
+    } catch (error) {
+      this.#onboardingPreferences = previous;
+      throw error;
+    }
+  }
+
+  async #applyGuidedWorkflow(
+    next: GuidedWorkflowState,
+    overrides: Partial<Pick<OnboardingPreferences, "dismissed">> = {},
+  ): Promise<void> {
+    const previousWorkflow = this.#guidedWorkflow;
+    if (next === previousWorkflow) return;
+    const previousPreferences = this.#onboardingPreferences;
+    this.#guidedWorkflow = next;
+
+    const goal = next.definition?.goal ?? null;
+    const completedGoals =
+      next.status === "completed" && goal !== null
+        ? [...new Set([...previousPreferences.completedGoals, goal])]
+        : [...previousPreferences.completedGoals];
+    const activeWorkflow = toWorkflowSnapshot(next, this.#liveGuidedBinding());
+    const dismissed =
+      overrides.dismissed ??
+      (next.status === "dismissed"
+        ? true
+        : next.status === "active"
+          ? false
+          : previousPreferences.dismissed);
+    const preferences: OnboardingPreferences = {
+      schemaVersion: 1,
+      completedGoals,
+      dismissed,
+      activeWorkflow,
+    };
+    this.#onboardingPreferences = preferences;
+    try {
+      await this.#onboardingPreferencesStore.save(preferences);
+    } catch (error) {
+      this.#guidedWorkflow = previousWorkflow;
+      this.#onboardingPreferences = previousPreferences;
+      throw error;
+    }
+  }
+
+  async #invalidateGuidanceForProjectReplacement(): Promise<void> {
+    if (this.#guidedWorkflow.status === "idle") return;
+    await this.#applyGuidedWorkflow(
+      reduceGuidedWorkflow(this.#guidedWorkflow, {
+        type: "project-replaced",
+      }),
+    );
+    this.#onboardingRecoveryNotice =
+      "Guidance ended because the open project was replaced.";
+  }
+
+  async #refreshActiveWorkflowSnapshot(): Promise<void> {
+    if (this.#guidedWorkflow.status !== "active") return;
+    const activeWorkflow = toWorkflowSnapshot(
+      this.#guidedWorkflow,
+      this.#liveGuidedBinding(),
+    );
+    if (
+      JSON.stringify(activeWorkflow) ===
+      JSON.stringify(this.#onboardingPreferences.activeWorkflow)
+    ) {
+      return;
+    }
+    const preferences: OnboardingPreferences = {
+      ...this.#onboardingPreferences,
+      activeWorkflow,
+    };
+    this.#onboardingPreferences = preferences;
+    try {
+      await this.#onboardingPreferencesStore.save(preferences);
+    } catch (error) {
+      await this.#logger.error("onboarding-persistence-refresh-failed", error);
+    }
+  }
+
   async #run(action: () => void | Promise<void>): Promise<CommandResult> {
     try {
       await action();
+      await this.#refreshActiveWorkflowSnapshot();
       this.#emit();
       return { ok: true, state: this.state };
     } catch (error) {

@@ -58,6 +58,7 @@ import {
   openAiAccountPageRequestSchema,
   rasterTraceRequestSchema,
   resolveRecoveryRequestSchema,
+  onboardingActionRequestSchema,
   setDisplayUnitRequestSchema,
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -584,6 +585,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.resolveRecovery, (_event, request: unknown) => {
     const validated = resolveRecoveryRequestSchema.parse(request);
     return requireController().resolveRecovery(validated);
+  });
+  ipcMain.handle(IPC_CHANNELS.onboardingAction, (_event, request: unknown) => {
+    const validated = onboardingActionRequestSchema.parse(request);
+    return requireController().onboardingAction(validated);
   });
 }
 
