@@ -106,6 +106,14 @@ describe("desktop onboarding guidance", () => {
     expect(second.state.onboarding.preferences.activeWorkflow?.currentStepId).toBe(
       "add-content",
     );
+    expect(second.state.onboarding.resumeEligibility).toBe("different-project");
+    const savedSnapshot = second.state.onboarding.preferences.activeWorkflow;
+    await second.onboardingAction({ type: "resume" });
+    expect(second.state.onboarding.workflow.status).toBe("idle");
+    expect(second.state.onboarding.preferences.activeWorkflow).toEqual(savedSnapshot);
+    expect(second.state.onboarding.resumeEligibility).toBe("different-project");
+    expect(second.state.onboarding.recoveryNotice).toContain("saved guidance was kept");
+
     await second.openProject();
     expect(
       second.state.onboarding.preferences.activeWorkflow?.projectBinding,
@@ -113,6 +121,7 @@ describe("desktop onboarding guidance", () => {
       projectId: second.state.project.id,
       documentId: second.state.project.document.id,
     });
+    expect(second.state.onboarding.resumeEligibility).toBe("available");
     await second.onboardingAction({ type: "resume" });
 
     expect(second.state.onboarding.workflow.currentStepId).toBe("add-content");

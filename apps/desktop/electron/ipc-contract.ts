@@ -96,6 +96,14 @@ const guidedWorkflowStatusSchema = z.enum([
   "dismissed",
   "failed",
 ]);
+const guidedSurfaceSchema = z.enum([
+  "create",
+  "import",
+  "ai",
+  "analysis",
+  "preview",
+  "output",
+]);
 const onboardingWorkflowSnapshotSchema = z.strictObject({
   goal: guidedGoalSchema,
   definitionVersion: z.number().int().positive(),
@@ -1229,10 +1237,17 @@ export const desktopStateSchema = z.strictObject({
       goal: guidedGoalSchema.nullable(),
       runToken: z.string().min(1).nullable(),
       currentStepId: z.string().min(1).nullable(),
+      surface: guidedSurfaceSchema.nullable(),
       completedStepIds: z.array(z.string().min(1)),
       skippedStepIds: z.array(z.string().min(1)),
       failureReason: z.string().nullable(),
     }),
+    resumeEligibility: z.enum([
+      "none",
+      "available",
+      "different-project",
+      "stale",
+    ]),
     recoveryNotice: z.string().nullable(),
   }),
   interchange: z.strictObject({

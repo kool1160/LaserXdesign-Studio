@@ -93,15 +93,20 @@ let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
 let handlingFatalFailure = false;
-let menuGuidanceActive: boolean | null = null;
+let menuGuidanceSurface:
+  | DesktopState["onboarding"]["workflow"]["surface"]
+  | undefined;
 let rejectNextGetState =
   process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
 function emitState(state: DesktopState): void {
-  const guidanceActive = state.onboarding.workflow.status === "active";
-  if (menuGuidanceActive !== guidanceActive) {
-    menuGuidanceActive = guidanceActive;
-    buildMenu(guidanceActive);
+  const guidanceSurface =
+    state.onboarding.workflow.status === "active"
+      ? state.onboarding.workflow.surface
+      : null;
+  if (menuGuidanceSurface !== guidanceSurface) {
+    menuGuidanceSurface = guidanceSurface;
+    buildMenu(guidanceSurface);
   }
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.stateChanged, state);
@@ -598,7 +603,12 @@ function registerIpc(): void {
   });
 }
 
-function buildMenu(guidanceActive: boolean): void {
+function buildMenu(
+  guidanceSurface: DesktopState["onboarding"]["workflow"]["surface"],
+): void {
+  const guidanceActive = guidanceSurface !== null;
+  const importAvailable = !guidanceActive || guidanceSurface === "import";
+  const exportAvailable = !guidanceActive || guidanceSurface === "output";
   const template: MenuItemConstructorOptions[] = [
     {
       label: "File",
@@ -619,6 +629,8 @@ function buildMenu(guidanceActive: boolean): void {
         },
         {
           label: "Import SVG/DXF...",
+          enabled: importAvailable,
+          visible: importAvailable,
           click: () =>
             void requireController().previewVectorImport({
               unitlessDxfUnit: null,
@@ -626,6 +638,8 @@ function buildMenu(guidanceActive: boolean): void {
         },
         {
           label: "Trace PNG/JPEG...",
+          enabled: importAvailable,
+          visible: importAvailable,
           click: () =>
             void requireController().previewRasterTrace({
               operationId: randomUUID(),
@@ -661,11 +675,15 @@ function buildMenu(guidanceActive: boolean): void {
         { type: "separator" },
         {
           label: "Export SVG...",
+          enabled: exportAvailable,
+          visible: exportAvailable,
           click: () =>
             void requireController().exportVector({ format: "svg" }),
         },
         {
           label: "Export DXF...",
+          enabled: exportAvailable,
+          visible: exportAvailable,
           click: () =>
             void requireController().exportVector({ format: "dxf" }),
         },
@@ -868,8 +886,8 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     registerIpc();
-    menuGuidanceActive = false;
-    buildMenu(false);
+    menuGuidanceSurface = null;
+    buildMenu(null);
     await createWindow();
   });
 }

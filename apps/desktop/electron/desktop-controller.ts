@@ -105,7 +105,10 @@ import {
   type OnboardingPreferences,
   type ResolutionFindingCounts,
 } from "../src/features/onboarding/guidedWorkflowState.js";
-import { guidedGoal } from "../src/features/onboarding/guidedWorkflowDefinitions.js";
+import {
+  guidedGoal,
+  guidedStep,
+} from "../src/features/onboarding/guidedWorkflowDefinitions.js";
 import type { PhysicalPreviewAssembly } from "../../../packages/physical-preview-3d/src/index.js";
 import { fingerprintPhysicalPreviewInput } from "../../../packages/physical-preview-3d/src/task.js";
 import {
@@ -577,6 +580,26 @@ export class DesktopController {
   public get state(): DesktopState {
     const session = this.#session.state;
     const productionPreview = this.#productionPreview(session.project);
+    const activeWorkflow = this.#onboardingPreferences.activeWorkflow;
+    const liveGuidedBinding = this.#liveGuidedBinding();
+    const resumeEligibility: DesktopState["onboarding"]["resumeEligibility"] =
+      activeWorkflow === null
+        ? "none"
+        : activeWorkflow.projectBinding.projectId !== liveGuidedBinding.projectId ||
+            activeWorkflow.projectBinding.documentId !== liveGuidedBinding.documentId
+          ? "different-project"
+          : canResumeSnapshot(
+                guidedGoal(activeWorkflow.goal).definition,
+                activeWorkflow,
+                liveGuidedBinding,
+              )
+            ? "available"
+            : "stale";
+    const workflowGoal = this.#guidedWorkflow.definition?.goal ?? null;
+    const workflowSurface =
+      workflowGoal === null || this.#guidedWorkflow.currentStepId === null
+        ? null
+        : guidedStep(workflowGoal, this.#guidedWorkflow.currentStepId)?.surface ?? null;
     return {
       project: {
         id: session.project.project.id,
@@ -602,13 +625,15 @@ export class DesktopController {
         ) as DesktopState["onboarding"]["preferences"],
         workflow: {
           status: this.#guidedWorkflow.status,
-          goal: this.#guidedWorkflow.definition?.goal ?? null,
+          goal: workflowGoal,
           runToken: this.#guidedWorkflow.runToken,
           currentStepId: this.#guidedWorkflow.currentStepId,
+          surface: workflowSurface,
           completedStepIds: [...this.#guidedWorkflow.completedStepIds],
           skippedStepIds: [...this.#guidedWorkflow.skippedStepIds],
           failureReason: this.#guidedWorkflow.failureReason,
         },
+        resumeEligibility,
         recoveryNotice: this.#onboardingRecoveryNotice,
       },
       interchange: {
@@ -2250,6 +2275,14 @@ export class DesktopController {
         const definition = guidedGoal(snapshot.goal).definition;
         const liveBinding = this.#liveGuidedBinding();
         if (!canResumeSnapshot(definition, snapshot, liveBinding)) {
+          if (
+            snapshot.projectBinding.projectId !== liveBinding.projectId ||
+            snapshot.projectBinding.documentId !== liveBinding.documentId
+          ) {
+            this.#onboardingRecoveryNotice =
+              "Open the exact project this guidance belongs to before resuming. The saved guidance was kept.";
+            return;
+          }
           await this.#replaceOnboardingPreferences({
             ...this.#onboardingPreferences,
             activeWorkflow: null,

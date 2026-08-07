@@ -26,6 +26,11 @@ test("clean first launch offers exactly three goals and a global exit", async ()
     await expect(page.getByText("Choose size and material", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Design", exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    await expect(page.getByTestId("preview-vector-import")).toBeHidden();
+    await expect(page.getByTestId("trace-raster")).toBeHidden();
+    await expect(page.getByTestId("export-svg")).toBeHidden();
+    await expect(page.getByTestId("export-dxf")).toBeHidden();
+    await expect(page.getByTestId("open-physical-preview")).toBeHidden();
     const activeProjectId = await page.evaluate(
       async () => (await window.laserx.getState()).project.id,
     );
@@ -34,11 +39,18 @@ test("clean first launch offers exactly three goals and a global exit", async ()
         (item) => item.label === "File",
       );
       return fileMenu?.submenu?.items
-        .filter((item) => item.label === "New Project" || item.label.startsWith("Open"))
+        .filter((item) => item.type !== "separator")
         .map((item) => ({ label: item.label, enabled: item.enabled, visible: item.visible }));
     })).toEqual([
       { label: "New Project", enabled: false, visible: false },
       { label: "Open…", enabled: false, visible: false },
+      { label: "Import SVG/DXF...", enabled: false, visible: false },
+      { label: "Trace PNG/JPEG...", enabled: false, visible: false },
+      { label: "Save", enabled: true, visible: true },
+      { label: "Save As…", enabled: true, visible: true },
+      { label: "Export SVG...", enabled: false, visible: false },
+      { label: "Export DXF...", enabled: false, visible: false },
+      { label: "Exit", enabled: true, visible: true },
     ]);
     await page.keyboard.press("Control+N");
     await expect.poll(
@@ -48,16 +60,28 @@ test("clean first launch offers exactly three goals and a global exit", async ()
     await page.getByTestId("guidance-exit").click();
     await expect(page.getByTestId("guidance-shell")).toBeHidden();
     await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+    await expect(page.getByTestId("preview-vector-import")).toBeVisible();
+    await expect(page.getByTestId("trace-raster")).toBeVisible();
+    await expect(page.getByTestId("export-svg")).toBeVisible();
+    await expect(page.getByTestId("export-dxf")).toBeVisible();
+    await expect(page.getByTestId("open-physical-preview")).toBeVisible();
     await expect.poll(() => launched.electronApp.evaluate(({ Menu }) => {
       const fileMenu = Menu.getApplicationMenu()?.items.find(
         (item) => item.label === "File",
       );
       return fileMenu?.submenu?.items
-        .filter((item) => item.label === "New Project" || item.label.startsWith("Open"))
+        .filter((item) => item.type !== "separator")
         .map((item) => ({ label: item.label, enabled: item.enabled, visible: item.visible }));
     })).toEqual([
       { label: "New Project", enabled: true, visible: true },
       { label: "Open…", enabled: true, visible: true },
+      { label: "Import SVG/DXF...", enabled: true, visible: true },
+      { label: "Trace PNG/JPEG...", enabled: true, visible: true },
+      { label: "Save", enabled: true, visible: true },
+      { label: "Save As…", enabled: true, visible: true },
+      { label: "Export SVG...", enabled: true, visible: true },
+      { label: "Export DXF...", enabled: true, visible: true },
+      { label: "Exit", enabled: true, visible: true },
     ]);
   } finally {
     await killAndRemove(launched);
@@ -85,9 +109,20 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
     const second = await launchPackaged(first.directory);
     try {
       const resumedPage = await second.electronApp.firstWindow();
+      await expect(resumedPage.getByTestId("resume-guidance")).toBeHidden();
+      await expect.poll(() => resumedPage.evaluate(async () => {
+        const onboarding = (await window.laserx.getState()).onboarding;
+        return {
+          eligibility: onboarding.resumeEligibility,
+          hasSnapshot: onboarding.preferences.activeWorkflow !== null,
+        };
+      })).toEqual({ eligibility: "different-project", hasSnapshot: true });
       await resumedPage.evaluate(async () => {
         await window.laserx.openProject();
       });
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.resumeEligibility,
+      )).toBe("available");
       await expect(resumedPage.getByTestId("resume-guidance-card")).toBeVisible();
       await resumedPage.getByTestId("resume-guidance").click();
       await expect(

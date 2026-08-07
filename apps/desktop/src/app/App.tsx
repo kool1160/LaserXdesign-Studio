@@ -632,7 +632,7 @@ export function App() {
     !state.onboarding.preferences.dismissed;
   const showResumeGuidance =
     guidance.status === "idle" &&
-    state.onboarding.preferences.activeWorkflow !== null;
+    state.onboarding.resumeEligibility === "available";
 
   const updateActiveLayerManufacturing = (
     updates: Partial<ManufacturingLayerMetadata>,
@@ -792,27 +792,37 @@ export function App() {
             <button type="button" disabled={busy || !state.editor.clipboardHasContent} title="Paste (Ctrl+V)" aria-keyshortcuts="Control+V" onClick={() => dispatchEditorAction({ type: "clipboard.paste" })}>Paste</button>
           </div>
         </div>
-        <div className="command-group artwork-command-group">
-          <span className="command-group-label">Bring in artwork</span>
-          <div className="command-group-actions">
-            <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
-              <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
-            </button>
-            <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
-              <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
-            </button>
+        {(!guidanceActive || guidance.surface === "import") && (
+          <div className="command-group artwork-command-group">
+            <span className="command-group-label">Bring in artwork</span>
+            <div className="command-group-actions">
+              <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
+                <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
+              </button>
+              <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
+                <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="command-group output-command-group">
-          <span className="command-group-label">Output</span>
-          <div className="command-group-actions">
-            <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
-            <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
-            <button type="button" data-testid="open-physical-preview" disabled={busy} title="Open a read-only 3D preview of the physical layers" onClick={() => void openPhysicalPreview()}>
-              <span className="command-icon" aria-hidden="true">▦</span><span>3D Preview</span>
-            </button>
+        )}
+        {(!guidanceActive || guidance.surface === "preview" || guidance.surface === "output") && (
+          <div className="command-group output-command-group">
+            <span className="command-group-label">Output</span>
+            <div className="command-group-actions">
+              {(!guidanceActive || guidance.surface === "output") && (
+                <>
+                  <button type="button" data-testid="export-svg" disabled={busy} title="Export editable artwork as SVG" onClick={() => void run(() => window.laserx.exportVector({ format: "svg" }))}>Export SVG</button>
+                  <button type="button" data-testid="export-dxf" disabled={busy} title="Export editable artwork as DXF" onClick={() => void run(() => window.laserx.exportVector({ format: "dxf" }))}>Export DXF</button>
+                </>
+              )}
+              {(!guidanceActive || guidance.surface === "preview") && (
+                <button type="button" data-testid="open-physical-preview" disabled={busy} title="Open a read-only 3D preview of the physical layers" onClick={() => void openPhysicalPreview()}>
+                  <span className="command-icon" aria-hidden="true">▦</span><span>3D Preview</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         <span className="shell-badge">Precision workspace</span>
       </nav>
 
