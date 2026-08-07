@@ -6,7 +6,9 @@
 
 Active issue: #45.
 
-Current slice: **G0 — guided-workflow architecture and first-run contract**.
+Current slice: **G1 — first-launch goal chooser and resumable guidance shell**.
+
+G0 architecture/contract work is accepted and merged through PR #67. The G1 governance/CI prerequisite is accepted and merged through PR #70 at `84a3ffad4973ed8830c1e9fc2e1f026183a1a30c`.
 
 ## User-visible outcome
 
@@ -49,23 +51,9 @@ LaserX groups findings by problem class, affected scope, repair confidence, and 
 2. **Suggested fix**
 3. **Needs your decision**
 
-The main repair workflow includes a prominent **Fix safe problems** action that:
-
-- summarizes the problem classes and counts it will repair;
-- previews the before/after result;
-- leaves authoritative geometry unchanged until accepted;
-- applies accepted batch repairs as one undoable transaction whenever technically practical;
-- reports fixed, skipped, and remaining findings separately;
-- preserves a reject/undo path;
-- never claims automated repair proves cut readiness or physical safety.
+The main repair workflow includes a prominent **Fix safe problems** action that previews deterministic eligible repairs, leaves authoritative geometry unchanged until accepted, applies accepted batch repairs as one undoable transaction whenever technically practical, reports fixed/skipped/remaining counts, preserves reject/undo, and never claims automated repair proves cut readiness or physical safety.
 
 Safe eligibility requires deterministic rules and regression tests. Initial expected safe classes include exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures only within an explicit approved tolerance. Any additional class requires evidence before being labeled safe.
-
-After safe repair, the user receives a useful summary such as:
-
-> **1,899 safe problems fixed. Six decisions remain.**
-
-Remaining ambiguous decisions are grouped and visually navigable one category or affected area at a time. Entity-level diagnostics remain available through Details for advanced users and support.
 
 ### Learn Mode and recovery
 
@@ -80,8 +68,8 @@ Remaining ambiguous decisions are grouped and visually navigable one category or
 
 ## Approved implementation gates
 
-1. **G0 — guided-workflow architecture and first-run contract** — active.
-2. **G1 — first-launch goal chooser and resumable guidance shell** — held.
+1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted.
+2. **G1 — first-launch goal chooser and resumable guidance shell** — **active**.
 3. **G2 — Create My First Sign guided vertical slice** — held.
 4. **G3 — vector import and raster trace contextual guidance** — held.
 5. **G4 — grouped repair decisions and Fix safe problems workflow** — held.
@@ -90,28 +78,40 @@ Remaining ambiguous decisions are grouped and visually navigable one category or
 
 Each gate requires exact-head review and explicit owner advancement before the next gate becomes active.
 
-## Active G0 contract
+## G0 completion record
 
-G0 is architecture and contract lock only. It must establish one coherent guided-workflow system before visible onboarding is implemented in separate screens.
+G0 locked the architecture and first-run contract in ADR 0027 and implemented the pure guided-workflow state machine without visible onboarding UI. PR #67 was accepted and merged at `90946f7db42ac2cc2be3532bf49bdcdfe0d885ed`.
+
+ADR 0027 remains binding for the three goals, linear step definitions, contextual-control matrix, skip/back/resume/replay/cancel/failure semantics, run identity, project replacement, transient recovery, resolution checkpoint behavior, persistence shape, and non-mutation boundary.
+
+## Active G1 contract
+
+G1 implements the first real shell around the G0 contract. It must make first launch and interrupted guidance usable without prematurely implementing the later complete goal workflows.
 
 Required outcome:
 
-- inspect the packaged application and inventory the current first-launch, empty-state, create, vector-import, raster-trace, repair, 3D, save, and export flows;
-- document where unrelated controls, unclear next actions, or technical language compete with the user's goal;
-- define a tutorial/guidance state machine separated from feature logic and authoritative project state;
-- lock the three first-run goal contracts;
-- define a contextual-control matrix for every primary workflow;
-- define one clear primary action per guided step whenever practical;
-- define skip, back, resume, replay, cancel, failure, and recovery behavior that cannot trap the user;
-- define local/privacy-respecting evidence and the owner-observed ten-minute fixture set;
-- define keyboard, focus, high-DPI, reduced-motion, screen-reader, and non-color-only guidance requirements;
-- record the architecture in an ADR and add mechanical checks where they genuinely prevent drift;
-- make only the smallest implementation or harness change needed to prove the boundary;
+- wire `apps/desktop/src/features/onboarding/guidedWorkflowState.ts` into the real desktop application through a bounded app-layer integration;
+- implement the versioned `OnboardingPreferences` persistence shape from ADR 0027 in Electron `userData`, using validated atomic writes and the existing desktop-state/security boundary;
+- on clean first launch or the appropriate empty-workspace state, present exactly **Create My First Sign**, **Import My Own Design**, and **Describe What I Want With AI — Optional**;
+- reuse existing AI connection state so the AI goal is clearly optional/unavailable rather than required or broken when no provider is connected;
+- render a focused guidance shell with current-step orientation, progress, Back where allowed, Skip only where `skippableStepIds` permits it, and a globally reachable **Exit guidance** action;
+- enforce the ADR 0027 contextual shell rules: project replacement controls hidden during active guidance, Save available when a document exists, and unrelated tool categories hidden or visually subordinate to the active guided stage;
+- mint a fresh unique run token for every `start`, `resume`, and `replay`;
+- derive persistence binding from the current project/document/fingerprint at snapshot time and validate it again at resume time;
+- dispatch `project-replaced` synchronously for true open-session replacement paths before replacement state is observable; do not dispatch it for `project.create-document`, Save, Save As, or ordinary edits;
+- recover transient steps to their nearest earlier stable step, preserve stable-step resume exactly, explain recovery to the user, and refuse stale/incompatible snapshots without mutating the document;
+- obey the resolution-checkpoint caller contract: unseen advance only when `shouldAutoCompleteResolution` is true and visible user Continue only when `canCompleteResolution` permits it;
+- add regression coverage for those caller obligations and packaged Windows E2E for clean first launch, start/exit, persistence/resume, project replacement, and at least one non-trapping recovery path;
+- preserve keyboard/focus/high-DPI/screen-reader/non-color-only conventions already locked for M15 even though the final accessibility validation gate is G6;
 - open one focused draft PR and stop at `AWAITING_REVIEW`.
 
-G0 does not implement the complete first-launch shell, tutorial content, grouped repair engine, broad visual redesign, material expansion, process profiles, export profiles, new AI capability, licensing, public beta, or M16 work.
+### G1 non-goals
 
-## Acceptance tests
+G1 does not implement the complete Create My First Sign workflow (G2), vector/raster guided workflow integration (G3), grouped repair/Fix safe problems (G4), full Learn Mode content and replay UX (G5), or owner-observed first-session validation (G6).
+
+G1 does not add new AI capability, material expansion, process profiles, export profiles, licensing, public beta, analytics, CAD/CAM, or machine control.
+
+## Milestone acceptance tests
 
 1. A clean first launch presents the three clear goal paths without exposing a blank unexplained workspace as the only choice.
 2. A user can complete a deterministic first sign through dimensions, text, material, cutability, physical 3D preview, save, and export.
@@ -132,14 +132,14 @@ G0 does not implement the complete first-launch shell, tutorial content, grouped
 
 ## Exit checklist
 
-- [ ] Tutorial architecture and state boundaries are documented.
-- [ ] Workflow-aware contextual-control architecture is documented.
+- [x] Tutorial architecture and state boundaries are documented.
+- [x] Workflow-aware contextual-control architecture is documented.
 - [ ] Create, vector-import, raster-trace, repair, 3D, export, and optional-AI guided paths pass.
 - [ ] SVG/DXF import does not expose irrelevant trace controls.
 - [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
 - [ ] Large finding sets reduce to understandable repair decisions.
 - [ ] Learn Mode covers the core manufacturing and repair concepts.
-- [ ] Skip/replay/resume/recovery pass.
+- [ ] Skip/replay/resume/recovery pass in the integrated product.
 - [ ] Accessibility and packaged Windows evidence pass.
 - [ ] Owner-observed first-session evidence is recorded.
 - [ ] Status advances to M16 only after exact-head audit, merge, issue closure, and owner approval.
