@@ -106,7 +106,8 @@
 }
 
 .guidance-actions button,
-.goal-chooser button {
+.goal-chooser button,
+.resume-guidance-card button {
   border: 1px solid #39708f;
   border-radius: 7px;
   background: #16628b;
@@ -158,6 +159,31 @@
   box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
   text-align: center;
   transform: translate(-50%, -50%);
+}
+
+.resume-guidance-card {
+  position: absolute;
+  z-index: 4;
+  top: 22px;
+  left: 50%;
+  width: min(430px, calc(100% - 44px));
+  padding: 18px;
+  border: 1px solid #315a70;
+  border-radius: 10px;
+  background: rgb(10 25 36 / 96%);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 45%);
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.resume-guidance-card h2,
+.resume-guidance-card p {
+  margin: 7px 0;
+}
+
+.resume-guidance-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .goal-chooser > img {

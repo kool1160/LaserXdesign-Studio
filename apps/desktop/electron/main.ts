@@ -93,10 +93,16 @@ let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
 let handlingFatalFailure = false;
+let menuGuidanceActive: boolean | null = null;
 let rejectNextGetState =
   process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
 function emitState(state: DesktopState): void {
+  const guidanceActive = state.onboarding.workflow.status === "active";
+  if (menuGuidanceActive !== guidanceActive) {
+    menuGuidanceActive = guidanceActive;
+    buildMenu(guidanceActive);
+  }
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.stateChanged, state);
     mainWindow.setTitle(
@@ -592,7 +598,7 @@ function registerIpc(): void {
   });
 }
 
-function buildMenu(): void {
+function buildMenu(guidanceActive: boolean): void {
   const template: MenuItemConstructorOptions[] = [
     {
       label: "File",
@@ -600,11 +606,15 @@ function buildMenu(): void {
         {
           label: "New Project",
           accelerator: "CmdOrCtrl+N",
+          enabled: !guidanceActive,
+          visible: !guidanceActive,
           click: () => void requireController().newProject(),
         },
         {
           label: "Open…",
           accelerator: "CmdOrCtrl+O",
+          enabled: !guidanceActive,
+          visible: !guidanceActive,
           click: () => void requireController().openProject(),
         },
         {
@@ -858,7 +868,8 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     registerIpc();
-    buildMenu();
+    menuGuidanceActive = false;
+    buildMenu(false);
     await createWindow();
   });
 }

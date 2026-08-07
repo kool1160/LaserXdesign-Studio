@@ -96,7 +96,9 @@ describe("desktop onboarding guidance", () => {
     });
     expect(first.state.onboarding.workflow.currentStepId).toBe("add-content");
     await first.createDocument({ width: 20, height: 10, inputUnit: "inches" });
+    await first.editorAction({ type: "object.create", objectType: "rectangle" });
     await first.saveProject();
+    expect(first.state.project.document.objects).toHaveLength(1);
     first.stop();
 
     const second = makeController(userDataPath, projectPath);

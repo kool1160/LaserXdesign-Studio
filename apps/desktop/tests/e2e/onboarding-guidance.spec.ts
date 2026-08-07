@@ -26,10 +26,39 @@ test("clean first launch offers exactly three goals and a global exit", async ()
     await expect(page.getByText("Choose size and material", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Design", exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    const activeProjectId = await page.evaluate(
+      async () => (await window.laserx.getState()).project.id,
+    );
+    await expect.poll(() => launched.electronApp.evaluate(({ Menu }) => {
+      const fileMenu = Menu.getApplicationMenu()?.items.find(
+        (item) => item.label === "File",
+      );
+      return fileMenu?.submenu?.items
+        .filter((item) => item.label === "New Project" || item.label.startsWith("Open"))
+        .map((item) => ({ label: item.label, enabled: item.enabled, visible: item.visible }));
+    })).toEqual([
+      { label: "New Project", enabled: false, visible: false },
+      { label: "Open…", enabled: false, visible: false },
+    ]);
+    await page.keyboard.press("Control+N");
+    await expect.poll(
+      () => page.evaluate(async () => (await window.laserx.getState()).project.id),
+    ).toBe(activeProjectId);
 
     await page.getByTestId("guidance-exit").click();
     await expect(page.getByTestId("guidance-shell")).toBeHidden();
     await expect(page.getByTestId("workspace-welcome")).toBeVisible();
+    await expect.poll(() => launched.electronApp.evaluate(({ Menu }) => {
+      const fileMenu = Menu.getApplicationMenu()?.items.find(
+        (item) => item.label === "File",
+      );
+      return fileMenu?.submenu?.items
+        .filter((item) => item.label === "New Project" || item.label.startsWith("Open"))
+        .map((item) => ({ label: item.label, enabled: item.enabled, visible: item.visible }));
+    })).toEqual([
+      { label: "New Project", enabled: true, visible: true },
+      { label: "Open…", enabled: true, visible: true },
+    ]);
   } finally {
     await killAndRemove(launched);
   }
@@ -43,6 +72,11 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
     await page.getByTestId("start-create-first-sign").click();
     await page.getByTestId("guidance-continue").click();
     await expect(page.getByText("Add your sign content", { exact: true })).toBeVisible();
+    await page.getByTestId("add-rectangle").click();
+    await clickAndWaitForCommand(page, "Save");
+    await expect.poll(
+      () => page.evaluate(async () => (await window.laserx.getState()).project.document.objects.length),
+    ).toBe(1);
     const firstToken = await page.evaluate(
       async () => (await window.laserx.getState()).onboarding.workflow.runToken,
     );
@@ -54,6 +88,7 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
       await resumedPage.evaluate(async () => {
         await window.laserx.openProject();
       });
+      await expect(resumedPage.getByTestId("resume-guidance-card")).toBeVisible();
       await resumedPage.getByTestId("resume-guidance").click();
       await expect(
         resumedPage.getByText("Add your sign content", { exact: true }),

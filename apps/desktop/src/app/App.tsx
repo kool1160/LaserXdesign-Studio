@@ -630,6 +630,9 @@ export function App() {
     workspaceIsEmpty &&
     guidance.status === "idle" &&
     !state.onboarding.preferences.dismissed;
+  const showResumeGuidance =
+    guidance.status === "idle" &&
+    state.onboarding.preferences.activeWorkflow !== null;
 
   const updateActiveLayerManufacturing = (
     updates: Partial<ManufacturingLayerMetadata>,
@@ -2077,7 +2080,7 @@ export function App() {
               <span className="eyebrow">Welcome to LaserX</span>
               <h1 id="goal-chooser-title">What would you like to make?</h1>
               <p>Choose a goal. LaserX will keep the important controls in view and save your place.</p>
-              {state.onboarding.preferences.activeWorkflow !== null && (
+              {showResumeGuidance && state.onboarding.preferences.activeWorkflow !== null && (
                 <button
                   type="button"
                   className="resume-guidance"
@@ -2118,6 +2121,32 @@ export function App() {
               </div>
             </section>
           )}
+          {showResumeGuidance &&
+            !showGoalChooser &&
+            state.onboarding.preferences.activeWorkflow !== null && (
+              <section
+                className="resume-guidance-card"
+                aria-labelledby="resume-guidance-title"
+                data-testid="resume-guidance-card"
+              >
+                <span className="eyebrow">Saved guidance</span>
+                <h2 id="resume-guidance-title">
+                  Continue where you left off
+                </h2>
+                <p>
+                  Resume {guidedGoal(state.onboarding.preferences.activeWorkflow.goal).title} against this exact project.
+                </p>
+                <button
+                  type="button"
+                  className="resume-guidance"
+                  disabled={busy}
+                  data-testid="resume-guidance"
+                  onClick={() => void run(() => window.laserx.onboardingAction({ type: "resume" }))}
+                >
+                  Resume guidance
+                </button>
+              </section>
+            )}
           {workspaceIsEmpty && !showGoalChooser && !guidanceActive && (
             <section className="workspace-welcome" aria-labelledby="workspace-welcome-title" data-testid="workspace-welcome">
               <img src="./laserx-mark.svg" alt="" />
