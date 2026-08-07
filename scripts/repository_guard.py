@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,7 +76,8 @@ REQUIRED_FILES = (
     "docs/MILESTONES.md",
     "docs/OPERATOR_PROTOCOL.md",
     "docs/WORKSTREAM_OWNERSHIP.md",
-    "docs/SOL_EXECUTION_PLAN.md",
+    "docs/CHAT_AUTHORITY.md",
+    "docs/CODEX_EXECUTION_PLAN.md",
     "docs/CLAUDE_EXECUTION_PLAN.md",
     "docs/status/CURRENT.md",
     *(f"docs/milestones/{name}" for name in MILESTONE_FILENAMES),
@@ -96,6 +98,8 @@ REQUIRED_FILES = (
     ".github/workflows/m12-layered-production.yml",
     ".github/workflows/m13-windows-installer-beta.yml",
     ".github/workflows/m13-controlled-beta-release.yml",
+    ".github/workflows/repository-guard.yml",
+    ".github/workflows/canonical-verification.yml",
     "fixtures/svg/24-inch.svg",
     "fixtures/svg/600-mm.svg",
     "fixtures/dxf/24-inch.dxf",
@@ -110,6 +114,8 @@ REQUIRED_FILES = (
     "fixtures/cutability/m08-rule-goldens.json",
     "fixtures/production/m12-package-goldens.json",
     "scripts/generate-m07-raster-fixtures.cjs",
+    "scripts/ci_scope.py",
+    "scripts/test_ci_scope.py",
     "scripts/cutability-policy-audit.mjs",
     "scripts/ai-boundary-audit.mjs",
     "scripts/production-package-audit.mjs",
@@ -167,18 +173,44 @@ IGNORED_DIRECTORY_NAMES = {
     "test-results",
 }
 
+HISTORICAL_PR_WORKFLOWS = (
+    "m04-text-fonts.yml",
+    "m05-geometry-editing.yml",
+    "m06-svg-dxf.yml",
+    "m07-raster-tracing.yml",
+    "m08-cutability.yml",
+    "m09-sign-tools.yml",
+    "m10-ai-generation.yml",
+    "m11-ui-branding-polish.yml",
+    "m12-layered-production.yml",
+    "m13-windows-installer-beta.yml",
+)
 
-# Durable source-of-truth markers. These intentionally avoid volatile head
-# SHAs and gate status while enforcing the current model assignment, command
-# separation, active milestone, product/unit/security boundaries, and the held
-# status of the superseded Claude plan.
+ACTIVE_GOVERNANCE_FILES = (
+    "AGENTS.md",
+    "README.md",
+    "docs/MILESTONES.md",
+    "docs/OPERATOR_PROTOCOL.md",
+    "docs/WORKSTREAM_OWNERSHIP.md",
+    "docs/CHAT_AUTHORITY.md",
+    "docs/CODEX_EXECUTION_PLAN.md",
+    "docs/status/CURRENT.md",
+)
+
+
+# Durable source-of-truth markers. These avoid volatile heads and PR numbers
+# while enforcing Codex-only execution, primary-chat write authority, command
+# separation, active milestone, product/unit/security boundaries, and clear
+# historical supersession.
 CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "AGENTS.md",
         (
             "GitHub Issues #44 and #37",
-            "Planning/review chat — orchestrator and acceptance authority",
-            "SOL High — implementation agent",
+            "Primary operations chat — orchestrator and acceptance authority",
+            "Codex — implementation surface",
+            "the repository does not select, pin, auto-route, or fall back to a model",
+            "every other chat is read-only for planning/review-side mutations and must fail closed",
             "Canonical stored length is millimeters.",
             "LaserX is not plasma-control software, not a general CAD replacement",
             "Electron renderer has no unrestricted Node access.",
@@ -189,29 +221,47 @@ CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "docs/OPERATOR_PROTOCOL.md",
         (
-            "Only `Continue LaserX` goes to that implementation thread.",
+            "The **LaserX Design Studio primary operations chat** is the sole planning/review write authority.",
+            "Only `Continue LaserX` goes to a Codex implementation session.",
+            "Other chats are read-only and fail closed.",
             "`READY`, `REPAIR`, or `BLOCKED`",
             "There is no automatic routine merge.",
-            "SOL High implements and repairs; it never merges or advances.",
+            "Codex implements and repairs; it never merges or advances.",
+            "Repository Guard / structure-and-policy",
+            "Canonical Verification / exact-head",
         ),
         "docs/OPERATOR_PROTOCOL.md",
     ),
     (
         "docs/WORKSTREAM_OWNERSHIP.md",
         (
-            "This assignment supersedes ADR 0026's Claude implementation assignment.",
-            "Only `Continue LaserX` goes to the SOL High implementation thread.",
-            "SOL High must never:",
-            "Claude and paid Anthropic models are held from implementation",
+            "This assignment supersedes ADR 0026's Claude implementation assignment",
+            "Codex is the sole active implementation surface.",
+            "Only `Continue LaserX` goes to the Codex implementation session.",
+            "Every other chat is read-only for those mutations.",
+            "Claude, Anthropic, Fable, and other external paid implementation, repair, review, continuation, and fallback routes are removed",
         ),
         "docs/WORKSTREAM_OWNERSHIP.md",
+    ),
+    (
+        "docs/CHAT_AUTHORITY.md",
+        (
+            "The **LaserX Design Studio primary operations chat** is the only chat authorized",
+            "The Codex implementation session is separately authorized only for the one bounded `Continue LaserX` task",
+            "LaserX write authority belongs to the LaserX Design Studio primary operations chat. Return there and issue the command.",
+            "Identity uncertain means read-only.",
+            "scripts/repository_guard.py",
+        ),
+        "docs/CHAT_AUTHORITY.md",
     ),
     (
         "docs/status/CURRENT.md",
         (
             "M15 — Guided Onboarding, Workflow-First UI, and Learn Mode",
-            "Implementation model: **SOL High**",
-            "planning/review ChatGPT",
+            "Implementation surface: **Codex**",
+            "Implementation model: **selected by the owner inside Codex",
+            "LaserX Design Studio primary operations chat only",
+            "external paid implementation routes: **removed from active operation",
             "Every agent must read GitHub Issues #44 and #37",
             "## M15 gate order",
             "## M14 completion record",
@@ -220,18 +270,19 @@ CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "docs/status/CURRENT.md",
     ),
     (
-        "docs/SOL_EXECUTION_PLAN.md",
+        "docs/CODEX_EXECUTION_PLAN.md",
         (
-            "# SOL High Execution Plan",
-            "Only `Continue LaserX` goes to the SOL High implementation thread.",
-            "repair review blockers first;",
-            "stop at `AWAITING_REVIEW` or `BLOCKED`;",
+            "# Codex Execution Plan",
+            "Codex is the only active implementation surface.",
+            "The owner selects the model inside Codex for each session.",
+            "Only `Continue LaserX` goes to Codex.",
+            "Every other chat is read-only for those mutations.",
+            "stop at `AWAITING_REVIEW` or `BLOCKED`",
             "There is no automatic routine merge.",
-            "## Current M15 queue",
-            "### G0 — guided-workflow architecture and first-run contract",
-            "### G6 — packaged accessibility and first-session validation",
+            "## Active M15 G1 task",
+            "Visible onboarding UI, stores, IPC, grouped repair, and later G1 product work are excluded.",
         ),
-        "docs/SOL_EXECUTION_PLAN.md",
+        "docs/CODEX_EXECUTION_PLAN.md",
     ),
     (
         "docs/FILE_FORMATS.md",
@@ -265,7 +316,8 @@ CONTRACT_REQUIREMENTS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         (
             "# Claude Execution Plan — Superseded",
             "**Superseded and held as of 2026-08-06 by explicit owner direction.**",
-            "docs/SOL_EXECUTION_PLAN.md",
+            "docs/CODEX_EXECUTION_PLAN.md",
+            "They have no active execution route.",
             "It contains no executable implementation authority.",
         ),
         "docs/CLAUDE_EXECUTION_PLAN.md (held historical notice)",
@@ -294,6 +346,16 @@ def check_required(errors: list[str]) -> None:
     for milestone in EXPECTED_MILESTONES:
         if not milestone.is_file():
             errors.append(f"missing milestone: {relative(milestone)}")
+
+    retired_plan = ROOT / "docs" / "SOL_EXECUTION_PLAN.md"
+    if retired_plan.exists():
+        errors.append("fixed-model execution plan must remain removed: docs/SOL_EXECUTION_PLAN.md")
+
+    retired_workflow = ROOT / ".github" / "workflows" / "repository-case-collision.yml"
+    if retired_workflow.exists():
+        errors.append(
+            "standalone case-collision workflow must remain consolidated into Repository Guard"
+        )
 
 
 def missing_terms(text: str, terms: tuple[str, ...]) -> tuple[str, ...]:
@@ -342,7 +404,9 @@ def check_instruction_links(errors: list[str]) -> None:
         errors,
         ROOT / "docs" / "decisions" / "0026-claude-implementation-chatgpt-orchestration.md",
         (
-            "Accepted by owner on 2026-08-04.",
+            "Superseded on 2026-08-06 by the Codex-only G1 governance reset",
+            "Retained as historical evidence only",
+            "Originally accepted by owner on 2026-08-04",
             "Claude is the active implementation agent",
             "ChatGPT is the senior software engineer, project orchestrator, exact-head auditor, and acceptance authority",
             "G5 owns the complete capture transaction",
@@ -359,6 +423,103 @@ def check_instruction_links(errors: list[str]) -> None:
         ("Superseded by ADR 0026",),
         "ADR 0025 (superseded)",
     )
+
+    for relative_path in ACTIVE_GOVERNANCE_FILES:
+        text = (ROOT / relative_path).read_text(encoding="utf-8")
+        if "SOL High" in text:
+            errors.append(f"active governance file contains fixed-model routing: {relative_path}")
+
+
+def case_collision_errors(paths: list[str]) -> list[str]:
+    """Return case-insensitive path and file/directory-prefix collisions."""
+    normalized = [
+        (path, tuple(part.casefold() for part in path.replace("\\", "/").split("/")))
+        for path in paths
+    ]
+    exact_first: dict[tuple[str, ...], str] = {}
+    directory_descendant: dict[tuple[str, ...], str] = {}
+    collisions: set[tuple[str, str, str]] = set()
+
+    for path, parts in normalized:
+        first = exact_first.get(parts)
+        if first is None:
+            exact_first[parts] = path
+        elif first != path:
+            collisions.add(("case-folded path", first, path))
+
+        for length in range(1, len(parts)):
+            directory_descendant.setdefault(parts[:length], path)
+
+    for path, parts in normalized:
+        descendant = directory_descendant.get(parts)
+        if descendant is not None and descendant != path:
+            collisions.add(("file/directory prefix", path, descendant))
+
+    return [
+        f"{kind}: {first} <-> {second}"
+        for kind, first, second in sorted(collisions)
+    ]
+
+
+def check_case_collisions(errors: list[str]) -> None:
+    raw = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT)
+    tracked_paths = [path for path in raw.decode("utf-8").split("\0") if path]
+    for collision in case_collision_errors(tracked_paths):
+        errors.append(f"case-insensitive tracked-path collision: {collision}")
+
+
+def workflow_contract_errors(workflows: dict[str, str]) -> list[str]:
+    """Return errors when required-check consolidation drifts."""
+    errors: list[str] = []
+    for filename in HISTORICAL_PR_WORKFLOWS:
+        text = workflows.get(filename, "")
+        if "workflow_dispatch:" not in text:
+            errors.append(f"historical workflow must remain manually dispatchable: {filename}")
+        if "pull_request:" in text:
+            errors.append(f"historical workflow must not be a permanent PR blocker: {filename}")
+
+    repository_guard = workflows.get("repository-guard.yml", "")
+    for marker in (
+        "name: Repository Guard",
+        "pull_request:",
+        "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+        "python scripts/repository_guard.py",
+        "python scripts/test_repository_guard.py",
+        "python scripts/test_ci_scope.py",
+    ):
+        if marker not in repository_guard:
+            errors.append(f"Repository Guard workflow missing exact-head policy marker: {marker}")
+
+    canonical = workflows.get("canonical-verification.yml", "")
+    for marker in (
+        "name: Canonical Verification",
+        "pull_request:",
+        "ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+        "py -3 scripts/ci_scope.py",
+        "steps.scope.outputs.packaged_windows == 'true'",
+        "pnpm verify",
+    ):
+        if marker not in canonical:
+            errors.append(f"Canonical Verification workflow missing marker: {marker}")
+
+    for filename in (
+        "m13-windows-installer-beta.yml",
+        "m13-controlled-beta-release.yml",
+    ):
+        text = workflows.get(filename, "")
+        if "workflow_dispatch:" not in text or "pull_request:" in text:
+            errors.append(f"release/signing workflow must remain an explicit release gate: {filename}")
+
+    return errors
+
+
+def check_workflow_contract(errors: list[str]) -> None:
+    workflow_directory = ROOT / ".github" / "workflows"
+    workflows = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in workflow_directory.glob("*.yml")
+    }
+    errors.extend(workflow_contract_errors(workflows))
 
 
 def check_no_legacy_milestones(errors: list[str]) -> None:
@@ -417,6 +578,8 @@ def main() -> int:
     errors: list[str] = []
     check_required(errors)
     check_instruction_links(errors)
+    check_workflow_contract(errors)
+    check_case_collisions(errors)
     check_no_legacy_milestones(errors)
     check_secrets(errors)
     check_fonts(errors)

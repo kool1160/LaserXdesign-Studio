@@ -1,11 +1,7 @@
 name: M05 Geometry Editing
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m05-geometry-editing"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

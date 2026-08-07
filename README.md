@@ -48,20 +48,20 @@ Do not use an old chat handoff, previous milestone branch, temporary worktree, o
 
 LaserX uses a GitHub-native operating loop:
 
-- **Owner** decides product direction and advancement.
-- **Claude** implements or repairs one bounded active-milestone slice and stops for review.
-- **ChatGPT** writes accepted planning decisions, performs independent exact-head audits, posts findings to GitHub, and merges/advances after owner command.
-- **Codex** remains held unless the owner explicitly assigns a task.
+- **Owner** decides product direction, selects the model inside Codex, and controls advancement.
+- **Codex** implements or repairs one bounded active-gate task and stops for review.
+- **LaserX Design Studio primary operations chat** alone writes planning decisions, performs exact-head review, and merges or advances after owner command.
+- **Every other chat** is read-only for planning/review-side mutations and fails closed when identity is uncertain.
 
-Read [`AGENTS.md`](AGENTS.md), [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md), and [`docs/CLAUDE_EXECUTION_PLAN.md`](docs/CLAUDE_EXECUTION_PLAN.md) for the complete contracts.
+Read [`AGENTS.md`](AGENTS.md), [`docs/OPERATOR_PROTOCOL.md`](docs/OPERATOR_PROTOCOL.md), [`docs/CHAT_AUTHORITY.md`](docs/CHAT_AUTHORITY.md), and [`docs/CODEX_EXECUTION_PLAN.md`](docs/CODEX_EXECUTION_PLAN.md) for the complete contracts.
 
 Core commands:
 
 - `Plan LaserX: <idea>` — discuss product intent without changing the repository.
 - `Lock that into LaserX` — record an accepted decision in GitHub.
-- `Continue LaserX` — Claude implements or repairs only the approved active slice and stops.
-- `Check LaserX` — ChatGPT independently audits the exact PR head.
-- `Advance LaserX` — ChatGPT merges and records a verified owner-approved advancement.
+- `Continue LaserX` — Codex implements or repairs only the approved active slice and stops.
+- `Check LaserX` — the primary operations chat independently audits the exact PR head.
+- `Advance LaserX` — the primary operations chat merges and records a verified owner-approved advancement.
 - `Status LaserX` — report current state without changing it.
 - `Hold LaserX` — pause new work without discarding current progress.
 
@@ -97,7 +97,7 @@ Completed foundations run through M13. The approved post-M13 sequence is:
 
 Detailed acceptance criteria live in [`docs/MILESTONES.md`](docs/MILESTONES.md) and `docs/milestones/`.
 
-Temporary Claude capacity may accelerate the active approved milestone. It never changes roadmap priority, authorizes parallel production work, or replaces independent audit.
+Claude, Anthropic, Fable, and other external paid implementation, review, continuation, and fallback routes are removed from active operation. Historical authorship remains normal repository evidence.
 
 ## Pinned stack
 

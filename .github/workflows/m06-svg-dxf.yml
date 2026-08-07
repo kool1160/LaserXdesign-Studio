@@ -1,11 +1,7 @@
 name: M06 SVG DXF Interoperability
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m06-svg-dxf"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

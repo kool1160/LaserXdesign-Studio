@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted by owner on 2026-08-04. Supersedes ADR 0025 the same day.
+Superseded on 2026-08-06 by the Codex-only G1 governance reset recorded in `docs/status/CURRENT.md`, `docs/CHAT_AUTHORITY.md`, and `docs/CODEX_EXECUTION_PLAN.md`. Retained as historical evidence only; it carries no current implementation, review, continuation, fallback, or routing authority.
+
+Originally accepted by owner on 2026-08-04 and superseded ADR 0025 the same day.
 
 ## Context
 

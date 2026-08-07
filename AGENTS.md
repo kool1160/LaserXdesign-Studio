@@ -53,7 +53,7 @@ When instructions conflict, use this order:
 8. `docs/ARCHITECTURE.md` and accepted ADRs in `docs/decisions/`.
 9. Existing tests and established conventions.
 
-`docs/OPERATOR_PROTOCOL.md` defines how the owner, planning/review chat, SOL High implementation thread, GitHub, pull requests, and CI move work through those sources. It does not override product requirements or milestone scope.
+`docs/OPERATOR_PROTOCOL.md` defines how the owner, the LaserX Design Studio primary operations chat, Codex implementation sessions, GitHub, pull requests, and CI move work through those sources. `docs/CHAT_AUTHORITY.md` is the binding cross-chat write-authority rule. Neither document overrides product requirements or milestone scope.
 
 A PDF, chat handoff, old completion report, stale README, previous milestone branch, experiment branch, or temporary worktree is never authoritative over current GitHub state. The owner may use an older handoff to restore an operating method; once accepted, that decision must be recorded in current GitHub truth.
 
@@ -63,7 +63,7 @@ Do not silently resolve a genuine conflict. Record it in GitHub and stop or choo
 
 The owner restored the original command workflow on **2026-08-06**.
 
-> Chat decides. GitHub remembers. SOL High executes. Pull requests hold the evidence. The owner receives the verdict and next command.
+> The primary operations chat decides. GitHub remembers. Codex executes the bounded implementation task. Pull requests hold the evidence. The owner receives the verdict and next command.
 
 Hard operating rules:
 
@@ -72,7 +72,8 @@ Hard operating rules:
 - one active implementation target;
 - one next valid command;
 - only `Continue LaserX` goes to the implementation thread;
-- planning, locking decisions, review, status, holds, and advancement stay in the planning/review chat;
+- planning, locking decisions, review, status, holds, and advancement stay in the LaserX Design Studio primary operations chat;
+- every other chat is read-only for planning/review-side mutations and must fail closed when its identity is uncertain;
 - implementation stops after pushing exact-head evidence;
 - no implementation agent merges, closes the active issue, activates the next gate, or approves its own work;
 - no agent creates scheduled heartbeats, background polling, recurring CI checks, or self-waking sessions;
@@ -85,9 +86,9 @@ Hard operating rules:
 
 The owner controls product direction, milestone order, pricing philosophy, trial policy, model choice, and advancement.
 
-### 5.2 Planning/review chat — orchestrator and acceptance authority
+### 5.2 Primary operations chat — orchestrator and acceptance authority
 
-The planning/review chat:
+The LaserX Design Studio primary operations chat:
 
 - discusses product intent through `Plan LaserX: <idea>`;
 - records accepted decisions through `Lock that into LaserX`;
@@ -102,13 +103,13 @@ The planning/review chat:
 
 There is no automatic routine merge. A `READY` verdict makes `Advance LaserX` valid; it does not replace the owner's advancement command.
 
-### 5.3 SOL High — implementation agent
+### 5.3 Codex — implementation surface
 
-The implementation model is **SOL High**, meaning the owner-selected OpenAI coding model running at High reasoning in the Codex coding workspace. “Codex” is the execution surface; SOL High is the selected implementation model.
+The active implementation surface is **Codex**. The owner selects the model inside Codex for each session; the repository does not select, pin, auto-route, or fall back to a model.
 
-SOL High receives only `Continue LaserX` as the normal owner command.
+Codex receives only `Continue LaserX` as the normal owner command.
 
-SOL High must:
+Codex must:
 
 - read live repository truth before editing;
 - work only on the one active milestone and bounded slice recorded in `CURRENT.md`;
@@ -125,15 +126,15 @@ SOL High must:
 
 Implementation responsibility does not authorize broad cleanup, parallel future milestones, duplicate research, wholesale experiment merges, or self-directed scope expansion.
 
-### 5.4 Claude / Anthropic — held
+### 5.4 External paid routes — removed
 
-Claude and other paid Anthropic models are **held**. Do not invoke them, spend Anthropic usage credits, assign background work to them, or treat them as the implementation lead unless the owner explicitly authorizes one named, bounded task in GitHub.
+Claude, Anthropic, Fable, and other external paid implementation, review, continuation, and fallback routes are removed from active operation. Historical authorship and superseded ADRs remain audit evidence, not execution authority.
 
-Earlier Claude-authored code and evidence remain valid historical repository content and must be reviewed on their merits. The hold changes future routing, not authorship history.
+Earlier externally authored code and evidence remain valid historical repository content and must be reviewed on their merits. Removed routing changes future operation, not authorship history.
 
 ### 5.5 Independent verification
 
-A verifier who did not author the load-bearing change may be assigned for critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety boundaries. The planning/review chat records the exact target and verifier in GitHub.
+A verifier who did not author the load-bearing change may be assigned for critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety boundaries. The primary operations chat records the exact target and verifier in GitHub.
 
 ### 5.6 GitHub
 
@@ -141,11 +142,12 @@ GitHub stores the durable plan, code, evidence, review findings, CI state, and m
 
 ## 6. Mandatory reading before implementation or repair
 
-SOL High must read:
+Codex must read:
 
 - this file;
 - `docs/OPERATOR_PROTOCOL.md`;
 - `docs/WORKSTREAM_OWNERSHIP.md`;
+- `docs/CHAT_AUTHORITY.md`;
 - `docs/status/CURRENT.md`;
 - Issues #44 and #37;
 - the active milestone document and active issue;
@@ -160,17 +162,17 @@ Do not start a later milestone because it appears convenient. Milestones are gat
 
 ### `Plan LaserX: <idea>`
 
-Use in the planning/review chat. Discuss product behavior, workflow, concern, priority, business model, manufacturing rule, architecture, or sequencing. No repository implementation begins.
+Use only in the primary operations chat. Discuss product behavior, workflow, concern, priority, business model, manufacturing rule, architecture, or sequencing. No repository implementation begins.
 
 ### `Lock that into LaserX`
 
-Use in the planning/review chat. Record the accepted decision in the smallest authoritative GitHub location: issue, milestone, requirements file, ADR, status file, ownership document, or PR finding.
+Use only in the primary operations chat. Record the accepted decision in the smallest authoritative GitHub location: issue, milestone, requirements file, ADR, status file, ownership document, or PR finding.
 
 ### `Continue LaserX`
 
-Use in the SOL High implementation thread.
+Use in the Codex implementation session authorized for the active bounded task.
 
-SOL High must:
+Codex must:
 
 1. Read repository truth: `AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/status/CURRENT.md`, active milestone, active issue, active PR, review findings, and CI.
 2. Fix blocking review findings first, with regression tests.
@@ -195,7 +197,7 @@ Next command: Check LaserX | Continue LaserX | Plan LaserX: <decision>
 
 ### `Check LaserX`
 
-Use in the planning/review chat. Review the exact current head, full relevant diff, milestone acceptance, tests, review threads, and required CI. Detailed findings go on GitHub.
+Use only in the primary operations chat. Review the exact current head, full relevant diff, milestone acceptance, tests, review threads, and required CI. Detailed findings go on GitHub.
 
 Compact verdict:
 
@@ -209,7 +211,7 @@ Next command: Advance LaserX | Continue LaserX | Plan LaserX: <decision>
 
 ### `Advance LaserX`
 
-Use only in the planning/review chat after `READY`. Before advancing, verify:
+Use only in the primary operations chat after `READY`. Before advancing, verify:
 
 - the reviewed head has not changed;
 - required GitHub workflows are green;
@@ -217,11 +219,11 @@ Use only in the planning/review chat after `READY`. Before advancing, verify:
 - milestone or gate acceptance and exit criteria are satisfied;
 - the owner explicitly issued `Advance LaserX`.
 
-Then merge using the established method, close the appropriate issue, update `CURRENT.md` with exact merge and verification evidence, activate only the next approved gate from latest `main`, and stop. Implementation of the new gate has not begun until the owner later sends `Continue LaserX` to SOL High.
+Then merge using the established method, close the appropriate issue, update `CURRENT.md` with exact merge and verification evidence, activate only the next approved gate from latest `main`, and stop. Implementation of the new gate has not begun until the owner later sends `Continue LaserX` to Codex.
 
 ### `Status LaserX`
 
-Use in the planning/review chat. Read-only status: active milestone, issue, PR, head, CI, blocker, and next valid command. No review, implementation, merge, or status mutation.
+Use only in the primary operations chat. Read-only status: active milestone, issue, PR, head, CI, blocker, and next valid command. No review, implementation, merge, or status mutation.
 
 ### `Hold LaserX`
 

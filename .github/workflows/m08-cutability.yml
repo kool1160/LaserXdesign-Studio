@@ -1,11 +1,7 @@
 name: M08 Cutability
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m08-cutability"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

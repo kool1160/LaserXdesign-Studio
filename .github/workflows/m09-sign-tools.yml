@@ -1,11 +1,7 @@
 name: M09 Sign Tools
 
 on:
-  push:
-    branches:
-      - main
-      - "feat/m09-sign-tools"
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
