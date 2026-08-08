@@ -6,19 +6,23 @@ A user can install LaserX, use the full product on real projects for an owner-ap
 
 ## Activation gate
 
-M20 remains blocked until M19 is complete and the owner makes the final licensing, trial-length, introductory-price, standard-price, offline-grace, and device-policy decisions.
+M20 remains blocked until M19 is complete and the owner makes the final licensing, trial-length, introductory-price, standard-price, offline-grace, device-policy, and support-scope decisions.
+
+Issue #76 is a planning input. It does not lock a price or activate M20 early.
 
 ## Product philosophy
 
 - premium product, generous price;
-- current direction: introductory/founder pricing near $19.99 and standard personal pricing around $25–$30;
+- current direction: introductory/founder pricing near $19.99 and standard personal pricing around $25–$30; these remain hypotheses until tested with representative users;
 - approximately two-week full-product trial;
 - no credit card merely to evaluate;
 - no watermark ruining exports;
 - no project limit that prevents real evaluation;
 - no premium gate blocking 3D preview;
 - no hidden conventional SaaS model unless the owner explicitly changes direction;
-- optional AI remains user-supplied and is not bundled into the license price.
+- optional AI remains user-supplied and is not bundled into the license price;
+- “send us your ugly files” means structured bug and fixture intake that improves LaserX, not an unlimited promise of custom file repair or individual design work;
+- purchase copy must describe support limits honestly.
 
 ## Included
 
@@ -31,7 +35,9 @@ M20 remains blocked until M19 is complete and the owner makes the final licensin
 - explicit error, expired, offline, revoked, and recovery states;
 - test-only deterministic licensing service and no production secrets in the repository;
 - installer and uninstall interaction with license state;
-- accessible plain-language terms and privacy information.
+- accessible plain-language terms and privacy information;
+- a documented support model covering bug/fixture intake, response expectations, escalation, privacy handling, self-service guidance, and any custom-help boundary;
+- representative-user validation of price comprehension, perceived value, and support expectations before final purchase copy is approved.
 
 ## Acceptance tests
 
@@ -44,16 +50,19 @@ M20 remains blocked until M19 is complete and the owner makes the final licensin
 7. Optional AI access remains separate from LaserX licensing and billing.
 8. Purchase copy does not imply a subscription or tier structure the owner has not approved.
 9. The system remains testable without contacting a real payment or licensing service in CI.
+10. Support copy clearly distinguishes bug/fixture intake from custom file repair and design services.
+11. Representative users understand the price, trial, update entitlement, device policy, and support boundary before purchase terms are locked.
+12. No support or pricing promise exceeds the approved business model’s capacity.
 
 ## Exit checklist
 
-- [ ] Owner final licensing decisions are recorded.
+- [ ] Owner final licensing, pricing, update-entitlement, and support-scope decisions are recorded.
 - [ ] License/trial ADR and privacy review are accepted.
 - [ ] Full-product trial, activation, expiration, recovery, and offline tests pass.
 - [ ] Packaged Windows and installer lifecycle evidence pass.
-- [ ] Terms, pricing presentation, and support process are approved.
+- [ ] Terms, pricing presentation, ugly-file intake, privacy handling, and support boundaries are validated and approved.
 - [ ] Status advances to M21 only after audit, merge, issue closure, and owner approval.
 
 ## Explicitly excluded
 
-No automatic subscription, AI-credit resale, complex enterprise licensing, marketplace, cloud project storage, invasive telemetry, or DRM that risks user projects belongs in M20.
+No automatic subscription, AI-credit resale, unlimited custom file repair bundled into the personal license, complex enterprise licensing, marketplace, cloud project storage, invasive telemetry, or DRM that risks user projects belongs in M20.

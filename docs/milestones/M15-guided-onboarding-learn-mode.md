@@ -8,6 +8,8 @@ Current slice: **G4 — grouped repair decisions and Fix safe problems workflow*
 
 G3 and its post-merge physical-confirmation repair are accepted and merged. G5 and G6 remain held.
 
+Cross-milestone correction overlay: Issue #76. It does not change the active gate order, reopen M14, or authorize later-milestone implementation during M15.
+
 ## User-visible outcome
 
 A first-time user chooses a real goal, sees only relevant controls, completes real LaserX actions, understands repair decisions, views physical 3D, and exports without needing CAD knowledge or an external tutorial.
@@ -64,7 +66,9 @@ The user now remains on **Set physical details** through role/material/thickness
 G4 must:
 
 - group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** with truthful affected scope/counts;
-- limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance;
+- present deterministic cleanup/hygiene volume separately from unresolved manufacturing blockers and user decisions, rather than presenting one inflated total as though every item has equal severity;
+- limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and only a narrowly proven straight, no-handle near-closure at or below the reviewed `0.010 mm` ceiling;
+- keep every broader, curved, larger, or ambiguous near-closure outside automatic-safe repair, and do not broaden the safe class without exact regression evidence plus representative real-file evidence;
 - make **Fix safe problems** preview-first and non-mutating until acceptance;
 - refuse stale proposals if their document/finding basis changes;
 - apply accepted safe repairs as one coherent undoable transaction whenever technically practical and report fixed/skipped/remaining counts;
@@ -80,18 +84,39 @@ G4 must:
 
 No G5 full Learn Mode/replay content, G6 owner-observed usability validation, broad geometry-engine rewrite, speculative safe classifications, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
 
+## Held G5 clarification — nominal design assembly
+
+When G5 becomes active, Learn Mode and contextual explanations must:
+
+- label physical 3D as the **Nominal design assembly**;
+- explain that it represents authoritative design geometry and exact declared layer thickness;
+- state plainly that it is not post-cut compensation, process simulation, or a guarantee of bench fit;
+- avoid adding kerf compensation, fit simulation, or process-profile behavior to M15.
+
+## Held G6 clarification — time-boxed private alpha before M16
+
+G6 includes a small early-discovery checkpoint, not a new milestone and not a substitute for M22:
+
+- observe at least five first-time users outside the project team;
+- provide no direct coaching during the measured primary task;
+- cover representative create/import/repair/3D/export use, including real user-supplied artwork where practical;
+- record completion, stuck points, misunderstood language, raw-count overload, recovery, and export success;
+- require repair before M16 only for correctness, data-loss, trapping, severe accessibility, or repeated primary-workflow blockers;
+- record isolated preferences and new-feature requests for M22 rather than expanding M15.
+
 ## Milestone acceptance tests
 
 1. Clean first launch presents the three goal paths.
 2. Create My First Sign completes through real physical/cutability/3D/export outcomes.
 3. SVG/DXF import stays isolated from raster trace controls.
 4. PNG/JPEG exposes preprocessing/trace only after raster selection.
-5. Large finding sets become understandable grouped repair decisions.
+5. Large finding sets become understandable grouped repair decisions, with cleanup volume visibly separate from unresolved blockers and user decisions.
 6. **Fix safe problems** is preview-first, deterministic, undoable, and truthfully reported.
 7. Ambiguous findings remain user decisions.
 8. Optional AI remains optional and non-blocking.
 9. Guidance can be exited and cannot permanently trap the user.
-10. G6 closes accessibility and owner-observed usability evidence.
+10. Users understand that physical 3D is a nominal design assembly, not compensated geometry or guaranteed physical fit.
+11. G6 closes accessibility, owner-observed usability, and the time-boxed private-alpha evidence required before M16.
 
 ## Exit checklist
 
@@ -100,13 +125,15 @@ No G5 full Learn Mode/replay content, G6 owner-observed usability validation, br
 - [x] Create My First Sign guided vertical slice passes.
 - [x] Vector-import and raster-trace guided paths pass, including PR #74 physical-confirmation repair.
 - [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
-- [ ] Large finding sets reduce to understandable repair decisions.
-- [ ] Learn Mode covers core manufacturing and repair concepts.
+- [ ] Large finding sets reduce to understandable repair decisions without equating cleanup volume to blocker severity.
+- [ ] Learn Mode covers core manufacturing and repair concepts, including nominal-design 3D language.
 - [ ] Skip/replay/resume/recovery pass across the integrated product.
 - [ ] Accessibility and packaged Windows evidence pass.
 - [ ] Owner-observed first-session evidence is recorded.
-- [ ] Status advances to M16 only after exact-head audit, merge, issue closure, and owner approval.
+- [ ] At least five outside first-time users complete the time-boxed private-alpha checkpoint without direct coaching during the measured task.
+- [ ] Correctness, data-loss, trapping, severe accessibility, and repeated primary-workflow blockers from that checkpoint are closed or explicitly accepted by the owner; other feedback is deferred to M22.
+- [ ] Status advances to M16 only after exact-head audit, merge, issue closure, private-alpha evidence, and owner approval.
 
 ## Explicitly excluded
 
-No broad material expansion, new process profiles, export-profile system, new AI provider capability, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support belongs in M15.
+No broad material expansion, new process profiles, export-profile system, new AI provider capability, licensing, public beta, analytics platform, kerf or fit simulation, general-purpose CAD, CAM, machine control, or native DWG support belongs in M15.

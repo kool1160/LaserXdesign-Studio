@@ -10,7 +10,9 @@ The intended philosophy is Apple-like without copying Apple branding or operatin
 
 ## Activation gate
 
-M22 remains blocked until M21 is complete, a controlled beta cohort exists, the major Version 1 feature surfaces are present, and the owner explicitly activates real-user validation and final interface polish.
+M22 remains blocked until M21 is complete, a controlled beta cohort exists, the major Version 1 feature surfaces are present, the M15 Issue #76 private-alpha evidence has been reviewed for regression risk, and the owner explicitly activates real-user validation and final interface polish.
+
+M22 is the broad final usability and interface-validation gate. It is not the first time people outside the project team encounter LaserX; it must build on, compare against, and verify that later milestones did not undo the earlier M15 private-alpha gains.
 
 ## Included
 
@@ -19,6 +21,7 @@ M22 remains blocked until M21 is complete, a controlled beta cohort exists, the 
 - documented participant mix across plasma, laser, router, woodworking, acrylic, sign-making, hobby, and small-shop workflows;
 - observed or recorded sessions with consent;
 - time to first successful project, stuck points, incorrect clicks, undiscovered features, misunderstood language, and export success;
+- comparison against M15 private-alpha findings to detect regressions, fixed problems that returned, and assumptions that later milestones invalidated;
 - understanding of LaserX versus machine-control software;
 - understanding that AI is optional;
 - feedback from real SVG, DXF, raster, text, layered, material, repair, 3D, and downstream-software workflows;
@@ -42,6 +45,7 @@ M22 remains blocked until M21 is complete, a controlled beta cohort exists, the 
 
 - representative ugly or broken DXF/SVG fixtures with large finding counts;
 - grouped repair presentation by problem type, scope, confidence, and decision;
+- deterministic cleanup/hygiene volume shown separately from unresolved manufacturing blockers and user decisions rather than as one alarming undifferentiated total;
 - **Fix safe problems** remains the clear primary action when eligible repairs exist;
 - before/after preview, no mutation before acceptance, one undoable batch action when practical, and fixed/skipped/remaining summary;
 - remaining ambiguous decisions presented in a small navigable sequence rather than a raw list of hundreds or thousands of findings;
@@ -62,7 +66,7 @@ M22 does not add unrelated product capability merely because a participant reque
 5. Users can find 3D preview, manipulate it, return to editing, and export.
 6. Users can recover from at least one realistic mistake without restarting or losing work.
 7. SVG/DXF output opens at intended scale in the participant's downstream workflow.
-8. A large broken-file finding set is understood as a small number of repair decisions rather than an overwhelming raw error list.
+8. A large broken-file finding set is understood as a small number of repair decisions, with cleanup volume clearly distinguished from unresolved blockers and user decisions.
 9. Users can run **Fix safe problems**, understand what changed, undo it, and complete the remaining ambiguous decisions.
 10. Create, SVG/DXF import, raster trace, repair, 3D, and export each show only their relevant default controls.
 11. No primary workflow presents a permanent wall of unrelated Create, Import, Trace, Analyze, Text, Sign, AI, 3D, and Export controls.
@@ -71,10 +75,12 @@ M22 does not add unrelated product capability merely because a participant reque
 14. Packaged layouts pass at 1366 x 768, 1920 x 1080, and supported Windows scaling without clipped primary actions or uncontrolled panel sprawl.
 15. Every severity-1 and release-blocking usability defect is closed or explicitly accepted by the owner.
 16. Accessibility and high-DPI blockers found in the cohort are resolved.
-17. Owner packaged-screenshot review accepts the complete application as simple, clean, restrained, and premium enough to enter the Version 1 release gate.
+17. Later milestones are shown not to have reintroduced M15 private-alpha blockers, tool walls, raw-count overload, or AI dependency.
+18. Owner packaged-screenshot review accepts the complete application as simple, clean, restrained, and premium enough to enter the Version 1 release gate.
 
 ## Exit checklist
 
+- [ ] M15 private-alpha findings and later-milestone regression risks are reviewed before participant sessions begin.
 - [ ] Participant plan and consent process are approved.
 - [ ] Session evidence and metrics are recorded.
 - [ ] Ten-minute success target is measured, not assumed.
