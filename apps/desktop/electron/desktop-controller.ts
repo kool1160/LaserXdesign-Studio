@@ -26,11 +26,13 @@ import {
   type AiProviderResult,
 } from "@laserx/ai";
 import {
+  analyzeDocumentCutability,
   CutabilityAnalysisCache,
   fingerprintCutabilityDocument,
   fingerprintCutabilityAnalysis,
   groupCutabilityFindings,
   materializeBridgeProposal,
+  normalizeCutPaths,
   proposeBridge,
   proposeSafeRepairs,
   type BridgeProposal,
@@ -43,6 +45,7 @@ import {
   copyDocumentObject,
   type DocumentObject,
   type Layer,
+  type LaserxDocument,
   type LaserxProject,
   type PathObject,
   type TextObject,
@@ -51,6 +54,7 @@ import {
   type ManufacturingSettings,
   type RasterSourceMetadata,
 } from "@laserx/domain";
+import { applyAffineTransform } from "@laserx/geometry";
 import {
   type FontCatalogEntry,
   FontEngine,
@@ -288,6 +292,65 @@ interface CutabilityAnalysisProjection {
   cutability: CutabilityAnalysisSummary;
 }
 
+type SafeRepairVisualPreview = NonNullable<
+  DesktopState["analysis"]["safeRepairProposal"]
+>["visualPreview"];
+
+function safeRepairPreviewPaths(
+  document: LaserxDocument,
+  objectIds: readonly string[],
+): SafeRepairVisualPreview["before"] {
+  const topLevelNodes = new Map(
+    document.objects
+      .filter((object): object is PathObject => object.type === "path")
+      .map((object) => [
+        object.id,
+        object.points.map((point) =>
+          applyAffineTransform(point, object.transform),
+        ),
+      ]),
+  );
+  return normalizeCutPaths(document, objectIds).map((path) => ({
+    id: path.id,
+    objectId: path.objectId,
+    closed: path.closed,
+    points: path.points.map((point) => ({
+      xMm: point.xMm,
+      yMm: point.yMm,
+    })),
+    nodes: (topLevelNodes.get(path.objectId) ?? []).map((point) => ({
+      ...point,
+    })),
+  }));
+}
+
+function buildSafeRepairVisualPreview(
+  document: LaserxDocument,
+  proposal: SafeRepairProposal,
+): SafeRepairVisualPreview {
+  const replacements = new Map(
+    proposal.replacements.map((object) => [object.id, object]),
+  );
+  const deletedIds = new Set(proposal.deleteObjectIds);
+  const proposedDocument: LaserxDocument = {
+    ...document,
+    objects: document.objects
+      .filter((object) => !deletedIds.has(object.id))
+      .map((object) => replacements.get(object.id) ?? object),
+  };
+  const before = safeRepairPreviewPaths(document, proposal.affectedObjectIds);
+  if (before.length === 0) {
+    throw new Error("Safe-repair preview geometry is unavailable.");
+  }
+  return {
+    before,
+    after: safeRepairPreviewPaths(
+      proposedDocument,
+      proposal.affectedObjectIds,
+    ),
+  };
+}
+
 function objectCutabilityScope(
   objectIds: readonly string[],
 ): Extract<CutabilityAnalysisScope, { kind: "whole-design" | "selection" }> {
@@ -482,6 +545,7 @@ export class DesktopController {
   #bridgeProposal: BridgeProposal | null = null;
   #repairGroups: CutabilityRepairGroups | null = null;
   #safeRepairProposal: SafeRepairProposal | null = null;
+  #safeRepairVisualPreview: SafeRepairVisualPreview | null = null;
   #safeRepairResult: {
     fixedCount: number;
     skippedCount: number;
@@ -761,7 +825,8 @@ export class DesktopController {
             ? null
             : structuredClone(this.#repairGroups),
         safeRepairProposal:
-          this.#safeRepairProposal === null
+          this.#safeRepairProposal === null ||
+          this.#safeRepairVisualPreview === null
             ? null
             : {
                 id: this.#safeRepairProposal.id,
@@ -782,6 +847,9 @@ export class DesktopController {
                   findingCount: change.findingIds.length,
                   description: change.description,
                 })),
+                visualPreview: structuredClone(
+                  this.#safeRepairVisualPreview,
+                ),
                 summary: this.#safeRepairProposal.summary,
                 disclaimer: this.#safeRepairProposal.disclaimer,
               },
@@ -2128,10 +2196,15 @@ export class DesktopController {
       if (projection === null) {
         throw new RangeError("Run manufacturing analysis before previewing safe repairs.");
       }
-      this.#safeRepairProposal = proposeSafeRepairs(
+      const proposal = proposeSafeRepairs(
         this.#session.state.project.document,
         projection.cutability,
       );
+      this.#safeRepairVisualPreview = buildSafeRepairVisualPreview(
+        this.#session.state.project.document,
+        proposal,
+      );
+      this.#safeRepairProposal = proposal;
       this.#safeRepairResult = null;
     });
   }
@@ -2219,15 +2292,31 @@ export class DesktopController {
         if (layer === undefined) {
           throw new RangeError("That manufacturing layer is unavailable.");
         }
-        await this.#analyzeCutability(
-          randomUUID(),
-          manufacturingLayerObjectIds(document, scope.layerId),
-          {
-            kind: "manufacturing-layer",
-            layerId: scope.layerId,
-            layerName: layer.name,
-          },
+        const objectIds = manufacturingLayerObjectIds(
+          document,
+          scope.layerId,
         );
+        const layerScope = {
+          kind: "manufacturing-layer" as const,
+          layerId: scope.layerId,
+          layerName: layer.name,
+        };
+        if (objectIds.length === 0) {
+          this.#publishCutabilityAnalysis(
+            layerScope,
+            analyzeDocumentCutability(document, {
+              operationId: randomUUID(),
+              objectIds: [],
+              objectIdsMode: "exact",
+            }),
+          );
+        } else {
+          await this.#analyzeCutability(
+            randomUUID(),
+            objectIds,
+            layerScope,
+          );
+        }
       } else if (scope.kind === "selection") {
         const availableIds = new Set(
           document.objects.map((object) => object.id),
@@ -2284,6 +2373,7 @@ export class DesktopController {
   public async rejectSafeRepairs(): Promise<CommandResult> {
     return this.#run(() => {
       this.#safeRepairProposal = null;
+      this.#safeRepairVisualPreview = null;
     });
   }
 
@@ -3379,6 +3469,7 @@ export class DesktopController {
     this.#bridgeProposal = null;
     this.#repairGroups = null;
     this.#safeRepairProposal = null;
+    this.#safeRepairVisualPreview = null;
     this.#safeRepairResult = null;
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
@@ -3427,6 +3518,7 @@ export class DesktopController {
     this.#bridgeProposal = null;
     this.#repairGroups = null;
     this.#safeRepairProposal = null;
+    this.#safeRepairVisualPreview = null;
     this.#safeRepairResult = null;
   }
 
@@ -3573,6 +3665,7 @@ export class DesktopController {
     this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
     this.#bridgeProposal = null;
     this.#safeRepairProposal = null;
+    this.#safeRepairVisualPreview = null;
   }
 
   #liveGuidedBinding(): GuidedProjectBinding {

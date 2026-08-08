@@ -273,6 +273,17 @@ test("safe repair preview is non-mutating, rejectable, accepted once, reanalyzed
     await expect(page.getByTestId("safe-repair-preview")).toContainText(
       "Original geometry is unchanged until acceptance",
     );
+    await expect(page.getByTestId("safe-repair-geometry-preview")).toBeVisible();
+    expect(await page.getByTestId("safe-repair-before-path").count())
+      .toBeGreaterThan(0);
+    expect(await page.getByTestId("safe-repair-after-path").count())
+      .toBeGreaterThan(0);
+    expect(await page.getByTestId("safe-repair-before-node").count())
+      .toBeGreaterThan(await page.getByTestId("safe-repair-after-node").count());
+    const previewState = await page.evaluate(() => window.laserx.getState());
+    expect(previewState.analysis.safeRepairProposal?.documentFingerprint).toBe(
+      previewState.analysis.cutability?.documentFingerprint,
+    );
     expect(await page.evaluate(async () =>
       JSON.stringify((await window.laserx.getState()).project.document),
     )).toBe(before);
@@ -320,6 +331,21 @@ test("large unsafe finding sets stay grouped and do not expose a false safe acti
     await expect(
       page.locator('[data-repair-group="needs-your-decision"] .cutability-issues li'),
     ).toHaveCount(6);
+    const group = page.locator('[data-repair-group="needs-your-decision"]');
+    await page.getByTestId("repair-group-toggle-needs-your-decision").click();
+    await expect.poll(async () =>
+      group.locator(".cutability-issues li").count(),
+    ).toBeGreaterThan(6);
+    const beyondInitialPage = group.locator("button[data-issue-id]").nth(6);
+    const issueId = await beyondInitialPage.getAttribute("data-issue-id");
+    expect(issueId).not.toBeNull();
+    await beyondInitialPage.click();
+    await expect(beyondInitialPage).toHaveClass(/active/);
+    await expect.poll(async () =>
+      (await page.evaluate(() => window.laserx.getState())).analysis.focusedIssueId,
+    ).toBe(issueId);
+    await page.getByTestId("repair-group-toggle-needs-your-decision").click();
+    await expect(group.locator(".cutability-issues li")).toHaveCount(6);
   } finally {
     await killAndRemove(launched);
   }

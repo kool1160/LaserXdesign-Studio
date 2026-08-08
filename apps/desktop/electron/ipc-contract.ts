@@ -1096,6 +1096,39 @@ const repairFindingGroupSchema = z.strictObject({
   affectedObjectCount: z.number().int().nonnegative(),
 });
 
+const MAX_SAFE_REPAIR_PREVIEW_PATHS = 50_000;
+const MAX_SAFE_REPAIR_PREVIEW_POINTS = 50_001;
+const MAX_SAFE_REPAIR_PREVIEW_COORDINATES = 200_000;
+const safeRepairPreviewPathSchema = z.strictObject({
+  id: z.string().min(1),
+  objectId: z.uuid(),
+  closed: z.boolean(),
+  points: z.array(pointSchema).min(1).max(MAX_SAFE_REPAIR_PREVIEW_POINTS),
+  nodes: z.array(pointSchema).max(MAX_SAFE_REPAIR_PREVIEW_POINTS),
+});
+const safeRepairVisualPreviewSchema = z
+  .strictObject({
+    before: z
+      .array(safeRepairPreviewPathSchema)
+      .min(1)
+      .max(MAX_SAFE_REPAIR_PREVIEW_PATHS),
+    after: z
+      .array(safeRepairPreviewPathSchema)
+      .max(MAX_SAFE_REPAIR_PREVIEW_PATHS),
+  })
+  .superRefine((preview, context) => {
+    const coordinateCount = [...preview.before, ...preview.after].reduce(
+      (count, path) => count + path.points.length + path.nodes.length,
+      0,
+    );
+    if (coordinateCount > MAX_SAFE_REPAIR_PREVIEW_COORDINATES) {
+      context.addIssue({
+        code: "custom",
+        message: `Safe-repair visual previews support at most ${String(MAX_SAFE_REPAIR_PREVIEW_COORDINATES)} derived coordinates.`,
+      });
+    }
+  });
+
 export const desktopStateSchema = z.strictObject({
   project: z.strictObject({
     id: z.uuid(),
@@ -1490,6 +1523,7 @@ export const desktopStateSchema = z.strictObject({
             }),
           )
           .min(1),
+        visualPreview: safeRepairVisualPreviewSchema,
         summary: z.string().min(1),
         disclaimer: z.string().min(1),
       })

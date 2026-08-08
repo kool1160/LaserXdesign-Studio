@@ -132,6 +132,8 @@ export function App() {
   const [issueSeverityFilter, setIssueSeverityFilter] = useState<
     "all" | "error" | "warning"
   >("all");
+  const [expandedRepairGroupIds, setExpandedRepairGroupIds] =
+    useState<string[]>([]);
   const [bridgeDirection, setBridgeDirection] = useState<
     "left" | "right" | "up" | "down"
   >("right");
@@ -214,6 +216,10 @@ export function App() {
       });
     }
   }, [savedManufacturingSettingsKey, state?.project.id]);
+
+  useEffect(() => {
+    setExpandedRepairGroupIds([]);
+  }, [state?.analysis.repairGroups?.analysisFingerprint]);
 
   useEffect(() => {
     if (state?.editor.selectionBounds === null || state === null) {
@@ -665,6 +671,12 @@ export function App() {
               (issueSeverityFilter === "all" ||
                 issue.severity === issueSeverityFilter),
           ),
+      })).map((group) => ({
+        ...group,
+        expanded: expandedRepairGroupIds.includes(group.id),
+        visibleIssues: expandedRepairGroupIds.includes(group.id)
+          ? group.issues
+          : group.issues.slice(0, 6),
       }));
   const workspaceIsEmpty =
     document.objects.length === 0 &&
@@ -2074,12 +2086,13 @@ export function App() {
                           <small>No findings in the current severity filter.</small>
                         ) : (
                           <ul className="cutability-issues">
-                            {group.issues.slice(0, 6).map((issue) => (
+                            {group.visibleIssues.map((issue) => (
                               <li key={issue.id}>
                                 <button
                                   type="button"
                                   className={state.analysis.focusedIssueId === issue.id ? "active" : ""}
                                   data-issue-code={issue.code}
+                                  data-issue-id={issue.id}
                                   onClick={() =>
                                     void run(() =>
                                       window.laserx.focusCutabilityIssue({ issueId: issue.id }),
@@ -2097,9 +2110,30 @@ export function App() {
                           </ul>
                         )}
                         {group.issues.length > 6 && (
-                          <small data-testid={`repair-group-overflow-${group.id}`}>
-                            {group.issues.length - 6} more finding(s) summarized in this group.
-                          </small>
+                          <div className="repair-group-overflow-controls">
+                            <small data-testid={`repair-group-overflow-${group.id}`}>
+                              {group.expanded
+                                ? `Showing all ${String(group.issues.length)} finding(s).`
+                                : `${String(group.issues.length - 6)} more finding(s) summarized in this group.`}
+                            </small>
+                            <button
+                              type="button"
+                              className="quiet"
+                              data-testid={`repair-group-toggle-${group.id}`}
+                              aria-expanded={group.expanded}
+                              onClick={() =>
+                                setExpandedRepairGroupIds((current) =>
+                                  current.includes(group.id)
+                                    ? current.filter((id) => id !== group.id)
+                                    : [...current, group.id],
+                                )
+                              }
+                            >
+                              {group.expanded
+                                ? "Show fewer"
+                                : `View all ${String(group.issues.length)} findings`}
+                            </button>
+                          </div>
                         )}
                       </section>
                     ))}
@@ -2109,6 +2143,9 @@ export function App() {
                   <div className="bridge-preview-summary" data-testid="safe-repair-preview">
                     <strong>{state.analysis.safeRepairProposal.summary}</strong>
                     <span>{state.analysis.safeRepairProposal.disclaimer}</span>
+                    <span className="safe-repair-preview-legend">
+                      Red dashed geometry is current and affected; cyan geometry is the proposed result.
+                    </span>
                     <ul>
                       {state.analysis.safeRepairProposal.changes.slice(0, 6).map((change) => (
                         <li key={`${change.kind}:${change.objectId}`}>
@@ -2505,6 +2542,9 @@ export function App() {
                     bridgePolygon:
                       state.analysis.bridgeProposal?.bridgePolygon ?? null,
                   }
+            }
+            safeRepairPreview={
+              state.analysis.safeRepairProposal?.visualPreview ?? null
             }
             onEditorAction={dispatchEditorAction}
           />

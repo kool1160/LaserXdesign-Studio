@@ -104,6 +104,7 @@ export interface CutabilityAnalysisSummary {
 export interface CutabilityAnalysisOptions {
   operationId?: string;
   objectIds?: readonly string[];
+  objectIdsMode?: "whole-design-when-empty" | "exact";
   onProgress?: (percent: number, stage: CutabilityProgressStage) => void;
 }
 
@@ -279,12 +280,17 @@ function collectObjectPaths(
 export function normalizeCutPaths(
   document: LaserxDocument,
   objectIds?: readonly string[],
+  objectIdsMode: "whole-design-when-empty" | "exact" =
+    "whole-design-when-empty",
 ): NormalizedCutPath[] {
   const visibleLayers = new Set(
     document.layers.filter((layer) => layer.visible).map((layer) => layer.id),
   );
   const selectedIds =
-    objectIds === undefined || objectIds.length === 0 ? null : new Set(objectIds);
+    objectIds === undefined ||
+    (objectIds.length === 0 && objectIdsMode === "whole-design-when-empty")
+      ? null
+      : new Set(objectIds);
   const paths = document.objects
     .filter((object) => visibleLayers.has(object.layerId))
     .flatMap((object) =>
@@ -679,7 +685,11 @@ export function analyzeDocumentCutability(
     ? { objectIds: [...(objectIdsOrOptions as readonly string[])] }
     : (objectIdsOrOptions as CutabilityAnalysisOptions);
   options.onProgress?.(5, "normalizing");
-  const paths = normalizeCutPaths(document, options.objectIds);
+  const paths = normalizeCutPaths(
+    document,
+    options.objectIds,
+    options.objectIdsMode,
+  );
   const segments = paths.flatMap(pathSegments);
   const settings = document.settings.manufacturing;
   const issues: CutabilityIssue[] = [];
@@ -705,8 +715,11 @@ export function analyzeDocumentCutability(
       .filter((layer) => layer.visible && !layer.locked)
       .map((layer) => layer.id),
   );
+  const hasExactObjectScope =
+    options.objectIds !== undefined &&
+    (options.objectIds.length > 0 || options.objectIdsMode === "exact");
   const analyzedTopLevelIds =
-    options.objectIds === undefined || options.objectIds.length === 0
+    !hasExactObjectScope
       ? null
       : new Set(options.objectIds);
   const editableTopLevelObjects = document.objects.filter(
@@ -975,8 +988,8 @@ export function analyzeDocumentCutability(
       }
     }
   }
-  const analyzedObjectIds = options.objectIds?.length
-    ? [...options.objectIds].sort()
+  const analyzedObjectIds = hasExactObjectScope
+    ? [...(options.objectIds ?? [])].sort()
     : [...new Set(paths.map((path) => path.objectId))].sort();
   const smallestSegmentMm = segments.length === 0 ? null : Math.min(...segments.map(segmentLength));
   options.onProgress?.(100, "classifying");

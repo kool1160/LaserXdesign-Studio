@@ -21,6 +21,7 @@ import {
   DesktopController,
   type DesktopDialogs,
 } from "../../electron/desktop-controller.js";
+import { desktopStateSchema } from "../../electron/ipc-contract.js";
 
 const OPERATION_ID = "a0000000-0000-4000-8000-000000000001";
 const SECOND_OPERATION_ID = "a0000000-0000-4000-8000-000000000002";
@@ -34,6 +35,8 @@ const SECOND_ISLAND_ID = "d0000000-0000-4000-8000-000000000002";
 const SAFE_DUPLICATE_ID = "c0000000-0000-4000-8000-000000000003";
 const SAFE_COLLINEAR_ID = "c0000000-0000-4000-8000-000000000004";
 const SAFE_AMBIGUOUS_ID = "c0000000-0000-4000-8000-000000000005";
+const SAFE_ZERO_LENGTH_ID = "c0000000-0000-4000-8000-000000000006";
+const UNRELATED_OPEN_ID = "c0000000-0000-4000-8000-000000000007";
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
 
@@ -229,6 +232,71 @@ function safeRepairProject(): LaserxProject {
   });
 }
 
+function emptiedManufacturingLayerRepairProject(): LaserxProject {
+  return createBlankProject({
+    id: "e0000000-0000-4000-8000-000000000007",
+    documentId: "e0000000-0000-4000-8000-000000000008",
+    now: "2026-08-08T12:00:00.000Z",
+    width: 150,
+    height: 120,
+    layers: [
+      {
+        id: LAYER_ID,
+        name: "Face",
+        visible: true,
+        locked: false,
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      },
+      {
+        id: SECOND_LAYER_ID,
+        name: "Unrelated backing",
+        visible: true,
+        locked: false,
+        manufacturing: {
+          role: "backing",
+          material: "acrylic",
+          thicknessMm: 6,
+          process: "router",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      },
+    ],
+    activeLayerId: LAYER_ID,
+    objects: [
+      {
+        id: SAFE_ZERO_LENGTH_ID,
+        type: "line",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        start: { xMm: 20, yMm: 20 },
+        end: { xMm: 20, yMm: 20 },
+      },
+      {
+        id: UNRELATED_OPEN_ID,
+        type: "path",
+        layerId: SECOND_LAYER_ID,
+        transform: identityTransform(),
+        closed: false,
+        points: [
+          { xMm: 70, yMm: 20 },
+          { xMm: 110, yMm: 20 },
+          { xMm: 110, yMm: 70 },
+        ],
+      },
+    ],
+  });
+}
+
 function immediateWorker(counter?: { calls: number }): CutabilityWorkerPort {
   return {
     run: (request, _signal, onProgress) => {
@@ -294,11 +362,26 @@ describe("cutability worker coordination", () => {
       .toBeGreaterThan(0);
 
     expect(await controller.previewSafeRepairs()).toMatchObject({ ok: true });
+    const parsedPreviewState = desktopStateSchema.safeParse(controller.state);
+    if (!parsedPreviewState.success) {
+      throw new Error(JSON.stringify(parsedPreviewState.error.issues, null, 2));
+    }
     expect(JSON.stringify(controller.state.project.document)).toBe(before);
     expect(controller.state.editor.history.undoDepth).toBe(0);
     expect(controller.state.analysis.safeRepairProposal).toMatchObject({
       skippedFindingCount: 0,
+      documentFingerprint:
+        controller.state.analysis.cutability?.documentFingerprint,
     });
+    const preview = controller.state.analysis.safeRepairProposal?.visualPreview;
+    expect(preview?.before.some(
+      (path) => path.objectId === SAFE_COLLINEAR_ID,
+    )).toBe(true);
+    expect(preview?.after.some(
+      (path) => path.objectId === SAFE_COLLINEAR_ID,
+    )).toBe(true);
+    expect(preview?.before.flatMap((path) => path.nodes).length)
+      .toBeGreaterThan(preview?.after.flatMap((path) => path.nodes).length ?? 0);
     expect(await controller.rejectSafeRepairs()).toMatchObject({ ok: true });
     expect(JSON.stringify(controller.state.project.document)).toBe(before);
     expect(controller.state.analysis.safeRepairProposal).toBeNull();
@@ -328,6 +411,43 @@ describe("cutability worker coordination", () => {
     await controller.editorAction({ type: "history.undo" });
     expect(JSON.stringify(controller.state.project.document)).toBe(before);
     expect(controller.state.analysis.cutability).toBeNull();
+  });
+
+  it("keeps an emptied manufacturing-layer repair scoped away from unrelated findings", async () => {
+    const counter = { calls: 0 };
+    const controller = await desktop(
+      immediateWorker(counter),
+      emptiedManufacturingLayerRepairProject(),
+    );
+
+    await controller.runManufacturingLayerAnalysis(OPERATION_ID, LAYER_ID);
+    expect(controller.state.analysis.cutability?.analyzedObjectIds).toEqual([
+      SAFE_ZERO_LENGTH_ID,
+    ]);
+    expect(controller.state.analysis.repairGroups?.safeToFix.findingCount)
+      .toBeGreaterThan(0);
+    await controller.previewSafeRepairs();
+    expect(await controller.acceptSafeRepairs()).toMatchObject({ ok: true });
+
+    expect(counter.calls).toBe(1);
+    expect(controller.state.analysis.scope).toEqual({
+      kind: "manufacturing-layer",
+      layerId: LAYER_ID,
+      layerName: "Face",
+    });
+    expect(controller.state.analysis.cutability).toMatchObject({
+      status: "complete",
+      analyzedObjectIds: [],
+      pathCount: 0,
+      issueCount: 0,
+      issues: [],
+    });
+    expect(controller.state.analysis.cutability?.issues.some(
+      (issue) => issue.objectIds.includes(UNRELATED_OPEN_ID),
+    )).toBe(false);
+    expect(controller.state.analysis.safeRepairResult).toMatchObject({
+      remainingCount: 0,
+    });
   });
 
   it("refuses a repair preview after the document basis changes", async () => {

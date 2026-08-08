@@ -74,6 +74,22 @@ interface ViewportProps {
     focusedIssueLocation: PointMm | null;
     bridgePolygon: PointMm[] | null;
   } | null;
+  safeRepairPreview: {
+    before: Array<{
+      id: string;
+      objectId: string;
+      closed: boolean;
+      points: PointMm[];
+      nodes: PointMm[];
+    }>;
+    after: Array<{
+      id: string;
+      objectId: string;
+      closed: boolean;
+      points: PointMm[];
+      nodes: PointMm[];
+    }>;
+  } | null;
   onEditorAction: (request: EditorActionRequest) => void;
 }
 
@@ -174,6 +190,7 @@ export function Viewport({
   previewGeometryVisible,
   rasterBackground,
   manufacturingPreview,
+  safeRepairPreview,
   onEditorAction,
 }: ViewportProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -381,6 +398,21 @@ export function Viewport({
             ),
     };
   }, [manufacturingPreview, viewport]);
+  const safeRepairProjection = useMemo(() => {
+    if (safeRepairPreview === null) return null;
+    const project = (
+      paths: NonNullable<ViewportProps["safeRepairPreview"]>["before"],
+    ) =>
+      paths.map((path) => ({
+        ...path,
+        points: path.points.map((point) => domainToScreen(point, viewport)),
+        nodes: path.nodes.map((point) => domainToScreen(point, viewport)),
+      }));
+    return {
+      before: project(safeRepairPreview.before),
+      after: project(safeRepairPreview.after),
+    };
+  }, [safeRepairPreview, viewport]);
   const pathOverlay = useMemo(() => {
     if (pathSelection === null) {
       return null;
@@ -919,6 +951,54 @@ export function Viewport({
               preserveAspectRatio="none"
               pointerEvents="none"
             />
+          )}
+          {safeRepairProjection !== null && (
+            <g
+              className="safe-repair-geometry-preview"
+              data-testid="safe-repair-geometry-preview"
+              pointerEvents="none"
+            >
+              {(["before", "after"] as const).map((version) => (
+                <g
+                  className={`safe-repair-${version}`}
+                  data-repair-version={version}
+                  key={version}
+                >
+                  {safeRepairProjection[version].map((path) =>
+                    path.closed ? (
+                      <polygon
+                        className="safe-repair-preview-path"
+                        data-object-id={path.objectId}
+                        data-testid={`safe-repair-${version}-path`}
+                        key={`${version}:${path.id}`}
+                        points={pointsAttribute(path.points)}
+                      />
+                    ) : (
+                      <polyline
+                        className="safe-repair-preview-path"
+                        data-object-id={path.objectId}
+                        data-testid={`safe-repair-${version}-path`}
+                        key={`${version}:${path.id}`}
+                        points={pointsAttribute(path.points)}
+                      />
+                    ),
+                  )}
+                  {safeRepairProjection[version].flatMap((path) =>
+                    path.nodes.map((node, index) => (
+                      <circle
+                        className="safe-repair-preview-node"
+                        cx={node.xCssPx}
+                        cy={node.yCssPx}
+                        data-object-id={path.objectId}
+                        data-testid={`safe-repair-${version}-node`}
+                        key={`${version}:${path.id}:node:${String(index)}`}
+                        r={version === "before" ? 4 : 3}
+                      />
+                    )),
+                  )}
+                </g>
+              ))}
+            </g>
           )}
           {manufacturingProjection?.bridgePolygon !== null &&
             manufacturingProjection?.bridgePolygon !== undefined && (
