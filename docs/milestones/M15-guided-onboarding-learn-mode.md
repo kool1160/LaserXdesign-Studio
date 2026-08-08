@@ -4,9 +4,9 @@
 
 **Active.** Active issue: #45.
 
-Current state: **G3 post-merge repair acceptance hold — PR #74 READY**.
+Current slice: **G4 — grouped repair decisions and Fix safe problems workflow**.
 
-G4 is the next intended implementation slice but is held until PR #74 is explicitly accepted and merged by the owner in the LaserX Design Studio primary operations chat.
+G3 and its post-merge physical-confirmation repair are accepted and merged. G5 and G6 remain held.
 
 ## User-visible outcome
 
@@ -17,8 +17,8 @@ A first-time user chooses a real goal, sees only relevant controls, completes re
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted.
 2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted.
 3. **G2 — Create My First Sign guided vertical slice** — merged and accepted.
-4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; **post-merge repair PR #74 READY, acceptance pending**.
-5. **G4 — grouped repair decisions and Fix safe problems workflow** — **held by PR #74 repair acceptance**.
+4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; post-merge physical-confirmation repair PR #74 merged and accepted.
+5. **G4 — grouped repair decisions and Fix safe problems workflow** — **active**.
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held.
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held.
 
@@ -46,25 +46,20 @@ PR #72 completed **Create My First Sign** through real size/material, content, w
 
 PR #73 completed source-aware **Import My Own Design** guidance across SVG/DXF and PNG/JPEG, transient source recovery, non-destructive cancel/reject, physical assignment, whole-design analysis, required physical 3D, and export. Squash merge: `f2a54d732ec9ee661c921d421da08e2b83c01b14`.
 
-## G3 post-merge repair hold
+### G3 post-merge repair
 
-A late P1 review finding on merged PR #73 showed that choosing a physical role could populate default material/thickness and auto-advance **Set physical details** before a user reviewed non-default settings.
+PR #74 fixed the late P1 where assigning a physical role could populate default material/thickness and auto-advance **Set physical details** before review.
 
-PR #74 removes import-guidance auto-advance from generic editor actions. The user remains on **Set physical details** through role/material/thickness edits and advances only through the existing explicit guided confirmation after validation.
-
-Repair evidence:
-
-- PR **#74**
 - Reviewed head: `66dab265b3073145e48667639b0a303691733f7b`
+- Squash merge: `df0d3463470afb7f69724ca808c25df0b8317d87`
 - Repository Guard: success
 - Canonical Verification: success, including packaged Windows verification
 - Review result: READY
-- Unresolved review threads: 0
-- Merge/acceptance: pending owner `Advance LaserX`
+- Result: accepted on explicit owner `Advance LaserX` on 2026-08-08
 
-No G4 implementation begins while this hold exists. The next owner `Advance LaserX` accepts/merges PR #74 and restores G4 as active; it does not advance to G5.
+The user now remains on **Set physical details** through role/material/thickness edits and advances only through explicit guided confirmation after validation.
 
-## Held G4 contract — grouped repair decisions and Fix safe problems
+## Active G4 contract — grouped repair decisions and Fix safe problems
 
 G4 must:
 
@@ -103,7 +98,7 @@ No G5 full Learn Mode/replay content, G6 owner-observed usability validation, br
 - [x] Tutorial architecture and state boundaries are documented.
 - [x] Workflow-aware contextual-control architecture is documented.
 - [x] Create My First Sign guided vertical slice passes.
-- [x] Vector-import and raster-trace guided paths pass, subject to PR #74 post-merge repair acceptance.
+- [x] Vector-import and raster-trace guided paths pass, including PR #74 physical-confirmation repair.
 - [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
 - [ ] Large finding sets reduce to understandable repair decisions.
 - [ ] Learn Mode covers core manufacturing and repair concepts.
