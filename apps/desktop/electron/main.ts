@@ -63,6 +63,7 @@ import {
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
   saveSignTemplateRequestSchema,
+  selectImportSourceRequestSchema,
   signToolRequestSchema,
   selectAiConceptRequestSchema,
   textLayoutRequestSchema,
@@ -93,20 +94,24 @@ let mainWindow: BrowserWindow | null = null;
 let controller: DesktopController | null = null;
 let allowClose = false;
 let handlingFatalFailure = false;
-let menuGuidanceSurface:
-  | DesktopState["onboarding"]["workflow"]["surface"]
-  | undefined;
+let menuGuidanceKey: string | undefined;
 let rejectNextGetState =
   process.env.LASERX_TEST_GET_STATE_FAILURE === "1";
 
 function emitState(state: DesktopState): void {
-  const guidanceSurface =
-    state.onboarding.workflow.status === "active"
-      ? state.onboarding.workflow.surface
-      : null;
-  if (menuGuidanceSurface !== guidanceSurface) {
-    menuGuidanceSurface = guidanceSurface;
-    buildMenu(guidanceSurface);
+  const guidanceWorkflow = state.onboarding.workflow.status === "active"
+    ? state.onboarding.workflow
+    : null;
+  const guidanceKey = guidanceWorkflow === null
+    ? "inactive"
+    : [
+        guidanceWorkflow.goal,
+        guidanceWorkflow.currentStepId,
+        guidanceWorkflow.surface,
+      ].join(":");
+  if (menuGuidanceKey !== guidanceKey) {
+    menuGuidanceKey = guidanceKey;
+    buildMenu(guidanceWorkflow);
   }
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(IPC_CHANNELS.stateChanged, state);
@@ -130,6 +135,11 @@ function configuredVectorPath(
 
 function configuredRasterPath(): string | null {
   const value = process.env.LASERX_TEST_RASTER_PATH;
+  return value === undefined ? null : resolve(value);
+}
+
+function configuredImportSourcePath(): string | null {
+  const value = process.env.LASERX_TEST_IMPORT_SOURCE_PATH;
   return value === undefined ? null : resolve(value);
 }
 
@@ -255,6 +265,22 @@ const dialogs: DesktopDialogs = {
     });
     const choices: readonly UnsavedChoice[] = ["save", "discard", "cancel"];
     return choices[result.response] ?? "cancel";
+  },
+  async chooseImportSource() {
+    const configured = configuredImportSourcePath();
+    if (configured !== null) {
+      return configured;
+    }
+    const result = await dialog.showOpenDialog(requireMainWindow(), {
+      title: "Choose Artwork to Import",
+      properties: ["openFile"],
+      filters: [
+        { name: "Supported artwork", extensions: ["svg", "dxf", "png", "jpg", "jpeg"] },
+        { name: "Vector artwork", extensions: ["svg", "dxf"] },
+        { name: "Raster images", extensions: ["png", "jpg", "jpeg"] },
+      ],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   },
   async chooseImportVector() {
     const configured = configuredVectorPath("LASERX_TEST_IMPORT_PATH");
@@ -383,6 +409,10 @@ function registerIpc(): void {
   ipcMain.handle(IPC_CHANNELS.saveProjectAs, () =>
     requireController().saveProjectAs(),
   );
+  ipcMain.handle(IPC_CHANNELS.selectImportSource, (_event, request: unknown) => {
+    const validated = selectImportSourceRequestSchema.parse(request);
+    return requireController().selectImportSource(validated);
+  });
   ipcMain.handle(
     IPC_CHANNELS.previewVectorImport,
     (_event, request: unknown) => {
@@ -604,11 +634,15 @@ function registerIpc(): void {
 }
 
 function buildMenu(
-  guidanceSurface: DesktopState["onboarding"]["workflow"]["surface"],
+  guidanceWorkflow: DesktopState["onboarding"]["workflow"] | null,
 ): void {
-  const guidanceActive = guidanceSurface !== null;
-  const importAvailable = !guidanceActive || guidanceSurface === "import";
-  const exportAvailable = !guidanceActive || guidanceSurface === "output";
+  const guidanceActive = guidanceWorkflow !== null;
+  const choosingImportSource =
+    guidanceWorkflow?.goal === "import-own-design" &&
+    guidanceWorkflow.currentStepId === "choose-file";
+  const importAvailable = !guidanceActive || choosingImportSource;
+  const exportAvailable =
+    guidanceWorkflow === null || guidanceWorkflow.surface === "output";
   const template: MenuItemConstructorOptions[] = [
     {
       label: "File",
@@ -628,18 +662,20 @@ function buildMenu(
           click: () => void requireController().openProject(),
         },
         {
-          label: "Import SVG/DXF...",
+          label: choosingImportSource ? "Choose Artwork..." : "Import SVG/DXF...",
           enabled: importAvailable,
           visible: importAvailable,
           click: () =>
-            void requireController().previewVectorImport({
-              unitlessDxfUnit: null,
-            }),
+            void (choosingImportSource
+              ? requireController().selectImportSource({ unitlessDxfUnit: null })
+              : requireController().previewVectorImport({
+                  unitlessDxfUnit: null,
+                })),
         },
         {
           label: "Trace PNG/JPEG...",
-          enabled: importAvailable,
-          visible: importAvailable,
+          enabled: !guidanceActive,
+          visible: !guidanceActive,
           click: () =>
             void requireController().previewRasterTrace({
               operationId: randomUUID(),
@@ -886,7 +922,7 @@ if (!app.requestSingleInstanceLock()) {
 
   void app.whenReady().then(async () => {
     registerIpc();
-    menuGuidanceSurface = null;
+    menuGuidanceKey = "inactive";
     buildMenu(null);
     await createWindow();
   });

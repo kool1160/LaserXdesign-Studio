@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
@@ -205,6 +205,173 @@ test("packaged Create My First Sign follows real outcomes through whole-design a
     const exported = await readFile(exportPath, "utf8");
     expect(exported).toContain('width="240mm"');
     expect(exported).toContain('height="120mm"');
+  } finally {
+    await killAndRemove(launched);
+  }
+});
+
+test("packaged Import My Own Design keeps vector preparation isolated and completes through real physical outcomes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "laserx-guided-vector-e2e-"));
+  const sourcePath = join(directory, "guided-clean-24-inch.svg");
+  const exportPath = join(directory, "guided-vector.svg");
+  await writeFile(
+    sourcePath,
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24in" height="12in" viewBox="0 0 24 12"><g data-layer="Cut"><rect x="0" y="0" width="24" height="12" fill="none" stroke="#000"/></g></svg>',
+    "utf8",
+  );
+  const launched = await launchPackaged(directory, "discard", {
+    sourcePath,
+    exportPath,
+  });
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-import-own-design").click();
+    await expect(page.getByTestId("select-import-source")).toBeVisible();
+    await expect(page.getByTestId("preview-vector-import")).toBeHidden();
+    await expect(page.getByTestId("trace-raster")).toBeHidden();
+    await expect(page.getByTestId("interchange-panel")).toBeVisible();
+    await expect(page.getByTestId("raster-panel")).toBeHidden();
+    await expect.poll(() => launched.electronApp.evaluate(({ Menu }) => {
+      const fileItems = Menu.getApplicationMenu()?.items.find(
+        (item) => item.label === "File",
+      )?.submenu?.items;
+      return {
+        choose: fileItems?.find((item) => item.label === "Choose Artwork...")?.visible,
+        trace: fileItems?.find((item) => item.label === "Trace PNG/JPEG...")?.visible,
+      };
+    })).toEqual({ choose: true, trace: false });
+
+    await page.getByTestId("select-import-source").click();
+    await expect(page.getByText("Prepare the artwork", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("import-preview-summary")).toContainText(
+      "609.600 × 304.800 mm",
+    );
+    await expect(page.getByTestId("raster-panel")).toBeHidden();
+    await expect(page.getByTestId("start-raster-trace")).toBeHidden();
+    await expect(page.getByTestId("dirty-indicator")).toHaveCount(0);
+
+    await page.getByTestId("cancel-vector-import").click();
+    await expect(page.getByText("Choose your artwork", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        objectCount: state.project.document.objects.length,
+        source: state.interchange.sourceSelection,
+      };
+    })).toEqual({ objectCount: 0, source: null });
+
+    await page.getByTestId("select-import-source").click();
+    await expect(page.getByTestId("commit-vector-import")).toBeVisible();
+    await page.getByTestId("commit-vector-import").click();
+    await expect(page.getByText("Set physical details", { exact: true })).toBeVisible();
+    const importedLayerName = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      const object = state.project.document.objects[0];
+      return state.project.document.layers.find((layer) => layer.id === object?.layerId)?.name;
+    });
+    expect(importedLayerName).toBeDefined();
+    await page.getByLabel(`Activate ${importedLayerName as string}`).click();
+    await page.getByLabel("Manufacturing layer role").selectOption("face");
+    await expect(page.getByText("Check the design", { exact: true })).toBeVisible();
+
+    await page.getByTestId("run-cutability-analysis").click();
+    await expect.poll(() => page.evaluate(async () =>
+      (await window.laserx.getState()).onboarding.workflow.currentStepId), {
+      timeout: 15_000,
+    }).toMatch(/resolve-findings|physical-preview/u);
+    const stepAfterAnalysis = await page.evaluate(async () =>
+      (await window.laserx.getState()).onboarding.workflow.currentStepId);
+    if (stepAfterAnalysis === "resolve-findings") {
+      await page.getByTestId("guidance-continue").click();
+    }
+    await expect(page.getByText("Review the 3D result", { exact: true })).toBeVisible();
+    await page.getByTestId("open-physical-preview").click();
+    await expect(page.getByTestId("physical-preview-canvas")).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByTestId("guided-physical-preview-continue").click();
+    await expect(page.getByText("Save and export", { exact: true })).toBeVisible();
+
+    await clickAndWaitForCommand(page, "Save as");
+    await page.getByTestId("export-svg").click();
+    await expect.poll(async () => {
+      try {
+        return (await readFile(exportPath, "utf8")).includes("<svg");
+      } catch {
+        return false;
+      }
+    }).toBe(true);
+    await expect.poll(() => page.evaluate(async () => {
+      const onboarding = (await window.laserx.getState()).onboarding;
+      return {
+        status: onboarding.workflow.status,
+        completed: onboarding.preferences.completedGoals,
+      };
+    })).toEqual({ status: "completed", completed: ["import-own-design"] });
+  } finally {
+    await killAndRemove(launched);
+  }
+});
+
+test("packaged Import My Own Design reveals raster controls only after selection and keeps reject non-destructive", async () => {
+  const sourcePath = resolve(
+    process.cwd(),
+    "../../fixtures/images/m07/clean-logo.png",
+  );
+  const launched = await launchPackaged(undefined, "discard", { sourcePath });
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-import-own-design").click();
+    await expect(page.getByTestId("raster-panel")).toBeHidden();
+    await expect(page.getByLabel("Unitless DXF assumption")).toBeHidden();
+
+    await page.getByTestId("select-import-source").click();
+    await expect(page.getByTestId("selected-raster-source")).toContainText(
+      "clean-logo.png",
+    );
+    await expect(page.getByTestId("raster-panel")).toBeVisible();
+    await expect(page.getByTestId("interchange-panel")).toBeHidden();
+    await expect(page.getByTestId("commit-vector-import")).toBeHidden();
+    await expect(page.getByTestId("raster-trace-summary")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () =>
+      (await window.laserx.getState()).project.document.objects.length)).toBe(0);
+
+    await page.getByTestId("cancel-raster-source").click();
+    await expect(page.getByText("Choose your artwork", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () =>
+      (await window.laserx.getState()).interchange.sourceSelection)).toBeNull();
+
+    await page.getByTestId("select-import-source").click();
+    await page.getByTestId("start-raster-trace").click();
+    await expect(page.getByTestId("raster-trace-summary")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByTestId("reject-raster-trace").click();
+    await expect(page.getByText("Choose your artwork", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () =>
+      (await window.laserx.getState()).project.document.objects.length)).toBe(0);
+
+    await page.getByTestId("select-import-source").click();
+    await page.getByTestId("start-raster-trace").click();
+    await expect(page.getByTestId("accept-raster-trace")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByTestId("accept-raster-trace").click();
+    await expect(page.getByText("Set physical details", { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        objectCount: state.project.document.objects.length,
+        preview: state.editor.rasterTracePreview,
+        source: state.interchange.sourceSelection,
+      };
+    }), { timeout: 15_000 }).toEqual({
+      objectCount: expect.any(Number),
+      preview: null,
+      source: null,
+    });
+    expect(await page.evaluate(async () =>
+      (await window.laserx.getState()).project.document.objects.length)).toBeGreaterThan(0);
   } finally {
     await killAndRemove(launched);
   }

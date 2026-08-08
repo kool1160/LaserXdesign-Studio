@@ -650,7 +650,8 @@ export function App() {
     state.editor.importPreview === null &&
     state.editor.rasterTracePreview === null &&
     state.editor.signToolPreview === null &&
-    state.editor.aiConceptPreview === null;
+    state.editor.aiConceptPreview === null &&
+    state.interchange.sourceSelection === null;
   const guidance = state.onboarding.workflow;
   const guidanceActive = guidance.status === "active";
   const guidanceGoal = guidance.goal === null ? null : guidedGoal(guidance.goal);
@@ -672,6 +673,12 @@ export function App() {
   };
   const guidanceIsCreateFirstSign =
     guidanceActive && guidance.goal === "create-first-sign";
+  const guidanceIsImportOwnDesign =
+    guidanceActive && guidance.goal === "import-own-design";
+  const guidedImportSource = guidanceIsImportOwnDesign
+    ? state.interchange.sourceSelection
+    : null;
+  const guidedImportSourceKind = guidedImportSource?.kind ?? null;
   const guidedPhysicalLayerIds = new Set(
     document.layers
       .filter(
@@ -702,9 +709,19 @@ export function App() {
           : guidanceStep?.id === "resolve-findings"
             ? "Continue after review"
             : null
-    : "Continue";
+    : guidanceIsImportOwnDesign
+      ? guidanceStep?.id === "assign-physical" &&
+        guidedPhysicalStockReady &&
+        guidedPhysicalContentReady
+        ? "Use imported physical setup"
+        : guidanceStep?.id === "analyze-cutability" && guidedWholeDesignAnalysisReady
+          ? "Use current whole-design check"
+          : guidanceStep?.id === "resolve-findings"
+            ? "Continue after review"
+            : null
+      : "Continue";
   const guidedPhysicalPreviewIdentity =
-    guidanceIsCreateFirstSign &&
+    (guidanceIsCreateFirstSign || guidanceIsImportOwnDesign) &&
     guidanceStep?.id === "physical-preview" &&
     guidance.runToken !== null
       ? {
@@ -814,7 +831,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell${guidanceActive ? ` guidance-active guidance-${guidanceStep?.surface ?? "create"} guidance-step-${guidanceStep?.id ?? "unknown"}` : ""}`}
+      className={`app-shell${guidanceActive ? ` guidance-active guidance-${guidanceStep?.surface ?? "create"} guidance-step-${guidanceStep?.id ?? "unknown"} guidance-source-${guidedImportSourceKind ?? "unknown"}` : ""}`}
       aria-busy={busy}
     >
       <a className="skip-link" href="#design-workspace">
@@ -879,16 +896,34 @@ export function App() {
             <button type="button" disabled={busy || !state.editor.clipboardHasContent} title="Paste (Ctrl+V)" aria-keyshortcuts="Control+V" onClick={() => dispatchEditorAction({ type: "clipboard.paste" })}>Paste</button>
           </div>
         </div>
-        {(!guidanceActive || guidance.surface === "import") && (
+        {(!guidanceActive ||
+          (guidanceIsImportOwnDesign && guidanceStep?.id === "choose-file")) && (
           <div className="command-group artwork-command-group">
             <span className="command-group-label">Bring in artwork</span>
             <div className="command-group-actions">
-              <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
-                <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
-              </button>
-              <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
-                <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
-              </button>
+              {guidanceIsImportOwnDesign ? (
+                <button
+                  type="button"
+                  data-testid="select-import-source"
+                  disabled={busy}
+                  title="Choose SVG, DXF, PNG, or JPEG artwork"
+                  onClick={() => void run(() =>
+                    window.laserx.selectImportSource({ unitlessDxfUnit }))}
+                >
+                  <span className="command-icon" aria-hidden="true">↘</span>
+                  <span>Choose Artwork</span>
+                  <small>SVG / DXF / PNG / JPEG</small>
+                </button>
+              ) : (
+                <>
+                  <button type="button" data-testid="preview-vector-import" disabled={busy} title="Import SVG or DXF as editable paths" onClick={() => void run(() => window.laserx.previewVectorImport({ unitlessDxfUnit }))}>
+                    <span className="command-icon" aria-hidden="true">↘</span><span>Import Artwork</span><small>SVG / DXF</small>
+                  </button>
+                  <button type="button" data-testid="trace-raster" disabled={busy} title="Trace a PNG or JPEG into editable paths" onClick={() => void runRasterTrace()}>
+                    <span className="command-icon" aria-hidden="true">◇</span><span>Trace Image</span><small>PNG / JPEG</small>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1006,6 +1041,38 @@ export function App() {
                 Export SVG or DXF. The goal completes only after the file is written successfully.
               </small>
             )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "choose-file" && (
+              <small data-testid="guidance-outcome-hint">
+                Choose one artwork file. LaserX will show vector import or raster tracing only after it knows the source type.
+              </small>
+            )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "prepare-source" && (
+              <small data-testid="guidance-outcome-hint">
+                {guidedImportSourceKind === "vector"
+                  ? "Review real units, stock fit, layers, repairs, and findings, then accept or cancel the vector preview."
+                  : "Choose trace settings, create a preview, then accept editable paths or reject the image."}
+              </small>
+            )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "assign-physical" && (
+              <small data-testid="guidance-outcome-hint">
+                In Layers, activate an imported layer and assign its physical role, material, and thickness.
+              </small>
+            )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "analyze-cutability" && (
+              <small data-testid="guidance-outcome-hint">
+                Choose Analyze all. A selection-only or layer-only check cannot complete this checkpoint.
+              </small>
+            )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "physical-preview" && (
+              <small data-testid="guidance-outcome-hint">
+                Open 3D Preview. Continue only after a rendered frame or an explicit unavailable result.
+              </small>
+            )}
+            {guidanceIsImportOwnDesign && guidanceStep.id === "export-result" && (
+              <small data-testid="guidance-outcome-hint">
+                Export SVG or DXF. This goal completes only after the file is written successfully.
+              </small>
+            )}
             {guidanceStep.id === "resolve-findings" && !guidedWholeDesignAnalysisReady && (
               <small>Run Analyze all on the current design before continuing.</small>
             )}
@@ -1119,25 +1186,65 @@ export function App() {
             </dl>
           </section>
 
-          <section id="workflow-import" className="interchange-panel" data-testid="interchange-panel">
-            <span className="section-label">Import & export artwork</span>
-            <p className="workflow-description">Bring SVG or DXF paths into this project, or export current geometry. This does not open a `.laserx` project.</p>
+          <section
+            id="workflow-import"
+            className="interchange-panel"
+            data-testid="interchange-panel"
+            hidden={
+              guidanceIsImportOwnDesign &&
+              guidanceStep?.id !== "choose-file" &&
+              !(guidanceStep?.id === "prepare-source" && guidedImportSourceKind === "vector")
+            }
+          >
+            {guidanceIsImportOwnDesign && guidanceStep?.id === "choose-file" ? (
+              <>
+                <span className="section-label">Choose artwork</span>
+                <p className="workflow-description">
+                  Start with one SVG, DXF, PNG, or JPEG. LaserX will open the matching preparation tools after selection.
+                </p>
+                <button
+                  type="button"
+                  data-testid="select-import-source-panel"
+                  disabled={busy}
+                  onClick={() => void run(() =>
+                    window.laserx.selectImportSource({ unitlessDxfUnit }))}
+                >
+                  Choose artwork file
+                </button>
+              </>
+            ) : (
+              <>
+            <span className="section-label">
+              {guidanceIsImportOwnDesign ? "Prepare vector artwork" : "Import & export artwork"}
+            </span>
+            <p className="workflow-description">
+              {guidanceIsImportOwnDesign
+                ? "Review the vector at real size, choose how it fits the stock, and accept only the paths you want to edit."
+                : "Bring SVG or DXF paths into this project, or export current geometry. This does not open a `.laserx` project."}
+            </p>
+            {(!guidanceIsImportOwnDesign || guidedImportSource?.format === "dxf") && (
             <label>
               Unitless DXF assumption
               <select
                 aria-label="Unitless DXF assumption"
                 value={unitlessDxfUnit}
-                onChange={(event) =>
-                  setUnitlessDxfUnit(
-                    event.target.value as "millimeters" | "inches",
-                  )
-                }
+                onChange={(event) => {
+                  const nextUnit = event.target.value as "millimeters" | "inches";
+                  setUnitlessDxfUnit(nextUnit);
+                  if (guidanceIsImportOwnDesign) {
+                    void run(() => window.laserx.previewVectorImport({
+                      unitlessDxfUnit: nextUnit,
+                    }));
+                  }
+                }}
               >
                 <option value="millimeters">1 unit = 1 mm</option>
                 <option value="inches">1 unit = 1 in</option>
               </select>
             </label>
+            )}
             <div className="button-grid compact">
+              {!guidanceIsImportOwnDesign && (
               <button
                 type="button"
                 disabled={busy}
@@ -1149,6 +1256,9 @@ export function App() {
               >
                 Preview import
               </button>
+              )}
+              {!guidanceActive && (
+                <>
               <button
                 type="button"
                 disabled={busy}
@@ -1167,6 +1277,8 @@ export function App() {
               >
                 Export DXF
               </button>
+                </>
+              )}
             </div>
             {state.editor.importPreview !== null && (
               <div className="interchange-summary" data-testid="import-preview-summary">
@@ -1306,11 +1418,32 @@ export function App() {
                 )}
               </div>
             )}
+              </>
+            )}
           </section>
 
-          <section id="workflow-trace" className="raster-panel" data-testid="raster-panel">
+          <section
+            id="workflow-trace"
+            className="raster-panel"
+            data-testid="raster-panel"
+            hidden={
+              guidanceIsImportOwnDesign &&
+              !(guidanceStep?.id === "prepare-source" && guidedImportSourceKind === "raster")
+            }
+          >
             <span className="section-label">Trace an image</span>
             <p className="workflow-description">Convert a PNG or JPEG into editable vector paths, then review before accepting.</p>
+            {guidanceIsImportOwnDesign && guidedImportSource?.kind === "raster" && (
+              <div className="interchange-summary" data-testid="selected-raster-source">
+                <strong>{guidedImportSource.sourceName}</strong>
+                <span>
+                  {guidedImportSource.format.toUpperCase()} · {guidedImportSource.widthPx} × {guidedImportSource.heightPx} px
+                </span>
+                <small>
+                  {guidedImportSource.sourceBytes.toLocaleString()} source bytes · {guidedImportSource.decodedBytes.toLocaleString()} decoded bytes
+                </small>
+              </div>
+            )}
             <label>
               Detail preset
               <select
@@ -1471,8 +1604,19 @@ export function App() {
               disabled={busy}
               onClick={() => void runRasterTrace()}
             >
-              Choose image and trace
+              {guidanceIsImportOwnDesign ? "Trace selected image" : "Choose image and trace"}
             </button>
+            {guidanceIsImportOwnDesign && state.editor.rasterTracePreview === null && (
+              <button
+                type="button"
+                className="quiet"
+                data-testid="cancel-raster-source"
+                disabled={busy}
+                onClick={() => void run(() => window.laserx.rejectRasterTrace())}
+              >
+                Cancel selected image
+              </button>
+            )}
             {state.raster.job !== null && (
               <div className="raster-progress" data-testid="raster-progress">
                 <strong>{state.raster.job.stage}</strong>

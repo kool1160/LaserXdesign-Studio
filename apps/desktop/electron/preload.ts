@@ -30,6 +30,7 @@ import {
   setManufacturingSettingsRequestSchema,
   setViewportPreferencesRequestSchema,
   saveSignTemplateRequestSchema,
+  selectImportSourceRequestSchema,
   selectAiConceptRequestSchema,
   signToolRequestSchema,
   textLayoutRequestSchema,
@@ -62,6 +63,7 @@ import {
   type OpenAiAccountPageRequest,
   type RasterTraceRequest,
   type SaveSignTemplateRequest,
+  type SelectImportSourceRequest,
   type SelectAiConceptRequest,
   type ResolveRecoveryRequest,
   type OnboardingActionRequest,
@@ -122,6 +124,12 @@ const api: LaserxDesktopApi = Object.freeze({
   async saveProjectAs() {
     return commandResultSchema.parse(
       await ipcRenderer.invoke(IPC_CHANNELS.saveProjectAs),
+    );
+  },
+  async selectImportSource(request: SelectImportSourceRequest) {
+    const validated = selectImportSourceRequestSchema.parse(request);
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.selectImportSource, validated),
     );
   },
   async previewVectorImport(request: VectorImportPreviewRequest) {

@@ -73,6 +73,7 @@ export interface LaunchEnvironment {
   deviceScaleFactor?: string;
   failInitialGetState?: boolean;
   geometryDelayMs?: string;
+  sourcePath?: string;
   importPath?: string;
   exportPath?: string;
   rasterPath?: string;
@@ -154,6 +155,9 @@ async function launchLaserxExecutable(
       ...(launchEnvironment.geometryDelayMs === undefined
         ? {}
         : { LASERX_TEST_GEOMETRY_DELAY_MS: launchEnvironment.geometryDelayMs }),
+      ...(launchEnvironment.sourcePath === undefined
+        ? {}
+        : { LASERX_TEST_IMPORT_SOURCE_PATH: launchEnvironment.sourcePath }),
       ...(launchEnvironment.importPath === undefined
         ? {}
         : { LASERX_TEST_IMPORT_PATH: launchEnvironment.importPath }),
