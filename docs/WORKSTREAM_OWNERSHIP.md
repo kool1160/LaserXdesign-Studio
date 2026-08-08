@@ -14,11 +14,11 @@ This assignment supersedes ADR 0026's Claude implementation assignment and the l
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G2 — Create My First Sign guided vertical slice**
-- Active task: turn the accepted G1 shell into one truthful deterministic first-sign path through real size/material, content, cutability, resolution, physical 3D, and save/export outcomes.
-- G3 vector/raster guided integration, G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
+- Active slice: **G3 — vector import and raster trace contextual guidance**
+- Active task: make **Import My Own Design** source-aware and truthful across the existing SVG/DXF vector-import and PNG/JPEG raster-trace branches, then carry accepted editable geometry through the already-established manufacturing, cutability, 3D, save, and export checkpoints.
+- G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
 
-PR #71 completed and merged G1 at `41e572a017a82f66f9586ab6e34253d914bc31e2` after exact-head READY review of `ae7c4e79509611a0704649d9c667886a98bcdcbd` with Repository Guard and Canonical Verification green. The owner explicitly accepted and advanced G1 in the designated primary operations chat on 2026-08-07, resolving the post-merge owner-acceptance hold.
+PR #72 completed and merged G2 at `c9a834a811db831207da6ca695ee8c46d6a88ca4` after exact-head READY review of `9da334207d29da27948863bb95f21155737f65b8` with Repository Guard and Canonical Verification green. The owner explicitly accepted and advanced G2 in the designated primary operations chat on 2026-08-07.
 
 ## Owner authority
 
@@ -46,9 +46,11 @@ Codex is the sole active implementation surface. The repository does not choose 
 
 Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
 
-For active G2, Codex must use the existing authoritative document, manufacturing, cutability, physical-preview, save, and export systems. Guidance may coordinate those systems and observe their real success signals; it must not create a parallel project model, silently mutate geometry, bypass validation, or claim a step completed when the corresponding product outcome did not occur.
+For active G3, Codex must reuse the existing vector-import and raster-trace preview/commit systems. The selected source type controls which preparation surface is presented: SVG/DXF never exposes raster trace controls, and raster preprocessing/trace appears only after PNG/JPEG is selected. Guidance may observe and coordinate those systems; it must not create parallel import state or claim a preview/commit happened when it did not.
 
-Codex must preserve ADR 0027 and G1 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, and non-trapping Exit guidance.
+After committed editable geometry exists, Codex must reuse the accepted physical-layer, whole-design cutability, ADR 0027 resolution, required physical 3D, Save/Save As, and SVG/DXF export checkpoints. G4 grouped repair and safe-fix behavior remain out of scope.
+
+Codex must preserve ADR 0027 and G1/G2 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, and non-trapping Exit guidance.
 
 Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
@@ -73,4 +75,4 @@ Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, crede
 
 ## Explicit exclusions
 
-No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, or public beta work becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
+No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, public beta work, or native DWG support becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
