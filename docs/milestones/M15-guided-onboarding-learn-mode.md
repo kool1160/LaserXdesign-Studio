@@ -4,9 +4,9 @@
 
 **Active.** Active issue: #45.
 
-Current slice: **G4 — grouped repair decisions and Fix safe problems workflow**.
+Current slice: **G5 — Learn Mode, replay, recovery, and contextual explanations**.
 
-G3 and its post-merge physical-confirmation repair are accepted and merged. G5 and G6 remain held.
+G4 is accepted and merged. G6 remains held.
 
 ## User-visible outcome
 
@@ -17,9 +17,9 @@ A first-time user chooses a real goal, sees only relevant controls, completes re
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted.
 2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted.
 3. **G2 — Create My First Sign guided vertical slice** — merged and accepted.
-4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; post-merge physical-confirmation repair PR #74 merged and accepted.
-5. **G4 — grouped repair decisions and Fix safe problems workflow** — **active**.
-6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held.
+4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; post-merge physical-confirmation repair merged and accepted.
+5. **G4 — grouped repair decisions and Fix safe problems workflow** — merged and accepted.
+6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — **active**.
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held.
 
 Each gate requires exact-head review and explicit owner advancement before the next gate becomes active. A merge alone does not advance a gate.
@@ -48,37 +48,42 @@ PR #73 completed source-aware **Import My Own Design** guidance across SVG/DXF a
 
 ### G3 post-merge repair
 
-PR #74 fixed the late P1 where assigning a physical role could populate default material/thickness and auto-advance **Set physical details** before review.
+PR #74 fixed the late physical-details auto-advance P1. Reviewed head `66dab265b3073145e48667639b0a303691733f7b`; squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`.
 
-- Reviewed head: `66dab265b3073145e48667639b0a303691733f7b`
-- Squash merge: `df0d3463470afb7f69724ca808c25df0b8317d87`
+### G4
+
+PR #75 completed grouped repair decisions and **Fix safe problems**.
+
+- Reviewed head: `fb6caaeddb4117f308685314082102e65e231989`
+- Squash merge: `daf48515fa54e1dfd3276173d84d597b7dd14492`
 - Repository Guard: success
 - Canonical Verification: success, including packaged Windows verification
 - Review result: READY
+- Unresolved review threads: 0
 - Result: accepted on explicit owner `Advance LaserX` on 2026-08-08
 
-The user now remains on **Set physical details** through role/material/thickness edits and advances only through explicit guided confirmation after validation.
+Delivered grouped repair decisions, deterministic approved safe classes, visual before/after preview without authoritative mutation, stale-proposal refusal, coherent accept/undo, truthful reanalysis/counts, all-finding navigation, and exact empty manufacturing-layer scope preservation.
 
-## Active G4 contract — grouped repair decisions and Fix safe problems
+## Active G5 contract — Learn Mode, replay, recovery, and contextual explanations
 
-G4 must:
+G5 must:
 
-- group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** with truthful affected scope/counts;
-- limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance;
-- make **Fix safe problems** preview-first and non-mutating until acceptance;
-- refuse stale proposals if their document/finding basis changes;
-- apply accepted safe repairs as one coherent undoable transaction whenever technically practical and report fixed/skipped/remaining counts;
-- re-run current analysis after acceptance and preserve unresolved suggested/decision findings;
-- never claim safe repair proves cut readiness or physical safety;
-- never silently apply suggested fixes, bridge/island decisions, ambiguous near-closures, or unproven safe classes;
-- reuse authoritative geometry/history/cutability and the accepted guided resolution checkpoint;
-- preserve exact-project resume, run tokens, project replacement, contextual controls, security, Save/Export, and Exit guidance;
-- add unit/integration plus packaged Windows evidence for preview non-mutation, safe/ambiguous separation, accept/reject/undo, grouped large-finding presentation, reanalysis, stale-proposal refusal, and non-trapping recovery;
+- provide a permanent optional Learn/Help entry point that can enable or disable contextual teaching without mutating the current project;
+- teach through the real workflow and controls, not a disconnected slideshow;
+- explain both **what** a control does and **why** a fabricator would use it in normal shop language;
+- cover core M15 concepts required for a first successful project: physical layers, material/thickness, cutability findings, grouped repair decisions, bridge/island intent, physical 3D, and export;
+- allow tutorials/guided workflows to be skipped, replayed, and reopened later from Learn/Help;
+- use fresh run tokens and current project/document identity for replay, never reviving stale transient previews or pretending work is complete;
+- preserve exact-project resume, wrong-project protection, project replacement, stable-checkpoint recovery, and global Exit behavior;
+- keep educational completion state separate from manufacturing/document truth;
+- ensure opening/dismissing/replaying teaching content cannot mutate geometry, accept repairs, complete checkpoints, create analysis/3D evidence, or export on the user's behalf;
+- reuse the accepted guided-workflow reducer, onboarding preferences, contextual controls, geometry/history/cutability, and G4 repair surfaces rather than creating a parallel tutorial engine;
+- add focused unit/integration and packaged Windows evidence for Learn Mode toggle, context explanations, skip/replay/reopen, fresh-token replay, restart/resume recovery, wrong-project/project replacement, and non-trapping Exit;
 - open one focused draft PR and stop `AWAITING_REVIEW`.
 
-## G4 non-goals
+## G5 non-goals
 
-No G5 full Learn Mode/replay content, G6 owner-observed usability validation, broad geometry-engine rewrite, speculative safe classifications, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
+No G6 owner-observed first-session validation or accessibility closure, new AI capability, future material/process tutorials for unimplemented features, broad material expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
 
 ## Milestone acceptance tests
 
@@ -90,8 +95,9 @@ No G5 full Learn Mode/replay content, G6 owner-observed usability validation, br
 6. **Fix safe problems** is preview-first, deterministic, undoable, and truthfully reported.
 7. Ambiguous findings remain user decisions.
 8. Optional AI remains optional and non-blocking.
-9. Guidance can be exited and cannot permanently trap the user.
-10. G6 closes accessibility and owner-observed usability evidence.
+9. Guidance can be exited, skipped/replayed/reopened, and cannot permanently trap the user.
+10. Learn Mode explains core manufacturing and repair concepts in context.
+11. G6 closes accessibility and owner-observed usability evidence.
 
 ## Exit checklist
 
@@ -99,8 +105,8 @@ No G5 full Learn Mode/replay content, G6 owner-observed usability validation, br
 - [x] Workflow-aware contextual-control architecture is documented.
 - [x] Create My First Sign guided vertical slice passes.
 - [x] Vector-import and raster-trace guided paths pass, including PR #74 physical-confirmation repair.
-- [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
-- [ ] Large finding sets reduce to understandable repair decisions.
+- [x] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
+- [x] Large finding sets reduce to understandable repair decisions.
 - [ ] Learn Mode covers core manufacturing and repair concepts.
 - [ ] Skip/replay/resume/recovery pass across the integrated product.
 - [ ] Accessibility and packaged Windows evidence pass.
