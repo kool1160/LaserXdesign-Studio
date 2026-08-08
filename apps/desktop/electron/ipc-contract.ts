@@ -1553,6 +1553,7 @@ export const desktopStateSchema = z.strictObject({
                 "eligible-near-closure",
               ])
               .nullable(),
+            repairNodeIndex: z.number().int().nonnegative().nullable(),
           }),
         ),
         regions: z.array(z.strictObject({

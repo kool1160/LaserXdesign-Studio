@@ -171,6 +171,111 @@ describe("grouped safe repairs", () => {
     expect(() => groupCutabilityFindings(document, analysis)).toThrow("stale");
   });
 
+  it("keeps a near-closure with curved endpoint handles out of Safe to fix", () => {
+    const document = documentWith([
+      {
+        id: NEAR_CLOSURE_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: false,
+        points: [
+          { xMm: 10, yMm: 10 },
+          { xMm: 50, yMm: 10 },
+          { xMm: 50, yMm: 50 },
+          {
+            xMm: 10,
+            yMm: 10 + SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM / 2,
+          },
+        ],
+        handles: [
+          { incoming: { xMm: 90, yMm: 90 }, outgoing: null },
+          { incoming: null, outgoing: null },
+          { incoming: null, outgoing: null },
+          { incoming: null, outgoing: { xMm: -70, yMm: 90 } },
+        ],
+      },
+    ]);
+    const analysis = analyzeDocumentCutability(document);
+    const groups = groupCutabilityFindings(document, analysis);
+
+    expect(groups.safeToFix.findingCount).toBe(0);
+    expect(
+      analysis.issues.find(
+        (issue) =>
+          issue.objectId === NEAR_CLOSURE_ID && issue.code === "OPEN_CONTOUR",
+      )?.repairHint,
+    ).toBeNull();
+    expect(() => proposeSafeRepairs(document, analysis)).toThrow(
+      "no mechanically proven safe problems",
+    );
+  });
+
+  it("applies only cleanup nodes that have their own safe finding", () => {
+    const document = documentWith([
+      {
+        id: COLLINEAR_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 0, yMm: 0 },
+          { xMm: 0, yMm: 0 },
+          { xMm: 10, yMm: 0 },
+          { xMm: 20, yMm: 0 },
+          { xMm: 20, yMm: 10 },
+        ],
+        handles: [
+          { incoming: null, outgoing: null },
+          { incoming: null, outgoing: null },
+          { incoming: null, outgoing: null },
+          { incoming: null, outgoing: null },
+          { incoming: { xMm: 20, yMm: 5 }, outgoing: null },
+        ],
+      },
+    ]);
+    const analysis = analyzeDocumentCutability(document);
+    expect(
+      analysis.issues.filter((issue) => issue.repairHint !== null).map(
+        (issue) => [issue.repairHint, issue.repairNodeIndex],
+      ),
+    ).toEqual(expect.arrayContaining([
+      ["zero-length-entity", 1],
+      ["redundant-collinear-point", 2],
+    ]));
+
+    const zeroLengthOnlyAnalysis = {
+      ...analysis,
+      issues: analysis.issues.filter(
+        (issue) => issue.repairHint !== "redundant-collinear-point",
+      ),
+    };
+    const zeroLengthOnlyProposal = proposeSafeRepairs(
+      document,
+      zeroLengthOnlyAnalysis,
+    );
+    const zeroLengthOnlyReplacement = zeroLengthOnlyProposal.replacements.find(
+      (object) => object.id === COLLINEAR_ID,
+    );
+    expect(zeroLengthOnlyReplacement?.points).toHaveLength(4);
+    expect(zeroLengthOnlyReplacement?.points).toContainEqual({ xMm: 10, yMm: 0 });
+    expect(
+      zeroLengthOnlyProposal.changes.flatMap((change) => change.findingIds),
+    ).toEqual(
+      zeroLengthOnlyAnalysis.issues
+        .filter((issue) => issue.repairHint === "zero-length-entity")
+        .map((issue) => issue.id),
+    );
+
+    const fullProposal = proposeSafeRepairs(document, analysis);
+    const fullReplacement = fullProposal.replacements.find(
+      (object) => object.id === COLLINEAR_ID,
+    );
+    expect(fullReplacement?.points).toHaveLength(3);
+    expect(fullReplacement?.points).not.toContainEqual({ xMm: 10, yMm: 0 });
+  });
+
   it("does not leak safe findings from objects outside a selection analysis", () => {
     const selectedId = "20000000-0000-4000-8000-000000000020";
     const unselectedId = "20000000-0000-4000-8000-000000000021";

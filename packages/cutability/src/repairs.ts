@@ -8,6 +8,7 @@ import {
   GEOMETRY_ENGINE_TOLERANCE_MM,
   cleanupEditablePath,
   maximumAffineStretch,
+  type PathCleanupRemoval,
 } from "@laserx/geometry";
 
 import {
@@ -189,6 +190,29 @@ function copyPath(object: PathObject): PathObject {
   return copyDocumentObject(object) as PathObject;
 }
 
+function cleanupRemovalForIssue(
+  issue: CutabilityIssue,
+): PathCleanupRemoval | null {
+  if (issue.repairNodeIndex === null) return null;
+  if (issue.repairHint === "zero-length-entity") {
+    return {
+      sourceNodeIndex: issue.repairNodeIndex,
+      reason: "zero-length",
+    };
+  }
+  if (issue.repairHint === "redundant-collinear-point") {
+    return {
+      sourceNodeIndex: issue.repairNodeIndex,
+      reason: "redundant-collinear",
+    };
+  }
+  return null;
+}
+
+function cleanupRemovalKey(removal: PathCleanupRemoval): string {
+  return `${removal.reason}:${String(removal.sourceNodeIndex)}`;
+}
+
 export function proposeSafeRepairs(
   document: LaserxDocument,
   analysis: CutabilityAnalysisSummary,
@@ -256,12 +280,16 @@ export function proposeSafeRepairs(
     }
     if (source.type !== "path") continue;
     let replacement = copyPath(source);
+    const pendingChanges: SafeRepairChange[] = [];
     const cleanupIssues = objectIssues.filter(
       (issue) =>
         issue.repairHint === "zero-length-entity" ||
         issue.repairHint === "redundant-collinear-point",
     );
     if (cleanupIssues.length > 0) {
+      const allowedRemovals = cleanupIssues
+        .map(cleanupRemovalForIssue)
+        .filter((removal): removal is PathCleanupRemoval => removal !== null);
       const cleaned = cleanupEditablePath(
         {
           closed: replacement.closed,
@@ -271,30 +299,40 @@ export function proposeSafeRepairs(
             : { handles: replacement.handles }),
         },
         localGeometryTolerance(replacement),
+        { allowedRemovals },
       );
-      replacement = {
-        ...replacement,
-        points: cleaned.path.points,
-        ...(cleaned.path.handles === undefined
-          ? { handles: undefined }
-          : { handles: cleaned.path.handles }),
-      };
-      const zeroFindingIds = cleanupIssues
+      if (cleaned.removedNodeCount > 0) {
+        replacement = {
+          ...replacement,
+          points: cleaned.path.points,
+          ...(cleaned.path.handles === undefined
+            ? { handles: undefined }
+            : { handles: cleaned.path.handles }),
+        };
+      }
+      const appliedRemovalKeys = new Set(
+        cleaned.removedNodes.map(cleanupRemovalKey),
+      );
+      const appliedCleanupIssues = cleanupIssues.filter((issue) => {
+        const removal = cleanupRemovalForIssue(issue);
+        return removal !== null && appliedRemovalKeys.has(cleanupRemovalKey(removal));
+      });
+      const zeroFindingIds = appliedCleanupIssues
         .filter((issue) => issue.repairHint === "zero-length-entity")
         .map((issue) => issue.id);
       if (zeroFindingIds.length > 0) {
-        changes.push({
+        pendingChanges.push({
           kind: "remove-zero-length",
           objectId: source.id,
           findingIds: zeroFindingIds,
           description: "Remove zero-length path segments within geometry-engine tolerance.",
         });
       }
-      const collinearFindingIds = cleanupIssues
+      const collinearFindingIds = appliedCleanupIssues
         .filter((issue) => issue.repairHint === "redundant-collinear-point")
         .map((issue) => issue.id);
       if (collinearFindingIds.length > 0) {
-        changes.push({
+        pendingChanges.push({
           kind: "remove-redundant-collinear-points",
           objectId: source.id,
           findingIds: collinearFindingIds,
@@ -307,19 +345,17 @@ export function proposeSafeRepairs(
     );
     if (closureIssues.length > 0) {
       replacement.closed = true;
-      changes.push({
+      pendingChanges.push({
         kind: "close-near-closure",
         objectId: source.id,
         findingIds: closureIssues.map((issue) => issue.id),
         description: `Close an endpoint gap no larger than ${SAFE_REPAIR_TOLERANCES.nearClosureMm.toFixed(3)} mm.`,
       });
     }
-    if (!isUsablePath(replacement)) {
-      if (zeroIssues.length > 0) deleteObjectIds.add(source.id);
-      continue;
-    }
+    if (!isUsablePath(replacement)) continue;
     if (JSON.stringify(replacement) !== JSON.stringify(source)) {
       replacements.push(replacement);
+      changes.push(...pendingChanges);
     }
   }
 

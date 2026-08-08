@@ -12,7 +12,6 @@ import {
   boundsFromPoints,
   cleanupEditablePath,
   composeAffineTransforms,
-  distancePointToSegment,
   findPathSelfIntersections,
   flattenEditablePath,
   maximumAffineStretch,
@@ -64,6 +63,7 @@ export interface CutabilityIssue {
   message: string;
   suggestion: string;
   repairHint: CutabilityRepairHint | null;
+  repairNodeIndex: number | null;
 }
 
 export type RegionDisposition = "retained" | "removed" | "ambiguous";
@@ -508,6 +508,7 @@ function issue(
   message: string,
   suggestion: string,
   repairHint: CutabilityRepairHint | null = null,
+  repairNodeIndex: number | null = null,
 ): CutabilityIssue {
   return {
     id: `${code}:${String(sequence)}`,
@@ -523,6 +524,7 @@ function issue(
     message,
     suggestion,
     repairHint,
+    repairNodeIndex,
   };
 }
 
@@ -534,14 +536,6 @@ function duplicateObjectPairKey(firstId: string, secondId: string): string {
   return firstId < secondId
     ? `${firstId}\u0000${secondId}`
     : `${secondId}\u0000${firstId}`;
-}
-
-function hasNonemptyHandles(object: PathObject): boolean {
-  return (
-    object.handles?.some(
-      (handles) => handles.incoming !== null || handles.outgoing !== null,
-    ) ?? false
-  );
 }
 
 function relatedSegments(first: Segment, second: Segment): boolean {
@@ -701,9 +695,10 @@ export function analyzeDocumentCutability(
     message: string,
     suggestion: string,
     repairHint: CutabilityRepairHint | null = null,
+    repairNodeIndex: number | null = null,
   ): void => {
     issueSequence += 1;
-    issues.push(issue(code, issueSequence, severity, objectIds, segmentIndices, measured, limit, location, message, suggestion, repairHint));
+    issues.push(issue(code, issueSequence, severity, objectIds, segmentIndices, measured, limit, location, message, suggestion, repairHint, repairNodeIndex));
   };
   const editableVisibleLayerIds = new Set(
     document.layers
@@ -743,10 +738,18 @@ export function analyzeDocumentCutability(
       const ends = [path.points[0], path.points.at(-1)].filter((point): point is PointMm => point !== undefined);
       const gap = ends.length === 2 ? Math.hypot((ends[0] as PointMm).xMm - (ends[1] as PointMm).xMm, (ends[0] as PointMm).yMm - (ends[1] as PointMm).yMm) : 0;
       const source = editableTopLevelById.get(path.objectId);
+      const firstEndpointHandles =
+        source?.type === "path" ? source.handles?.[0] : undefined;
+      const lastEndpointHandles =
+        source?.type === "path" ? source.handles?.at(-1) : undefined;
+      const closingSegmentIsLinear =
+        (lastEndpointHandles?.outgoing ?? null) === null &&
+        (firstEndpointHandles?.incoming ?? null) === null;
       const repairHint =
         source?.type === "path" &&
         source.points.length >= 3 &&
-        gap <= SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM
+        gap <= SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM &&
+        closingSegmentIsLinear
           ? "eligible-near-closure"
           : null;
       record("OPEN_CONTOUR", "error", [path.objectId], [], gap, SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM, ends[0] ?? { xMm: 0, yMm: 0 }, "This contour is open, so retained and removed regions are ambiguous.", repairHint === null ? "Join or close the endpoints before relying on manufacturing preview." : `Preview closing this endpoint gap within the explicit ${SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM.toFixed(3)} mm safe-repair tolerance.`, repairHint);
@@ -795,68 +798,40 @@ export function analyzeDocumentCutability(
       localToleranceMm,
     );
     if (cleaned.removedNodeCount === 0) continue;
-    const hasZeroLengthSegment = object.points.some((point, index) => {
-      const next = object.points[
-        object.closed ? (index + 1) % object.points.length : index + 1
-      ];
-      return (
-        next !== undefined &&
-        Math.hypot(next.xMm - point.xMm, next.yMm - point.yMm) <=
-          localToleranceMm
+    for (const removal of cleaned.removedNodes) {
+      const location = applyAffineTransform(
+        object.points[removal.sourceNodeIndex] ?? { xMm: 0, yMm: 0 },
+        object.transform,
       );
-    });
-    const hasRedundantCollinearPoint =
-      !hasNonemptyHandles(object) &&
-      object.points.some((point, index) => {
-        if (!object.closed && (index === 0 || index === object.points.length - 1)) {
-          return false;
-        }
-        const previous = object.points[
-          (index - 1 + object.points.length) % object.points.length
-        ];
-        const next = object.points[(index + 1) % object.points.length];
-        if (previous === undefined || next === undefined) return false;
-        if (
-          Math.hypot(point.xMm - previous.xMm, point.yMm - previous.yMm) <=
-            localToleranceMm ||
-          Math.hypot(point.xMm - next.xMm, point.yMm - next.yMm) <=
-            localToleranceMm
-        ) {
-          return false;
-        }
-        return distancePointToSegment(point, previous, next) <= localToleranceMm;
-      });
-    const location = applyAffineTransform(
-      object.points[0] ?? { xMm: 0, yMm: 0 },
-      object.transform,
-    );
-    if (hasZeroLengthSegment) {
-      record(
-        "UNSUPPORTED_GEOMETRY",
-        "error",
-        [object.id],
-        [],
-        0,
-        GEOMETRY_ENGINE_TOLERANCE_MM,
-        location,
-        "This path contains a zero-length entity.",
-        "Preview removing the zero-length entity without changing the remaining path.",
-        "zero-length-entity",
-      );
-    }
-    if (hasRedundantCollinearPoint) {
-      record(
-        "UNSUPPORTED_GEOMETRY",
-        "warning",
-        [object.id],
-        [],
-        0,
-        GEOMETRY_ENGINE_TOLERANCE_MM,
-        location,
-        "This path contains redundant collinear points.",
-        "Preview removing points that do not change the path within geometry-engine tolerance.",
-        "redundant-collinear-point",
-      );
+      if (removal.reason === "zero-length") {
+        record(
+          "UNSUPPORTED_GEOMETRY",
+          "error",
+          [object.id],
+          [],
+          0,
+          GEOMETRY_ENGINE_TOLERANCE_MM,
+          location,
+          "This path contains a zero-length entity.",
+          "Preview removing this zero-length entity without changing the remaining path.",
+          "zero-length-entity",
+          removal.sourceNodeIndex,
+        );
+      } else {
+        record(
+          "UNSUPPORTED_GEOMETRY",
+          "warning",
+          [object.id],
+          [],
+          0,
+          GEOMETRY_ENGINE_TOLERANCE_MM,
+          location,
+          "This path contains a redundant collinear point.",
+          "Preview removing this point without changing the path within geometry-engine tolerance.",
+          "redundant-collinear-point",
+          removal.sourceNodeIndex,
+        );
+      }
     }
   }
 

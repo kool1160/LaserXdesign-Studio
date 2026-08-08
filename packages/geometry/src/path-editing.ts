@@ -27,8 +27,22 @@ export interface PathIntersection {
 export interface PathCleanupResult {
   path: EditablePathGeometry;
   removedNodeCount: number;
+  removedNodes: PathCleanupRemoval[];
   intersections: PathIntersection[];
   warnings: string[];
+}
+
+export type PathCleanupRemovalReason =
+  | "zero-length"
+  | "redundant-collinear";
+
+export interface PathCleanupRemoval {
+  sourceNodeIndex: number;
+  reason: PathCleanupRemovalReason;
+}
+
+export interface PathCleanupOptions {
+  allowedRemovals?: readonly PathCleanupRemoval[] | undefined;
 }
 
 function assertFinitePoint(point: PointMm, label: string): void {
@@ -652,44 +666,87 @@ export function findPathSelfIntersections(
 export function cleanupEditablePath(
   source: EditablePathGeometry,
   toleranceMm: number,
+  options: PathCleanupOptions = {},
 ): PathCleanupResult {
   if (!Number.isFinite(toleranceMm) || toleranceMm <= 0) {
     throw new RangeError("Cleanup tolerance must be positive and finite.");
   }
   const path = copyEditablePath(source);
+  const removalKey = (removal: PathCleanupRemoval): string =>
+    `${removal.reason}:${String(removal.sourceNodeIndex)}`;
+  const allowedRemovalKeys =
+    options.allowedRemovals === undefined
+      ? null
+      : new Set(
+          options.allowedRemovals.map((removal) => {
+            if (
+              !Number.isInteger(removal.sourceNodeIndex) ||
+              removal.sourceNodeIndex < 0 ||
+              removal.sourceNodeIndex >= path.points.length
+            ) {
+              throw new RangeError(
+                "Allowed cleanup removals must reference a source path node.",
+              );
+            }
+            return removalKey(removal);
+          }),
+        );
+  const canRemove = (removal: PathCleanupRemoval): boolean =>
+    allowedRemovalKeys === null || allowedRemovalKeys.has(removalKey(removal));
   const handles = copyHandles(path.handles, path.points.length);
   const retainedPoints: PointMm[] = [];
   const retainedHandles: PathControlHandles[] = [];
+  const retainedSourceNodeIndices: number[] = [];
+  const removedNodes: PathCleanupRemoval[] = [];
   for (let index = 0; index < path.points.length; index += 1) {
     const point = path.points[index] as PointMm;
     const previous = retainedPoints.at(-1);
     const handle = handles[index] as PathControlHandles;
     const previousHandle = retainedHandles.at(-1);
+    const removal = {
+      sourceNodeIndex: index,
+      reason: "zero-length",
+    } satisfies PathCleanupRemoval;
     if (
       previous !== undefined &&
       previousHandle !== undefined &&
       pointsEqual(previous, point, toleranceMm) &&
       handlesAreEmpty(previousHandle) &&
-      handlesAreEmpty(handle)
+      handlesAreEmpty(handle) &&
+      canRemove(removal)
     ) {
+      removedNodes.push(removal);
       continue;
     }
     retainedPoints.push(copyPoint(point));
     retainedHandles.push(handle);
+    retainedSourceNodeIndices.push(index);
   }
   const firstRetainedHandle = retainedHandles[0];
   const lastRetainedHandle = retainedHandles.at(-1);
+  const lastRetainedSourceNodeIndex = retainedSourceNodeIndices.at(-1);
+  const closingRemoval =
+    lastRetainedSourceNodeIndex === undefined
+      ? null
+      : ({
+          sourceNodeIndex: lastRetainedSourceNodeIndex,
+          reason: "zero-length",
+        } satisfies PathCleanupRemoval);
   if (
     path.closed &&
     retainedPoints.length > 3 &&
     firstRetainedHandle !== undefined &&
     lastRetainedHandle !== undefined &&
+    closingRemoval !== null &&
     pointsEqual(retainedPoints[0] as PointMm, retainedPoints.at(-1) as PointMm, toleranceMm) &&
     handlesAreEmpty(firstRetainedHandle) &&
-    handlesAreEmpty(lastRetainedHandle)
+    handlesAreEmpty(lastRetainedHandle) &&
+    canRemove(closingRemoval)
   ) {
     retainedPoints.pop();
     retainedHandles.pop();
+    retainedSourceNodeIndices.pop();
+    removedNodes.push(closingRemoval);
   }
   let changed = true;
   while (changed && retainedPoints.length > (path.closed ? 3 : 2)) {
@@ -703,6 +760,12 @@ export function cleanupEditablePath(
       const previousHandle = retainedHandles[previousIndex] as PathControlHandles;
       const handle = retainedHandles[index] as PathControlHandles;
       const nextHandle = retainedHandles[nextIndex] as PathControlHandles;
+      const sourceNodeIndex = retainedSourceNodeIndices[index];
+      if (sourceNodeIndex === undefined) continue;
+      const removal = {
+        sourceNodeIndex,
+        reason: "redundant-collinear",
+      } satisfies PathCleanupRemoval;
       if (
         handlesAreEmpty(handle) &&
         previousHandle.outgoing === null &&
@@ -711,10 +774,13 @@ export function cleanupEditablePath(
           retainedPoints[index] as PointMm,
           retainedPoints[previousIndex] as PointMm,
           retainedPoints[nextIndex] as PointMm,
-        ) <= toleranceMm
+        ) <= toleranceMm &&
+        canRemove(removal)
       ) {
         retainedPoints.splice(index, 1);
         retainedHandles.splice(index, 1);
+        retainedSourceNodeIndices.splice(index, 1);
+        removedNodes.push(removal);
         changed = true;
         break;
       }
@@ -727,10 +793,11 @@ export function cleanupEditablePath(
     ...(compacted === undefined ? {} : { handles: compacted }),
   };
   const intersections = findPathSelfIntersections(cleaned, toleranceMm);
-  const removedNodeCount = path.points.length - retainedPoints.length;
+  const removedNodeCount = removedNodes.length;
   return {
     path: cleaned,
     removedNodeCount,
+    removedNodes,
     intersections,
     warnings: [
       ...(removedNodeCount > 0
