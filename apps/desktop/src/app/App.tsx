@@ -1179,6 +1179,38 @@ export function App() {
             </div>
             <div>
               <h3>Guided workflows</h3>
+              {showResumeGuidance &&
+                state.onboarding.preferences.activeWorkflow !== null && (
+                <div
+                  className="learn-goal-card learn-resume-card"
+                  data-testid="learn-resume-guidance"
+                >
+                  <div>
+                    <strong>
+                      Resume {guidedGoal(
+                        state.onboarding.preferences.activeWorkflow.goal,
+                      ).title}
+                    </strong>
+                    <small>
+                      Continue the saved checkpoint for this exact project before
+                      starting another tutorial.
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="learn-resume-guidance-button"
+                    disabled={busy}
+                    onClick={() => {
+                      setLearnCenterOpen(false);
+                      void run(() => window.laserx.onboardingAction({
+                        type: "resume",
+                      }));
+                    }}
+                  >
+                    Resume
+                  </button>
+                </div>
+              )}
               <div className="learn-goal-list">
                 {([
                   "create-first-sign",
@@ -1193,7 +1225,7 @@ export function App() {
                       guidance.status === "dismissed" ||
                       guidance.status === "failed");
                   const canOpen =
-                    guidance.status === "idle" ||
+                    (guidance.status === "idle" && !showResumeGuidance) ||
                     guidance.status === "completed" ||
                     guidance.status === "dismissed" ||
                     guidance.status === "failed";

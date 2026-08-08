@@ -252,6 +252,12 @@
   flex: 0 0 auto;
 }
 
+.learn-resume-card {
+  margin-bottom: 7px;
+  border-color: #39708f;
+  background: #102536;
+}
+
 .learn-guidance-controls {
   display: flex;
   align-items: center;

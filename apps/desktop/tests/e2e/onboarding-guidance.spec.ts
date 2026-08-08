@@ -587,7 +587,50 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
         async () => (await window.laserx.getState()).onboarding.resumeEligibility,
       )).toBe("available");
       await expect(resumedPage.getByTestId("resume-guidance-card")).toBeVisible();
-      await resumedPage.getByTestId("resume-guidance").click();
+      const savedSnapshot = await resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.preferences.activeWorkflow,
+      );
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(resumedPage.getByTestId("learn-resume-guidance")).toBeVisible();
+      const learnGoalButtons = resumedPage.locator('[data-testid^="learn-goal-"]');
+      await expect(learnGoalButtons).toHaveCount(3);
+      for (const button of await learnGoalButtons.all()) {
+        await expect(button).toBeDisabled();
+      }
+      const blockedStart = await resumedPage.evaluate(async () => {
+        const before = await window.laserx.getState();
+        const result = await window.laserx.onboardingAction({
+          type: "start",
+          goal: "import-own-design",
+        });
+        const after = await window.laserx.getState();
+        return {
+          ok: result.ok,
+          error: result.ok ? null : result.error,
+          beforeSnapshot: before.onboarding.preferences.activeWorkflow,
+          afterSnapshot: after.onboarding.preferences.activeWorkflow,
+          eligibility: after.onboarding.resumeEligibility,
+          workflowStatus: after.onboarding.workflow.status,
+          project: after.project,
+          beforeProject: before.project,
+        };
+      });
+      expect(blockedStart).toEqual({
+        ok: false,
+        error: expect.stringContaining("saved guidance checkpoint"),
+        beforeSnapshot: savedSnapshot,
+        afterSnapshot: savedSnapshot,
+        eligibility: "available",
+        workflowStatus: "idle",
+        project: blockedStart.beforeProject,
+        beforeProject: blockedStart.beforeProject,
+      });
+      await resumedPage.getByTestId("close-learn-center").click();
+      await resumedPage.getByTestId("learn-help").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.preferences.activeWorkflow,
+      )).toEqual(savedSnapshot);
+      await resumedPage.getByTestId("learn-resume-guidance-button").click();
       await expect(
         resumedPage.getByText("Add your sign content", { exact: true }),
       ).toBeVisible();

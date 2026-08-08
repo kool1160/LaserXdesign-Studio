@@ -318,6 +318,25 @@ describe("desktop onboarding guidance", () => {
       documentId: second.state.project.document.id,
     });
     expect(second.state.onboarding.resumeEligibility).toBe("available");
+    const protectedSnapshot = structuredClone(
+      second.state.onboarding.preferences.activeWorkflow,
+    );
+    const beforeBlockedStart = JSON.stringify(second.state.project);
+    const blockedStart = await second.onboardingAction({
+      type: "start",
+      goal: "import-own-design",
+    });
+    expect(blockedStart.ok).toBe(false);
+    if (blockedStart.ok) {
+      throw new Error("Expected saved guidance to block a new tutorial.");
+    }
+    expect(blockedStart.error).toContain("saved guidance checkpoint");
+    expect(second.state.onboarding.workflow.status).toBe("idle");
+    expect(second.state.onboarding.preferences.activeWorkflow).toEqual(
+      protectedSnapshot,
+    );
+    expect(second.state.onboarding.resumeEligibility).toBe("available");
+    expect(JSON.stringify(second.state.project)).toBe(beforeBlockedStart);
     await second.onboardingAction({ type: "resume" });
 
     expect(second.state.onboarding.workflow.currentStepId).toBe("add-content");

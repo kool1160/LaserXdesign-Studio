@@ -2820,6 +2820,19 @@ export class DesktopController {
       }
 
       if (request.type === "start") {
+        const savedWorkflow = this.#onboardingPreferences.activeWorkflow;
+        if (
+          savedWorkflow !== null &&
+          canResumeSnapshot(
+            guidedGoal(savedWorkflow.goal).definition,
+            savedWorkflow,
+            this.#liveGuidedBinding(),
+          )
+        ) {
+          throw new Error(
+            "Resume or explicitly resolve the saved guidance checkpoint before starting another tutorial.",
+          );
+        }
         if (
           request.goal === "describe-with-ai" &&
           this.#aiConnection.status !== "connected"
