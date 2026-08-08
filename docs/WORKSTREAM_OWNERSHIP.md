@@ -2,77 +2,60 @@
 
 ## Status and authority
 
-This document records the Codex-only governance reset effective **2026-08-06**:
+This assignment supersedes ADR 0026's Claude implementation assignment and the later fixed-model routing. Codex is the sole active implementation surface.
 
-> The primary operations chat decides. GitHub remembers. Codex executes the bounded task. Pull requests hold the evidence.
+Only `Continue LaserX` goes to the Codex implementation session. The owner selects the model inside Codex. The LaserX Design Studio primary operations chat is the only planning/review write authority. Every other chat is read-only for those mutations.
 
-This assignment supersedes ADR 0026's Claude implementation assignment and the later fixed-model SOL routing. Those records remain historical evidence but carry no current execution authority.
-
-`AGENTS.md`, `docs/OPERATOR_PROTOCOL.md`, `docs/CHAT_AUTHORITY.md`, `docs/CODEX_EXECUTION_PLAN.md`, and `docs/status/CURRENT.md` are the current operating truth.
+Claude, Anthropic, Fable, and other external paid implementation, repair, review, continuation, and fallback routes are removed from active operation.
 
 ## Current delivery gate
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G4 — grouped repair decisions and Fix safe problems workflow**
-- Active task: turn current repair/manufacturing findings into truthful grouped decisions, preview deterministic safe repairs without mutation, then apply accepted safe batches coherently with undo and reanalysis.
-- G5 full Learn Mode and G6 owner usability validation remain held.
+- Current state: **G3 post-merge repair acceptance hold**
+- Repair PR: **#74 — M15 G3 repair: require physical setup confirmation**
+- Reviewed repair head: `66dab265b3073145e48667639b0a303691733f7b`
+- Required CI: **Repository Guard success; Canonical Verification success, including packaged Windows verification**
+- Review result: **READY**
+- G4 grouped repair is **held until PR #74 is explicitly accepted and merged**.
 
-PR #73 completed and merged G3 at `f2a54d732ec9ee661c921d421da08e2b83c01b14` after exact-head READY review of `4df406869bf23c175069b9b93dda9d97b5cb8cab` with Repository Guard and Canonical Verification green. The owner explicitly accepted and advanced G3 in the designated primary operations chat on 2026-08-07.
+The late P1 showed that assigning a physical role to imported geometry could populate default material/thickness and auto-advance guidance before the user reviewed non-default physical settings. PR #74 removes that auto-advance. The explicit guided Continue remains the only route out of **Set physical details** and validates the current physical setup.
 
 ## Owner authority
 
-The owner controls product direction, milestone and gate order, pricing and trial philosophy, model selection inside Codex, hands-on acceptance, and explicit advancement through `Advance LaserX`.
+The owner controls product direction, milestone and gate order, pricing/trial philosophy, model selection inside Codex, hands-on acceptance, and explicit advancement through `Advance LaserX`.
 
-A `READY` verdict is required before advancement, but it does not replace the owner command. A merge also does not replace the owner command.
+A READY verdict does not replace the owner command. A merge also does not replace the owner command.
 
 ## Primary operations chat ownership
 
-The **LaserX Design Studio primary operations chat** is the only conversation authorized for planning/review-side writes. It owns:
+The primary operations chat owns planning, durable decisions, exact-head `Check LaserX`, READY/REPAIR/BLOCKED verdicts, status/holds, merges after owner authorization, and gate activation.
 
-- `Plan LaserX: <idea>` and `Lock that into LaserX`;
-- exact-head review through `Check LaserX`;
-- durable findings and decisions on GitHub;
-- `Status LaserX` and `Hold LaserX`;
-- merge, issue closure when appropriate, status recording, and next-gate activation after the owner issues `Advance LaserX` there.
-
-Every other chat is read-only for those mutations. When chat identity is uncertain, the conversation must fail closed. `docs/CHAT_AUTHORITY.md` contains the binding prohibition and recovery rule.
-
-There is no automatic routine merge.
+During the current repair hold, the next valid owner command is `Advance LaserX`. That command accepts/merges PR #74 and restores G4 as active; it does not advance to G5.
 
 ## Codex implementation ownership
 
-Codex is the sole active implementation surface. The repository does not choose or auto-route the model; the owner selects it inside Codex for each session.
+Codex may implement and repair only the bounded task authorized by current repository truth. It never merges or advances.
 
-Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
+While PR #74 is unmerged, Codex must not begin G4. A `Continue LaserX` command during this hold must stop `BLOCKED` after reading the repair hold.
 
-For active G4, Codex must group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** without inventing a second finding truth. Deterministic safe eligibility is initially limited to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance.
-
-**Fix safe problems** must be preview-first and non-mutating until acceptance. Accepted safe repairs should form one coherent undoable transaction whenever technically practical, report fixed/skipped/remaining counts, re-run analysis, and never imply that automated repair proves cut readiness or physical safety. Suggested or ambiguous fixes must never be silently applied.
-
-Codex must preserve ADR 0027 and G1–G3 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, Save/Export semantics, and non-trapping Exit guidance.
-
-Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
+After PR #74 is accepted and merged, G4 becomes the sole implementation task: grouped repair decisions and preview-first **Fix safe problems**, reusing authoritative geometry/history/cutability and preserving all G1–G3 security, persistence, resume, project-replacement, Save/Export, and Exit-guidance guarantees.
 
 ## Removed external routes
 
-Claude, Anthropic, Fable, and other external paid implementation, repair, review, continuation, and fallback routes are removed from active operation. Earlier authorship remains normal repository history and is judged by exact-head evidence.
-
-## Independent verification
-
-Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, credential, signing, licensing, release, or machine-safety work may require a verifier who did not author the load-bearing change. The primary operations chat records the verifier and exact target in GitHub; this does not create an automatic external-model route.
+Claude, Anthropic, Fable, and other external paid implementation, repair, review, continuation, and fallback routes are removed from active operation. Earlier authorship remains repository history only.
 
 ## Durable operating loop
 
-1. Owner discusses direction with `Plan LaserX: <idea>` in the primary operations chat.
-2. The primary operations chat records it with `Lock that into LaserX`.
-3. Owner sends `Continue LaserX` to Codex.
-4. Codex implements or repairs the bounded active gate and stops.
-5. Owner sends `Check LaserX` in the primary operations chat.
-6. If `REPAIR`, owner sends `Continue LaserX` to Codex.
-7. If `READY`, owner sends `Advance LaserX` in the primary operations chat.
-8. The primary operations chat merges when needed, records acceptance, activates the next gate, and stops.
+1. Owner discusses/locks direction in the primary operations chat.
+2. Owner sends `Continue LaserX` to Codex only when current truth authorizes implementation.
+3. Codex implements or repairs one bounded task and stops `AWAITING_REVIEW` or `BLOCKED`.
+4. Owner sends `Check LaserX` here.
+5. If READY, owner sends `Advance LaserX` here.
+6. This chat merges/records acceptance and activates only the authorized next state.
+
+There is no automatic routine merge.
 
 ## Explicit exclusions
 
-No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, public beta work, analytics platform, or native DWG support becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
+No later milestone, broad geometry rewrite, CAM, machine control, material expansion, licensing, public beta, native DWG, or speculative safe-repair class becomes active merely because an agent has capacity or a branch exists.
