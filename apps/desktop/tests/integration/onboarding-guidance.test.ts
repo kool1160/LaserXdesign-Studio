@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -113,6 +113,176 @@ afterEach(async () => {
 });
 
 describe("desktop onboarding guidance", () => {
+  it("persists learning preferences without changing project or manufacturing truth", async () => {
+    const { userDataPath, projectPath } = await setup();
+    const first = makeController(userDataPath, projectPath);
+    await first.initialize();
+    const beforeProject = JSON.stringify(first.state.project);
+    const beforeHistory = structuredClone(first.state.editor.history);
+    const beforeAnalysis = structuredClone(first.state.analysis);
+    const beforePreview = structuredClone(first.state.physicalPreview);
+
+    expect(first.state.onboarding.preferences).toMatchObject({
+      schemaVersion: 2,
+      learnModeEnabled: false,
+      completedLearnTopics: [],
+    });
+    expect(
+      await first.onboardingAction({ type: "set-learn-mode", enabled: true }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await first.onboardingAction({
+        type: "complete-learn-topic",
+        topic: "repair-groups",
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(JSON.stringify(first.state.project)).toBe(beforeProject);
+    expect(first.state.editor.history).toEqual(beforeHistory);
+    expect(first.state.analysis).toEqual(beforeAnalysis);
+    expect(first.state.physicalPreview).toEqual(beforePreview);
+    expect(first.state.onboarding.preferences).toMatchObject({
+      learnModeEnabled: true,
+      completedLearnTopics: ["repair-groups"],
+      completedGoals: [],
+    });
+    first.stop();
+
+    const second = makeController(userDataPath, projectPath);
+    await second.initialize();
+    expect(second.state.onboarding.preferences).toMatchObject({
+      schemaVersion: 2,
+      learnModeEnabled: true,
+      completedLearnTopics: ["repair-groups"],
+    });
+    const beforeReopenProject = JSON.stringify(second.state.project);
+    await second.onboardingAction({
+      type: "reopen-learn-topic",
+      topic: "repair-groups",
+    });
+    expect(second.state.onboarding.preferences.completedLearnTopics).toEqual([]);
+    expect(JSON.stringify(second.state.project)).toBe(beforeReopenProject);
+  });
+
+  it("migrates shipped v1 preferences without unexpectedly enabling Learn Mode", async () => {
+    const { userDataPath, projectPath } = await setup();
+    await mkdir(userDataPath, { recursive: true });
+    await writeFile(
+      join(userDataPath, "onboarding-preferences.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        completedGoals: ["create-first-sign"],
+        dismissed: true,
+        activeWorkflow: null,
+      }),
+      "utf8",
+    );
+
+    const controller = makeController(userDataPath, projectPath);
+    await controller.initialize();
+    expect(controller.state.onboarding.preferences).toEqual({
+      schemaVersion: 2,
+      completedGoals: ["create-first-sign"],
+      dismissed: true,
+      activeWorkflow: null,
+      learnModeEnabled: false,
+      completedLearnTopics: [],
+    });
+
+    await controller.onboardingAction({ type: "set-learn-mode", enabled: true });
+    const persisted = JSON.parse(
+      await readFile(join(userDataPath, "onboarding-preferences.json"), "utf8"),
+    ) as { schemaVersion: number; learnModeEnabled: boolean };
+    expect(persisted).toMatchObject({ schemaVersion: 2, learnModeEnabled: true });
+  });
+
+  it("switches and replays skipped tutorials with fresh tokens without changing project truth", async () => {
+    const { userDataPath, projectPath } = await setup();
+    const controller = makeController(userDataPath, projectPath);
+    await controller.initialize();
+    const projectId = controller.state.project.id;
+    const beforeTruth = JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    });
+
+    await controller.onboardingAction({
+      type: "start",
+      goal: "create-first-sign",
+    });
+    const firstRun = activeIdentity(controller);
+    await controller.onboardingAction({
+      type: "exit",
+      runToken: firstRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow.status).toBe("dismissed");
+    expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
+
+    await controller.onboardingAction({
+      type: "switch-goal",
+      goal: "import-own-design",
+      expectedRunToken: firstRun.runToken,
+    });
+    const secondRun = activeIdentity(controller);
+    expect(secondRun.runToken).not.toBe(firstRun.runToken);
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      goal: "import-own-design",
+      currentStepId: "choose-file",
+    });
+    expect(
+      controller.state.onboarding.preferences.activeWorkflow?.projectBinding.projectId,
+    ).toBe(projectId);
+    expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
+    expect(JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    })).toBe(beforeTruth);
+
+    await controller.onboardingAction({
+      type: "exit",
+      runToken: secondRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow.status).toBe("dismissed");
+
+    // A delayed choice from the first terminal run cannot replace the newer
+    // terminal run.
+    await controller.onboardingAction({
+      type: "switch-goal",
+      goal: "create-first-sign",
+      expectedRunToken: firstRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      status: "dismissed",
+      goal: "import-own-design",
+      runToken: secondRun.runToken,
+    });
+
+    await controller.onboardingAction({
+      type: "replay",
+      goal: "import-own-design",
+      expectedRunToken: secondRun.runToken,
+    });
+    const replay = activeIdentity(controller);
+    expect(replay.runToken).not.toBe(secondRun.runToken);
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      goal: "import-own-design",
+      currentStepId: "choose-file",
+    });
+    expect(JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    })).toBe(beforeTruth);
+  });
+
   it("persists and resumes an exact stable checkpoint with a fresh run token", async () => {
     const { userDataPath, projectPath } = await setup();
     const first = makeController(userDataPath, projectPath);
@@ -148,6 +318,25 @@ describe("desktop onboarding guidance", () => {
       documentId: second.state.project.document.id,
     });
     expect(second.state.onboarding.resumeEligibility).toBe("available");
+    const protectedSnapshot = structuredClone(
+      second.state.onboarding.preferences.activeWorkflow,
+    );
+    const beforeBlockedStart = JSON.stringify(second.state.project);
+    const blockedStart = await second.onboardingAction({
+      type: "start",
+      goal: "import-own-design",
+    });
+    expect(blockedStart.ok).toBe(false);
+    if (blockedStart.ok) {
+      throw new Error("Expected saved guidance to block a new tutorial.");
+    }
+    expect(blockedStart.error).toContain("saved guidance checkpoint");
+    expect(second.state.onboarding.workflow.status).toBe("idle");
+    expect(second.state.onboarding.preferences.activeWorkflow).toEqual(
+      protectedSnapshot,
+    );
+    expect(second.state.onboarding.resumeEligibility).toBe("available");
+    expect(JSON.stringify(second.state.project)).toBe(beforeBlockedStart);
     await second.onboardingAction({ type: "resume" });
 
     expect(second.state.onboarding.workflow.currentStepId).toBe("add-content");

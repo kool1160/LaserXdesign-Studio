@@ -46,7 +46,13 @@ import {
   canCompleteResolution,
   isStepSkippable,
   resolutionPrimaryAction,
+  type GuidedGoal,
+  type LearnTopic,
 } from "../features/onboarding/guidedWorkflowState.js";
+import {
+  learningTopic,
+  learningTopics,
+} from "../features/onboarding/learningContent.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -93,6 +99,38 @@ function scrollToWorkflow(id: string): void {
   });
 }
 
+function LearnNote({
+  topicId,
+  busy,
+  onComplete,
+}: {
+  readonly topicId: LearnTopic;
+  readonly busy: boolean;
+  readonly onComplete: (topic: LearnTopic) => void;
+}) {
+  const topic = learningTopic(topicId);
+  return (
+    <aside
+      className="learn-note"
+      data-testid={`learn-note-${topic.id}`}
+      aria-label={`${topic.title} explanation`}
+    >
+      <span className="learn-note-label">Learn mode</span>
+      <strong>{topic.title}</strong>
+      <p><b>What:</b> {topic.what}</p>
+      <p><b>Why:</b> {topic.why}</p>
+      <button
+        type="button"
+        className="quiet"
+        disabled={busy}
+        onClick={() => onComplete(topic.id)}
+      >
+        Got it
+      </button>
+    </aside>
+  );
+}
+
 /**
  * Loaded only when the user opens the physical preview -- keeps Three.js and
  * React Three Fiber out of the main editor bundle (ADR 0024 section 5).
@@ -115,6 +153,7 @@ export function App() {
   const [activeCutabilityOperationId, setActiveCutabilityOperationId] =
     useState<string | null>(null);
   const [physicalPreviewOpen, setPhysicalPreviewOpen] = useState(false);
+  const [learnCenterOpen, setLearnCenterOpen] = useState(false);
   const [physicalPreviewBuildFailed, setPhysicalPreviewBuildFailed] =
     useState(false);
   const [activePhysicalPreviewOperationId, setActivePhysicalPreviewOperationId] =
@@ -783,6 +822,52 @@ export function App() {
   const showResumeGuidance =
     guidance.status === "idle" &&
     state.onboarding.resumeEligibility === "available";
+  const completedLearnTopics = new Set(
+    state.onboarding.preferences.completedLearnTopics,
+  );
+  const showLearnTopic = (topic: LearnTopic): boolean =>
+    state.onboarding.preferences.learnModeEnabled &&
+    !completedLearnTopics.has(topic);
+  const showOutputLearningContext =
+    (!guidanceActive ||
+      guidance.surface === "preview" ||
+      guidance.surface === "output") &&
+    (showLearnTopic("physical-preview") || showLearnTopic("export-output"));
+  const completeLearnTopic = (topic: LearnTopic): void => {
+    void run(() => window.laserx.onboardingAction({
+      type: "complete-learn-topic",
+      topic,
+    }));
+  };
+  const visitLearningTopic = (topic: LearnTopic): void => {
+    setLearnCenterOpen(false);
+    if (completedLearnTopics.has(topic)) {
+      void run(() => window.laserx.onboardingAction({
+        type: "reopen-learn-topic",
+        topic,
+      }));
+    }
+    scrollToWorkflow(learningTopic(topic).targetId);
+  };
+  const startOrReplayGuidance = (goal: GuidedGoal): void => {
+    if (
+      guidance.runToken !== null &&
+      (guidance.status === "completed" ||
+        guidance.status === "dismissed" ||
+        guidance.status === "failed")
+    ) {
+      const expectedRunToken = guidance.runToken;
+      void run(() => window.laserx.onboardingAction(
+        guidance.goal === goal
+          ? { type: "replay", goal, expectedRunToken }
+          : { type: "switch-goal", goal, expectedRunToken },
+      ));
+      setLearnCenterOpen(false);
+      return;
+    }
+    void run(() => window.laserx.onboardingAction({ type: "start", goal }));
+    setLearnCenterOpen(false);
+  };
 
   const updateActiveLayerManufacturing = (
     updates: Partial<ManufacturingLayerMetadata>,
@@ -974,7 +1059,7 @@ export function App() {
           </div>
         )}
         {(!guidanceActive || guidance.surface === "preview" || guidance.surface === "output") && (
-          <div className="command-group output-command-group">
+          <div id="workflow-output" className="command-group output-command-group">
             <span className="command-group-label">Output</span>
             <div className="command-group-actions">
               {(!guidanceActive || guidance.surface === "output") && (
@@ -991,8 +1076,222 @@ export function App() {
             </div>
           </div>
         )}
+        <div className="command-group learn-command-group">
+          <span className="command-group-label">Learn</span>
+          <div className="command-group-actions">
+            <button
+              type="button"
+              data-testid="learn-help"
+              aria-expanded={learnCenterOpen}
+              aria-controls="learn-center"
+              onClick={() => setLearnCenterOpen((open) => !open)}
+            >
+              Learn / Help
+            </button>
+          </div>
+        </div>
         <span className="shell-badge">Precision workspace</span>
       </nav>
+
+      {showOutputLearningContext && (
+        <div className="command-learning-strip" data-testid="output-learning-context">
+          {showLearnTopic("physical-preview") && (
+            <LearnNote
+              topicId="physical-preview"
+              busy={busy}
+              onComplete={completeLearnTopic}
+            />
+          )}
+          {showLearnTopic("export-output") && (
+            <LearnNote
+              topicId="export-output"
+              busy={busy}
+              onComplete={completeLearnTopic}
+            />
+          )}
+        </div>
+      )}
+
+      {learnCenterOpen && (
+        <section
+          id="learn-center"
+          className="learn-center"
+          data-testid="learn-center"
+          aria-labelledby="learn-center-title"
+        >
+          <div className="learn-center-heading">
+            <div>
+              <span className="eyebrow">Learning only</span>
+              <h2 id="learn-center-title">Learn LaserX in the workspace</h2>
+              <p>
+                Explanations and tutorials never change geometry, accept repairs,
+                complete manufacturing checks, create evidence, or export files.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="quiet"
+              data-testid="close-learn-center"
+              onClick={() => setLearnCenterOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+
+          <label className="learn-mode-toggle">
+            <input
+              type="checkbox"
+              data-testid="learn-mode-toggle"
+              checked={state.onboarding.preferences.learnModeEnabled}
+              disabled={busy}
+              onChange={(event) => void run(() =>
+                window.laserx.onboardingAction({
+                  type: "set-learn-mode",
+                  enabled: event.target.checked,
+                }),
+              )}
+            />
+            <span>
+              <strong>Show contextual explanations</strong>
+              <small>Saved on this computer. Turn it off without losing learned topics.</small>
+            </span>
+          </label>
+
+          <div className="learn-center-columns">
+            <div>
+              <h3>Shop concepts</h3>
+              <div className="learn-topic-list">
+                {learningTopics.map((topic) => {
+                  const learned = completedLearnTopics.has(topic.id);
+                  return (
+                    <button
+                      type="button"
+                      key={topic.id}
+                      data-testid={`learn-topic-${topic.id}`}
+                      onClick={() => visitLearningTopic(topic.id)}
+                    >
+                      <span>{topic.title}</span>
+                      <small>{learned ? "Learned · show again" : "Go to this control"}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <h3>Guided workflows</h3>
+              {showResumeGuidance &&
+                state.onboarding.preferences.activeWorkflow !== null && (
+                <div
+                  className="learn-goal-card learn-resume-card"
+                  data-testid="learn-resume-guidance"
+                >
+                  <div>
+                    <strong>
+                      Resume {guidedGoal(
+                        state.onboarding.preferences.activeWorkflow.goal,
+                      ).title}
+                    </strong>
+                    <small>
+                      Continue the saved checkpoint for this exact project before
+                      starting another tutorial.
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="learn-resume-guidance-button"
+                    disabled={busy}
+                    onClick={() => {
+                      setLearnCenterOpen(false);
+                      void run(() => window.laserx.onboardingAction({
+                        type: "resume",
+                      }));
+                    }}
+                  >
+                    Resume
+                  </button>
+                </div>
+              )}
+              <div className="learn-goal-list">
+                {([
+                  "create-first-sign",
+                  "import-own-design",
+                  "describe-with-ai",
+                ] as const).map((goalId) => {
+                  const goal = guidedGoal(goalId);
+                  const isCurrent = guidance.goal === goalId;
+                  const isTerminalCurrent =
+                    isCurrent &&
+                    (guidance.status === "completed" ||
+                      guidance.status === "dismissed" ||
+                      guidance.status === "failed");
+                  const canOpen =
+                    (guidance.status === "idle" && !showResumeGuidance) ||
+                    guidance.status === "completed" ||
+                    guidance.status === "dismissed" ||
+                    guidance.status === "failed";
+                  const wasCompleted =
+                    state.onboarding.preferences.completedGoals.includes(goalId);
+                  const aiUnavailable =
+                    goalId === "describe-with-ai" &&
+                    state.ai.connection.status !== "connected";
+                  return (
+                    <div className="learn-goal-card" key={goalId}>
+                      <div>
+                        <strong>{goal.title}</strong>
+                        <small>
+                          {isCurrent && guidance.status === "active"
+                            ? "In progress"
+                            : aiUnavailable
+                              ? "Connect an AI account first"
+                              : wasCompleted
+                                ? "Completed learning record"
+                                : "Available when you want it"}
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`learn-goal-${goalId}`}
+                        disabled={busy || !canOpen || aiUnavailable}
+                        onClick={() => startOrReplayGuidance(goalId)}
+                      >
+                        {isTerminalCurrent
+                          ? "Replay"
+                          : wasCompleted
+                            ? "Reopen"
+                            : "Start"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {guidance.status !== "idle" && (
+                <div className="learn-guidance-controls">
+                  <small className="learn-guidance-state">
+                    {guidance.status === "active"
+                      ? "Skip the current tutorial before choosing a different one."
+                      : "Replay this tutorial or choose another one."}
+                    {" "}Every new run starts fresh against the current project.
+                  </small>
+                  {guidance.status === "active" && guidance.runToken !== null && (
+                    <button
+                      type="button"
+                      className="quiet"
+                      data-testid="learn-skip-tutorial"
+                      disabled={busy}
+                      onClick={() => void run(() => window.laserx.onboardingAction({
+                        type: "exit",
+                        runToken: guidance.runToken as string,
+                      }))}
+                    >
+                      Skip tutorial for now
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="activity-status" role="status" aria-live="polite">
         {busy ? <><span className="loading-spinner" aria-hidden="true" />Working… controls are temporarily unavailable.</> : null}
@@ -1810,6 +2109,27 @@ export function App() {
             <p className="manufacturing-disclaimer">
               Guidance from editable values—not a certification of machine safety or part quality.
             </p>
+            {showLearnTopic("cutability-findings") && (
+              <LearnNote
+                topicId="cutability-findings"
+                busy={busy}
+                onComplete={completeLearnTopic}
+              />
+            )}
+            {showLearnTopic("repair-groups") && (
+              <LearnNote
+                topicId="repair-groups"
+                busy={busy}
+                onComplete={completeLearnTopic}
+              />
+            )}
+            {showLearnTopic("bridge-islands") && (
+              <LearnNote
+                topicId="bridge-islands"
+                busy={busy}
+                onComplete={completeLearnTopic}
+              />
+            )}
             <label>
               Starting preset
               <select
@@ -3369,6 +3689,13 @@ export function App() {
                 + Add
               </button>
             </div>
+            {showLearnTopic("physical-layers") && (
+              <LearnNote
+                topicId="physical-layers"
+                busy={busy}
+                onComplete={completeLearnTopic}
+              />
+            )}
             <ol className="layer-list">
               {document.layers.map((layer, index) => (
                 <li
@@ -3463,6 +3790,13 @@ export function App() {
             </ol>
             {activeLayer !== undefined && (
               <div className="production-layer-editor" data-testid="production-layer-editor">
+                {showLearnTopic("material-thickness") && (
+                  <LearnNote
+                    topicId="material-thickness"
+                    busy={busy}
+                    onComplete={completeLearnTopic}
+                  />
+                )}
                 <label>
                   Manufacturing role
                   <select

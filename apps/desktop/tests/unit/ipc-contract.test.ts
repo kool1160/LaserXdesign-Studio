@@ -84,6 +84,50 @@ describe("typed IPC validation", () => {
         goal: "make-anything",
       }).success,
     ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "replay",
+        goal: "create-first-sign",
+        expectedRunToken: "finished-run",
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "replay",
+        goal: "create-first-sign",
+      }).success,
+    ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "switch-goal",
+        goal: "import-own-design",
+        expectedRunToken: "finished-run",
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "switch-goal",
+        goal: "import-own-design",
+      }).success,
+    ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "set-learn-mode",
+        enabled: false,
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "complete-learn-topic",
+        topic: "bridge-islands",
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "complete-learn-topic",
+        topic: "machine-control",
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps vector paths and file contents out of renderer requests", () => {
@@ -359,10 +403,12 @@ describe("typed IPC validation", () => {
       recovery: null,
       onboarding: {
         preferences: {
-          schemaVersion: 1,
+          schemaVersion: 2,
           completedGoals: [],
           dismissed: false,
           activeWorkflow: null,
+          learnModeEnabled: true,
+          completedLearnTopics: [],
         },
         workflow: {
           status: "idle",

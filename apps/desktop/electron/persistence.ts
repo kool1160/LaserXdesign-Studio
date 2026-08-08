@@ -33,6 +33,15 @@ const guidedGoalSchema = z.enum([
   "import-own-design",
   "describe-with-ai",
 ]);
+const learnTopicSchema = z.enum([
+  "physical-layers",
+  "material-thickness",
+  "cutability-findings",
+  "repair-groups",
+  "bridge-islands",
+  "physical-preview",
+  "export-output",
+]);
 const onboardingWorkflowSnapshotSchema = z.strictObject({
   goal: guidedGoalSchema,
   definitionVersion: z.number().int().positive(),
@@ -47,11 +56,19 @@ const onboardingWorkflowSnapshotSchema = z.strictObject({
 });
 const onboardingPreferencesSchema: z.ZodType<OnboardingPreferences> =
   z.strictObject({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     completedGoals: z.array(guidedGoalSchema),
     dismissed: z.boolean(),
     activeWorkflow: onboardingWorkflowSnapshotSchema.nullable(),
+    learnModeEnabled: z.boolean(),
+    completedLearnTopics: z.array(learnTopicSchema),
   });
+const legacyOnboardingPreferencesSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  completedGoals: z.array(guidedGoalSchema),
+  dismissed: z.boolean(),
+  activeWorkflow: onboardingWorkflowSnapshotSchema.nullable(),
+});
 
 export interface RecentProject {
   filePath: string;
@@ -163,10 +180,23 @@ export class OnboardingPreferencesStore
 
   public async load(): Promise<OnboardingPreferences | null> {
     try {
-      const parsed = onboardingPreferencesSchema.safeParse(
-        JSON.parse(await readFile(this.filePath, "utf8")) as unknown,
-      );
-      return parsed.success ? parsed.data : null;
+      const value = JSON.parse(await readFile(this.filePath, "utf8")) as unknown;
+      const parsed = onboardingPreferencesSchema.safeParse(value);
+      if (parsed.success) return parsed.data;
+
+      const legacy = legacyOnboardingPreferencesSchema.safeParse(value);
+      return legacy.success
+        ? {
+            schemaVersion: 2,
+            completedGoals: legacy.data.completedGoals,
+            dismissed: legacy.data.dismissed,
+            activeWorkflow: legacy.data.activeWorkflow,
+            // Do not unexpectedly turn teaching on for an established user.
+            // The permanent Learn / Help entry makes it easy to opt in.
+            learnModeEnabled: false,
+            completedLearnTopics: [],
+          }
+        : null;
     } catch {
       return null;
     }

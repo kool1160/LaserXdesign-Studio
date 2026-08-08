@@ -106,6 +106,7 @@ import {
   canResumeSnapshot,
   initialGuidedWorkflowState,
   initialOnboardingPreferences,
+  isTerminalStatus,
   isStepSkippable,
   reduceGuidedWorkflow,
   resolveResumeStepId,
@@ -2732,7 +2733,106 @@ export class DesktopController {
     return this.#run(async () => {
       this.#onboardingRecoveryNotice = null;
 
+      if (request.type === "set-learn-mode") {
+        await this.#replaceOnboardingPreferences({
+          ...this.#onboardingPreferences,
+          learnModeEnabled: request.enabled,
+        });
+        return;
+      }
+
+      if (request.type === "complete-learn-topic") {
+        await this.#replaceOnboardingPreferences({
+          ...this.#onboardingPreferences,
+          completedLearnTopics: [
+            ...new Set([
+              ...this.#onboardingPreferences.completedLearnTopics,
+              request.topic,
+            ]),
+          ],
+        });
+        return;
+      }
+
+      if (request.type === "reopen-learn-topic") {
+        await this.#replaceOnboardingPreferences({
+          ...this.#onboardingPreferences,
+          completedLearnTopics:
+            this.#onboardingPreferences.completedLearnTopics.filter(
+              (topic) => topic !== request.topic,
+            ),
+        });
+        return;
+      }
+
+      if (request.type === "replay") {
+        if (this.#guidedWorkflow.definition?.goal !== request.goal) {
+          throw new Error("That guidance run is no longer available to replay.");
+        }
+        const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "replay",
+          expectedRunToken: request.expectedRunToken,
+          nextRunToken: randomUUID(),
+        });
+        const didReplay = next !== this.#guidedWorkflow;
+        await this.#applyGuidedWorkflow(next, { dismissed: false });
+        if (didReplay) {
+          this.#guidedPreviewCompletion = null;
+          this.#guidedAnalysisCompletion = null;
+        }
+        return;
+      }
+
+      if (request.type === "switch-goal") {
+        if (
+          !isTerminalStatus(this.#guidedWorkflow.status) ||
+          this.#guidedWorkflow.runToken !== request.expectedRunToken ||
+          this.#guidedWorkflow.definition?.goal === request.goal
+        ) {
+          return;
+        }
+        if (
+          request.goal === "describe-with-ai" &&
+          this.#aiConnection.status !== "connected"
+        ) {
+          throw new Error(
+            "AI guidance is optional and is available after an AI account is connected.",
+          );
+        }
+
+        // Keep the reducer's source-status contract intact: leave the exact
+        // terminal run first, then start the selected goal from idle. The
+        // expected terminal token makes a delayed choice a no-op rather than
+        // allowing it to replace a newer run.
+        const idle = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "cancel",
+        });
+        const next = reduceGuidedWorkflow(idle, {
+          type: "start",
+          definition: guidedGoal(request.goal).definition,
+          runToken: randomUUID(),
+          projectId: this.#session.state.project.project.id,
+        });
+        await this.#applyGuidedWorkflow(next, { dismissed: false });
+        this.#guidedPreviewCompletion = null;
+        this.#guidedAnalysisCompletion = null;
+        return;
+      }
+
       if (request.type === "start") {
+        const savedWorkflow = this.#onboardingPreferences.activeWorkflow;
+        if (
+          savedWorkflow !== null &&
+          canResumeSnapshot(
+            guidedGoal(savedWorkflow.goal).definition,
+            savedWorkflow,
+            this.#liveGuidedBinding(),
+          )
+        ) {
+          throw new Error(
+            "Resume or explicitly resolve the saved guidance checkpoint before starting another tutorial.",
+          );
+        }
         if (
           request.goal === "describe-with-ai" &&
           this.#aiConnection.status !== "connected"
@@ -4029,7 +4129,8 @@ export class DesktopController {
           ? false
           : previousPreferences.dismissed);
     const preferences: OnboardingPreferences = {
-      schemaVersion: 1,
+      ...previousPreferences,
+      schemaVersion: 2,
       completedGoals,
       dismissed,
       activeWorkflow,

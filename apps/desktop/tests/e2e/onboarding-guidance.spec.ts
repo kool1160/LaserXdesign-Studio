@@ -92,6 +92,151 @@ test("clean first launch offers exactly three goals and a global exit", async ()
   }
 });
 
+test("packaged Learn Mode is persistent, contextual, non-mutating, and replays with a fresh token", async () => {
+  const first = await launchPackaged();
+  try {
+    const page = await first.electronApp.firstWindow();
+    const before = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        project: state.project,
+        history: state.editor.history,
+        analysis: state.analysis,
+        physicalPreview: state.physicalPreview,
+        production: state.production,
+      };
+    });
+
+    await expect(page.getByTestId("learn-help")).toBeVisible();
+    await expect(page.getByTestId("learn-note-physical-preview")).toHaveCount(0);
+    await expect(page.getByTestId("learn-note-export-output")).toHaveCount(0);
+    await page.getByTestId("learn-help").click();
+    await expect(page.getByTestId("learn-center")).toBeVisible();
+    await expect(page.locator('[data-testid^="learn-topic-"]')).toHaveCount(7);
+    await page.getByTestId("learn-mode-toggle").check();
+    await expect(page.getByTestId("learn-note-physical-preview")).toBeVisible();
+    await expect(page.getByTestId("learn-note-export-output")).toBeVisible();
+    await page.getByTestId("learn-mode-toggle").uncheck();
+    await expect(page.getByTestId("learn-note-physical-preview")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        learnModeEnabled: state.onboarding.preferences.learnModeEnabled,
+        project: state.project,
+        history: state.editor.history,
+        analysis: state.analysis,
+        physicalPreview: state.physicalPreview,
+        production: state.production,
+      };
+    })).toEqual({ learnModeEnabled: false, ...before });
+    await kill(first);
+
+    const second = await launchPackaged(first.directory);
+    try {
+      const resumedPage = await second.electronApp.firstWindow();
+      await expect(resumedPage.getByTestId("learn-help")).toBeVisible();
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(resumedPage.getByTestId("learn-mode-toggle")).not.toBeChecked();
+      await resumedPage.getByTestId("learn-mode-toggle").check();
+      await expect(resumedPage.getByTestId("learn-note-physical-preview")).toBeVisible();
+
+      await resumedPage.getByTestId("learn-topic-physical-layers").click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toBeVisible();
+      await resumedPage.getByTestId("learn-note-physical-layers").getByRole("button", { name: "Got it" }).click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toHaveCount(0);
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(
+        resumedPage.getByTestId("learn-topic-physical-layers"),
+      ).toContainText("Learned · show again");
+      await resumedPage.getByTestId("learn-topic-physical-layers").click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toBeVisible();
+
+      const beforeTutorialTruth = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          project: state.project,
+          history: state.editor.history,
+          analysis: state.analysis,
+          physicalPreview: state.physicalPreview,
+          production: state.production,
+        };
+      });
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-goal-create-first-sign").click();
+      const firstRunToken = await resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.runToken,
+      );
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-skip-tutorial").click();
+      await expect(resumedPage.getByTestId("guidance-shell")).toHaveCount(0);
+      await expect(
+        resumedPage.getByTestId("learn-goal-create-first-sign"),
+      ).toHaveText("Replay");
+      await expect(
+        resumedPage.getByTestId("learn-goal-import-own-design"),
+      ).toBeEnabled();
+      await resumedPage.getByTestId("learn-goal-import-own-design").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.status,
+      )).toBe("active");
+      const switched = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          token: state.onboarding.workflow.runToken,
+          goal: state.onboarding.workflow.goal,
+          step: state.onboarding.workflow.currentStepId,
+          completedGoals: state.onboarding.preferences.completedGoals,
+          truth: {
+            project: state.project,
+            history: state.editor.history,
+            analysis: state.analysis,
+            physicalPreview: state.physicalPreview,
+            production: state.production,
+          },
+        };
+      });
+      expect(switched).toEqual({
+        token: expect.any(String),
+        goal: "import-own-design",
+        step: "choose-file",
+        completedGoals: [],
+        truth: beforeTutorialTruth,
+      });
+      expect(switched.token).not.toBe(firstRunToken);
+
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-skip-tutorial").click();
+      await expect(
+        resumedPage.getByTestId("learn-goal-import-own-design"),
+      ).toHaveText("Replay");
+      await resumedPage.getByTestId("learn-goal-import-own-design").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.runToken,
+      )).not.toBe(switched.token);
+      const replayed = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          token: state.onboarding.workflow.runToken,
+          goal: state.onboarding.workflow.goal,
+          step: state.onboarding.workflow.currentStepId,
+        };
+      });
+      expect(replayed).toEqual({
+        token: expect.any(String),
+        goal: "import-own-design",
+        step: "choose-file",
+      });
+      expect(replayed.token).not.toBe(switched.token);
+      await resumedPage.getByTestId("guidance-exit").click();
+    } finally {
+      await killAndRemove(second);
+    }
+  } catch (error) {
+    await killAndRemove(first);
+    throw error;
+  }
+});
+
 test("packaged Create My First Sign follows real outcomes through whole-design analysis, rendered 3D, save, and SVG export", async () => {
   const directory = await mkdtemp(join(tmpdir(), "laserx-first-sign-e2e-"));
   const exportPath = join(directory, "my-first-sign.svg");
@@ -442,7 +587,50 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
         async () => (await window.laserx.getState()).onboarding.resumeEligibility,
       )).toBe("available");
       await expect(resumedPage.getByTestId("resume-guidance-card")).toBeVisible();
-      await resumedPage.getByTestId("resume-guidance").click();
+      const savedSnapshot = await resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.preferences.activeWorkflow,
+      );
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(resumedPage.getByTestId("learn-resume-guidance")).toBeVisible();
+      const learnGoalButtons = resumedPage.locator('[data-testid^="learn-goal-"]');
+      await expect(learnGoalButtons).toHaveCount(3);
+      for (const button of await learnGoalButtons.all()) {
+        await expect(button).toBeDisabled();
+      }
+      const blockedStart = await resumedPage.evaluate(async () => {
+        const before = await window.laserx.getState();
+        const result = await window.laserx.onboardingAction({
+          type: "start",
+          goal: "import-own-design",
+        });
+        const after = await window.laserx.getState();
+        return {
+          ok: result.ok,
+          error: result.ok ? null : result.error,
+          beforeSnapshot: before.onboarding.preferences.activeWorkflow,
+          afterSnapshot: after.onboarding.preferences.activeWorkflow,
+          eligibility: after.onboarding.resumeEligibility,
+          workflowStatus: after.onboarding.workflow.status,
+          project: after.project,
+          beforeProject: before.project,
+        };
+      });
+      expect(blockedStart).toEqual({
+        ok: false,
+        error: expect.stringContaining("saved guidance checkpoint"),
+        beforeSnapshot: savedSnapshot,
+        afterSnapshot: savedSnapshot,
+        eligibility: "available",
+        workflowStatus: "idle",
+        project: blockedStart.beforeProject,
+        beforeProject: blockedStart.beforeProject,
+      });
+      await resumedPage.getByTestId("close-learn-center").click();
+      await resumedPage.getByTestId("learn-help").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.preferences.activeWorkflow,
+      )).toEqual(savedSnapshot);
+      await resumedPage.getByTestId("learn-resume-guidance-button").click();
       await expect(
         resumedPage.getByText("Add your sign content", { exact: true }),
       ).toBeVisible();
