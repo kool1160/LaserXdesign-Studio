@@ -12,14 +12,10 @@ Claude, Anthropic, Fable, and other external paid implementation, repair, review
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Current state: **G3 post-merge repair acceptance hold**
-- Repair PR: **#74 — M15 G3 repair: require physical setup confirmation**
-- Reviewed repair head: `66dab265b3073145e48667639b0a303691733f7b`
-- Required CI: **Repository Guard success; Canonical Verification success, including packaged Windows verification**
-- Review result: **READY**
-- G4 grouped repair is **held until PR #74 is explicitly accepted and merged**.
+- Active slice: **G4 — grouped repair decisions and Fix safe problems workflow**
+- G5 full Learn Mode and G6 owner usability validation remain held.
 
-The late P1 showed that assigning a physical role to imported geometry could populate default material/thickness and auto-advance guidance before the user reviewed non-default physical settings. PR #74 removes that auto-advance. The explicit guided Continue remains the only route out of **Set physical details** and validates the current physical setup.
+PR #74 completed the late G3 physical-confirmation repair at reviewed head `66dab265b3073145e48667639b0a303691733f7b` and squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`. Repository Guard and Canonical Verification, including packaged Windows verification, were green. The owner explicitly accepted the repair on 2026-08-08.
 
 ## Owner authority
 
@@ -31,15 +27,13 @@ A READY verdict does not replace the owner command. A merge also does not replac
 
 The primary operations chat owns planning, durable decisions, exact-head `Check LaserX`, READY/REPAIR/BLOCKED verdicts, status/holds, merges after owner authorization, and gate activation.
 
-During the current repair hold, the next valid owner command is `Advance LaserX`. That command accepts/merges PR #74 and restores G4 as active; it does not advance to G5.
-
 ## Codex implementation ownership
 
 Codex may implement and repair only the bounded task authorized by current repository truth. It never merges or advances.
 
-While PR #74 is unmerged, Codex must not begin G4. A `Continue LaserX` command during this hold must stop `BLOCKED` after reading the repair hold.
+For active G4, Codex must build grouped repair decisions and preview-first **Fix safe problems** on top of authoritative geometry/history/cutability and the accepted guided resolution checkpoint. Safe eligibility is limited to the approved deterministic classes; ambiguous or risky changes remain user decisions.
 
-After PR #74 is accepted and merged, G4 becomes the sole implementation task: grouped repair decisions and preview-first **Fix safe problems**, reusing authoritative geometry/history/cutability and preserving all G1–G3 security, persistence, resume, project-replacement, Save/Export, and Exit-guidance guarantees.
+Codex must preserve all G1–G3 security, persistence, resume, project-replacement, Save/Export, undo/history, and Exit-guidance guarantees.
 
 ## Removed external routes
 
