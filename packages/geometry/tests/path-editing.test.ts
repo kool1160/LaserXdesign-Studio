@@ -213,6 +213,40 @@ describe("editable path geometry", () => {
     expect(findPathSelfIntersections(result.path)).toEqual(result.intersections);
   });
 
+  it("tracks source-node cleanup and leaves removals outside an allowed preview untouched", () => {
+    const source = {
+      closed: true,
+      points: [
+        { xMm: 0, yMm: 0 },
+        { xMm: 0, yMm: 0 },
+        { xMm: 10, yMm: 0 },
+        { xMm: 20, yMm: 0 },
+        { xMm: 20, yMm: 10 },
+      ],
+      handles: [
+        { incoming: null, outgoing: null },
+        { incoming: null, outgoing: null },
+        { incoming: null, outgoing: null },
+        { incoming: null, outgoing: null },
+        { incoming: { xMm: 20, yMm: 5 }, outgoing: null },
+      ],
+    } satisfies EditablePathGeometry;
+
+    const fullCleanup = cleanupEditablePath(source, 0.001);
+    expect(fullCleanup.removedNodes).toEqual([
+      { sourceNodeIndex: 1, reason: "zero-length" },
+      { sourceNodeIndex: 2, reason: "redundant-collinear" },
+    ]);
+
+    const zeroLengthOnly = cleanupEditablePath(source, 0.001, {
+      allowedRemovals: [{ sourceNodeIndex: 1, reason: "zero-length" }],
+    });
+    expect(zeroLengthOnly.removedNodes).toEqual([
+      { sourceNodeIndex: 1, reason: "zero-length" },
+    ]);
+    expect(zeroLengthOnly.path.points).toContainEqual({ xMm: 10, yMm: 0 });
+  });
+
   it("retains a handle-free collinear anchor between curved segments", () => {
     const source = {
       closed: false,

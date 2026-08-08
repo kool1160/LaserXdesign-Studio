@@ -562,6 +562,15 @@ function registerIpc(): void {
     const validated = focusCutabilityIssueRequestSchema.parse(request);
     return requireController().focusCutabilityIssue(validated.issueId);
   });
+  ipcMain.handle(IPC_CHANNELS.previewSafeRepairs, () =>
+    requireController().previewSafeRepairs(),
+  );
+  ipcMain.handle(IPC_CHANNELS.acceptSafeRepairs, () =>
+    requireController().acceptSafeRepairs(),
+  );
+  ipcMain.handle(IPC_CHANNELS.rejectSafeRepairs, () =>
+    requireController().rejectSafeRepairs(),
+  );
   ipcMain.handle(IPC_CHANNELS.runPhysicalPreview, (_event, request: unknown) => {
     const validated = runPhysicalPreviewRequestSchema.parse(request);
     return requireController().runPhysicalPreview(validated.operationId);

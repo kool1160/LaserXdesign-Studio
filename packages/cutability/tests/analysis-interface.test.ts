@@ -159,6 +159,32 @@ function documentWith(objects: DocumentObject[]): LaserxDocument {
 }
 
 describe("cutability analysis", () => {
+  it("distinguishes an explicit empty object scope from the legacy whole-design empty selection", () => {
+    const document = documentWith([
+      rectangle(OUTER_ID, 10, 10, 110, 110),
+      rectangle(ISLAND_ID, 30, 30, 90, 90),
+    ]);
+
+    expect(analyzeDocumentCutability(document, []).analyzedObjectIds).toEqual([
+      ISLAND_ID,
+      OUTER_ID,
+    ].sort());
+
+    const emptyScope = analyzeDocumentCutability(document, {
+      objectIds: [],
+      objectIdsMode: "exact",
+    });
+    expect(emptyScope).toMatchObject({
+      status: "complete",
+      analyzedObjectIds: [],
+      pathCount: 0,
+      segmentCount: 0,
+      issueCount: 0,
+      issues: [],
+      regions: [],
+    });
+  });
+
   it("classifies nested retained and removed regions from geometry", () => {
     const analysis = analyzeDocumentCutability(
       documentWith([
