@@ -30,30 +30,29 @@ Codex's bounded implementation authority permits branch pushes and draft-PR evid
 
 ## Active M15 task
 
-Implement **G2 — Create My First Sign guided vertical slice** from current `main`.
+Implement **G3 — vector import and raster trace contextual guidance** from current `main`.
 
 Required scope:
 
-- turn the existing `create-first-sign` G1 shell into one real end-to-end deterministic workflow using the authoritative feature commands that already exist;
-- wire step completion to real product state and successful feature outcomes rather than letting a generic Continue button claim work happened when it did not;
-- **Choose size and material:** require a real document/stock size plus real manufacturing material/thickness state before advancing;
-- **Add the sign content:** require at least one real object on the design before advancing, using the existing Create/Text/Sign surfaces rather than a parallel editor path;
-- **Check the design:** run the existing cutability analysis and accept only current, non-stale analysis for the open document;
-- **Resolve findings:** preserve ADR 0027 exactly — auto-complete unseen only when nothing is actionable; allow user Continue only when no blocking findings remain; do not invent G4 safe-fix classification or grouped repair;
-- **Review the 3D result:** require the existing physical preview to render successfully or present an explicit truthful unavailable/failure route; the checkpoint is not skippable;
-- **Save or export:** use the existing save and SVG/DXF export paths, report real success/failure, and complete the guided goal only after a real successful export;
-- preserve Back, Exit guidance, exact-project resume, run-token protection, contextual controls, project-replacement invalidation, and authoritative-state non-mutation guarantees from G1/ADR 0027;
-- add focused unit/integration tests and packaged Windows E2E proving a deterministic first sign can move from clean first launch through size/material, content, cutability, resolution, 3D, save/export, and completed guidance without hidden state mutation;
-- include at least one negative/non-trapping packaged path showing a required checkpoint cannot be falsely advanced;
+- turn **Import My Own Design** into one truthful source-aware guided workflow using the existing SVG/DXF and PNG/JPEG systems;
+- keep the first source-selection step generic until the selected file type is known;
+- for SVG/DXF, use the existing vector preview/commit flow with real units, fit/scale, layers, findings/warnings, accept, and cancel while keeping raster trace controls hidden;
+- for PNG/JPEG, expose preprocessing/trace only after a raster source is selected and require a real accepted editable-geometry commit before advancing;
+- treat vector/raster preview state as transient so resume returns to the stable source-selection checkpoint instead of pretending a vanished preview still exists;
+- make commit/accept the completion signal; cancel/reject returns to source selection without falsely marking the step complete;
+- after editable geometry is committed, reuse the accepted physical-layer, whole-design cutability, ADR 0027 resolution, required physical 3D, Save/Save As, and SVG/DXF export checkpoints rather than bypassing them;
+- preserve G1/G2 run-token protection, exact-project resume, project replacement, contextual controls, security, undo/history, and non-mutation guarantees;
+- do not implement G4 grouped repair, safe-fix classification, batch repair, or **Fix safe problems**;
+- add focused unit/integration tests plus packaged Windows E2E for at least one SVG/DXF branch, one PNG/JPEG branch, branch isolation, and a negative/non-trapping cancel or stale-preview case;
 - open one focused draft PR and stop at `AWAITING_REVIEW`.
 
-Do not begin G3 vector/raster guided integration, G4 grouped repair/Fix safe problems, G5 full Learn Mode content, or G6 owner usability validation. Do not add new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, CAD/CAM, or machine control.
+Do not begin G4 grouped repair/Fix safe problems, G5 full Learn Mode content, or G6 owner usability validation. Do not add new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, CAD/CAM, machine control, or native DWG support.
 
 Do not begin a later M15 gate without explicit owner advancement.
 
-## G1 completion record
+## G2 completion record
 
-PR #71 completed the first-launch goal chooser and resumable guidance shell at reviewed head `ae7c4e79509611a0704649d9c667886a98bcdcbd` and squash merge `41e572a017a82f66f9586ab6e34253d914bc31e2`. Repository Guard and Canonical Verification, including packaged Windows verification, passed on the reviewed head. The owner explicitly accepted and advanced G1 in the designated LaserX Design Studio primary operations chat on 2026-08-07 after the post-merge governance hold was resolved.
+PR #72 completed the deterministic **Create My First Sign** vertical slice at reviewed head `9da334207d29da27948863bb95f21155737f65b8` and squash merge `c9a834a811db831207da6ca695ee8c46d6a88ca4`. Repository Guard and Canonical Verification, including packaged Windows verification, passed on the reviewed head. The owner explicitly accepted and advanced G2 in the designated LaserX Design Studio primary operations chat on 2026-08-07.
 
 ## Active M15 G1 task — historical completion marker
 
