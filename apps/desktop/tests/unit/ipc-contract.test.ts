@@ -12,6 +12,7 @@ import {
   openRecentRequestSchema,
   onboardingActionRequestSchema,
   rasterTraceRequestSchema,
+  selectImportSourceRequestSchema,
   setManufacturingSettingsRequestSchema,
   setDisplayUnitRequestSchema,
   setViewportPreferencesRequestSchema,
@@ -86,6 +87,17 @@ describe("typed IPC validation", () => {
   });
 
   it("keeps vector paths and file contents out of renderer requests", () => {
+    expect(
+      selectImportSourceRequestSchema.safeParse({
+        unitlessDxfUnit: "millimeters",
+      }).success,
+    ).toBe(true);
+    expect(
+      selectImportSourceRequestSchema.safeParse({
+        unitlessDxfUnit: null,
+        filePath: "C:\\secret\\artwork.svg",
+      }).success,
+    ).toBe(false);
     expect(
       vectorImportPreviewRequestSchema.safeParse({
         unitlessDxfUnit: "millimeters",
@@ -365,7 +377,7 @@ describe("typed IPC validation", () => {
         resumeEligibility: "none",
         recoveryNotice: null,
       },
-      interchange: { exportSummary: null },
+      interchange: { sourceSelection: null, exportSummary: null },
       production: { preview: null, exportSummary: null },
       raster: { job: null, preview: null },
       ai: {

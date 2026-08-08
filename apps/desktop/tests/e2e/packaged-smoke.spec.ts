@@ -86,6 +86,7 @@ test("packaged viewport launches with an isolated renderer", async () => {
       "saveSignTemplate",
       "security",
       "selectAiConcept",
+      "selectImportSource",
       "setDisplayUnit",
       "setManufacturingSettings",
       "setViewportPreferences",

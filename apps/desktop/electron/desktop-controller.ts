@@ -44,6 +44,7 @@ import {
   type UpdateViewportPreferences,
   type VectorExportSummary,
   type ManufacturingSettings,
+  type RasterSourceMetadata,
 } from "@laserx/domain";
 import {
   type FontCatalogEntry,
@@ -84,6 +85,7 @@ import type {
   BridgeProposalRequestDto,
   VectorExportRequest,
   VectorImportPreviewRequest,
+  SelectImportSourceRequest,
   ConfigureVectorImportRequest,
   FocusVectorImportFindingRequest,
   ProductionExportRequest,
@@ -130,6 +132,7 @@ import {
   type CutabilityWorkerPort,
 } from "./cutability-worker-service.js";
 import { AppLogger } from "./logger.js";
+import { classifyImportSource } from "./import-source.js";
 import {
   PhysicalPreviewCoordinator,
   PhysicalPreviewSupersededError,
@@ -230,6 +233,7 @@ export interface DesktopDialogs {
   chooseOpenProject(): Promise<string | null>;
   chooseSaveProject(suggestedName: string): Promise<string | null>;
   confirmUnsavedChanges(projectName: string): Promise<UnsavedChoice>;
+  chooseImportSource?(): Promise<string | null>;
   chooseImportVector?(): Promise<string | null>;
   chooseImportRaster?(): Promise<string | null>;
   chooseExportVector?(
@@ -424,11 +428,11 @@ export class DesktopController {
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #guidedWorkflow: GuidedWorkflowState = initialGuidedWorkflowState;
-  #createGuidancePreviewCompletion: {
+  #guidedPreviewCompletion: {
     runToken: string;
     inputFingerprint: string;
   } | null = null;
-  #createGuidanceAnalysisCompletion: {
+  #guidedAnalysisCompletion: {
     runToken: string;
     documentFingerprint: string;
   } | null = null;
@@ -453,6 +457,16 @@ export class DesktopController {
     stage: "selecting" | "reading" | "decoding" | RasterTraceProgress["stage"];
   } | null = null;
   #rasterPreview: (RasterPreviewDataUrls & { operationId: string }) | null = null;
+  #selectedVectorSource: {
+    sourceName: string;
+    format: VectorFileFormat;
+    contents: string;
+  } | null = null;
+  #selectedRasterSource: {
+    sourceName: string;
+    source: RasterSourceMetadata;
+    bytes: Uint8Array;
+  } | null = null;
   #cutabilityProjection: CutabilityAnalysisProjection | null = null;
   #cutabilityJob: {
     operationId: string;
@@ -651,6 +665,24 @@ export class DesktopController {
         recoveryNotice: this.#onboardingRecoveryNotice,
       },
       interchange: {
+        sourceSelection:
+          this.#selectedVectorSource !== null
+            ? {
+                kind: "vector" as const,
+                sourceName: this.#selectedVectorSource.sourceName,
+                format: this.#selectedVectorSource.format,
+              }
+            : this.#selectedRasterSource !== null
+              ? {
+                  kind: "raster" as const,
+                  sourceName: this.#selectedRasterSource.sourceName,
+                  format: this.#selectedRasterSource.source.format,
+                  widthPx: this.#selectedRasterSource.source.widthPx,
+                  heightPx: this.#selectedRasterSource.source.heightPx,
+                  sourceBytes: this.#selectedRasterSource.source.sourceBytes,
+                  decodedBytes: this.#selectedRasterSource.source.decodedBytes,
+                }
+              : null,
         exportSummary:
           this.#lastExportSummary === null
             ? null
@@ -812,38 +844,111 @@ export class DesktopController {
     });
   }
 
+  public async selectImportSource(
+    request: SelectImportSourceRequest,
+  ): Promise<CommandResult> {
+    return this.#run(async () => {
+      if (
+        this.#guidedWorkflow.status !== "active" ||
+        this.#guidedWorkflow.definition?.goal !== "import-own-design" ||
+        this.#guidedWorkflow.currentStepId !== "choose-file"
+      ) {
+        throw new Error(
+          "Artwork source selection is available at the guided Choose your artwork checkpoint.",
+        );
+      }
+      if (this.#dialogs.chooseImportSource === undefined) {
+        throw new Error("Artwork selection is not available in this desktop host.");
+      }
+      if (this.#rasterAbortControllers.size > 0) {
+        throw new RangeError("Finish or cancel the active raster trace first.");
+      }
+      const filePath = await this.#dialogs.chooseImportSource();
+      if (filePath === null) return;
+      const classification = classifyImportSource(filePath);
+      if (classification === null) {
+        throw new RangeError("Choose an SVG, DXF, PNG, or JPEG artwork file.");
+      }
+
+      if (classification.kind === "vector") {
+        const selected = {
+          sourceName: basename(filePath),
+          format: classification.format,
+          contents: await this.#vectorStorage.read(filePath),
+        };
+        this.#session.cancelRasterTrace();
+        this.#rasterPreview = null;
+        this.#selectedRasterSource = null;
+        this.#previewSelectedVectorSource(selected, request.unitlessDxfUnit);
+        this.#selectedVectorSource = selected;
+      } else {
+        if (this.#rasterCodec === null) {
+          throw new Error("The desktop raster decoder is not configured.");
+        }
+        const bytes = await this.#rasterStorage.read(filePath);
+        const source = inspectRasterSource(bytes, classification.format);
+        this.#session.cancelVectorImport();
+        this.#session.cancelRasterTrace();
+        this.#selectedVectorSource = null;
+        this.#rasterPreview = null;
+        this.#selectedRasterSource = {
+          sourceName: basename(filePath),
+          source,
+          bytes,
+        };
+      }
+      await this.#advanceImportGuidanceStep("choose-file");
+    });
+  }
+
   public async previewVectorImport(
     request: VectorImportPreviewRequest,
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      if (this.#dialogs.chooseImportVector === undefined) {
-        throw new Error("Vector import is not available in this desktop host.");
+      const guidedImportActive =
+        this.#guidedWorkflow.status === "active" &&
+        this.#guidedWorkflow.definition?.goal === "import-own-design";
+      if (
+        guidedImportActive &&
+        (this.#guidedWorkflow.currentStepId !== "prepare-source" ||
+          this.#selectedVectorSource === null)
+      ) {
+        throw new Error(
+          "Choose vector artwork through the guided artwork selector before preparing it.",
+        );
       }
-      const filePath = await this.#dialogs.chooseImportVector();
-      if (filePath === null) {
-        return;
+      let selected = guidedImportActive ? this.#selectedVectorSource : null;
+      if (selected === null) {
+        if (this.#dialogs.chooseImportVector === undefined) {
+          throw new Error("Vector import is not available in this desktop host.");
+        }
+        const filePath = await this.#dialogs.chooseImportVector();
+        if (filePath === null) return;
+        const classification = classifyImportSource(filePath);
+        if (classification?.kind !== "vector") {
+          throw new RangeError("Choose an .svg or .dxf vector file.");
+        }
+        selected = {
+          sourceName: basename(filePath),
+          format: classification.format,
+          contents: await this.#vectorStorage.read(filePath),
+        };
       }
-      const contents = await this.#vectorStorage.read(filePath);
-      const extension = extname(filePath).toLowerCase();
-      const candidate = extension === ".svg"
-        ? importSvg(contents)
-        : extension === ".dxf"
-          ? importDxf(contents, {
-              ...(request.unitlessDxfUnit === null
-                ? {}
-                : { unitlessUnit: request.unitlessDxfUnit }),
-            })
-          : (() => {
-              throw new RangeError("Choose an .svg or .dxf vector file.");
-            })();
-      this.#session.previewVectorImport(candidate, basename(filePath));
+      this.#session.cancelRasterTrace();
+      this.#rasterPreview = null;
+      this.#selectedRasterSource = null;
+      this.#previewSelectedVectorSource(selected, request.unitlessDxfUnit);
+      this.#selectedVectorSource = selected;
+      await this.#advanceImportGuidanceStep("choose-file");
     });
   }
 
   public async commitVectorImport(): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       this.#session.commitVectorImport();
       this.#invalidateCutability();
+      this.#selectedVectorSource = null;
+      await this.#advanceImportGuidanceStep("prepare-source");
     });
   }
 
@@ -864,8 +969,10 @@ export class DesktopController {
   }
 
   public async cancelVectorImport(): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       this.#session.cancelVectorImport();
+      this.#selectedVectorSource = null;
+      await this.#returnImportGuidanceToSourceSelection();
     });
   }
 
@@ -873,7 +980,22 @@ export class DesktopController {
     request: RasterTraceRequest,
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      if (this.#dialogs.chooseImportRaster === undefined) {
+      const guidedImportActive =
+        this.#guidedWorkflow.status === "active" &&
+        this.#guidedWorkflow.definition?.goal === "import-own-design";
+      if (
+        guidedImportActive &&
+        (this.#guidedWorkflow.currentStepId !== "prepare-source" ||
+          this.#selectedRasterSource === null)
+      ) {
+        throw new Error(
+          "Choose a raster image through the guided artwork selector before tracing it.",
+        );
+      }
+      if (
+        this.#selectedRasterSource === null &&
+        this.#dialogs.chooseImportRaster === undefined
+      ) {
         throw new Error("Raster tracing is not available in this desktop host.");
       }
       if (this.#rasterCodec === null) {
@@ -889,7 +1011,7 @@ export class DesktopController {
       const abortController = new AbortController();
       this.#rasterAbortControllers.set(operationId, abortController);
       this.#rasterJob = { operationId, percent: 0, stage: "selecting" };
-      const documentFingerprint = fingerprintGeometryDocument(
+      const documentFingerprint = guidedDocumentFingerprint(
         this.#session.state.project.document,
       );
       this.#emit();
@@ -912,34 +1034,62 @@ export class DesktopController {
         });
         assertActive();
       };
-      try {
-        const filePath = await this.#dialogs.chooseImportRaster();
-        assertActive();
-        if (filePath === null) return;
-        deadline = setTimeout(() => {
+      const startDeadline = (): ReturnType<typeof setTimeout> => {
+        const timer = setTimeout(() => {
           deadlineState.timedOut = true;
           abortController.abort();
         }, this.#rasterOperationTimeoutMs);
-        deadline.unref();
-        this.#rasterJob = { operationId, percent: 2, stage: "reading" };
-        this.#emit();
-        const bytes = await this.#rasterStorage.read(
-          filePath,
-          abortController.signal,
-        );
-        assertActive();
-        const extension = extname(filePath).toLowerCase();
-        const expectedFormat = extension === ".png" ? "png" : "jpeg";
-        const source = inspectRasterSource(bytes, expectedFormat);
-        assertActive();
+        timer.unref();
+        return timer;
+      };
+      try {
+        let selected = this.#selectedRasterSource;
+        let sourceMustRemainSelected = selected !== null;
+        if (selected === null) {
+          const filePath = await this.#dialogs.chooseImportRaster?.();
+          assertActive();
+          if (filePath === null || filePath === undefined) return;
+          deadline = startDeadline();
+          const classification = classifyImportSource(filePath);
+          if (classification?.kind !== "raster") {
+            throw new RangeError("Choose a .png, .jpg, or .jpeg raster file.");
+          }
+          this.#rasterJob = { operationId, percent: 2, stage: "reading" };
+          this.#emit();
+          const bytes = await this.#rasterStorage.read(
+            filePath,
+            abortController.signal,
+          );
+          assertActive();
+          selected = {
+            sourceName: basename(filePath),
+            source: inspectRasterSource(bytes, classification.format),
+            bytes,
+          };
+          this.#session.cancelVectorImport();
+          this.#selectedVectorSource = null;
+          if (
+            this.#guidedWorkflow.status === "active" &&
+            this.#guidedWorkflow.definition?.goal === "import-own-design"
+          ) {
+            this.#selectedRasterSource = selected;
+            sourceMustRemainSelected = true;
+            await this.#advanceImportGuidanceStep("choose-file");
+          }
+        } else {
+          deadline = startDeadline();
+        }
         this.#rasterJob = { operationId, percent: 5, stage: "decoding" };
         this.#emit();
-        const image = await this.#rasterCodec.decode(bytes, source);
+        const image = await this.#rasterCodec.decode(
+          selected.bytes,
+          selected.source,
+        );
         await yieldForCancellation();
         const result = await this.#rasterWorker.run(
           {
             operationId,
-            source,
+            source: selected.source,
             image,
             settings: request.settings,
           },
@@ -960,8 +1110,9 @@ export class DesktopController {
           throw new Error("Raster worker returned a mismatched operation ID.");
         }
         if (
-          fingerprintGeometryDocument(this.#session.state.project.document) !==
-          documentFingerprint
+          guidedDocumentFingerprint(this.#session.state.project.document) !==
+            documentFingerprint ||
+          (sourceMustRemainSelected && this.#selectedRasterSource !== selected)
         ) {
           throw new Error(
             "The document changed while raster tracing was running; the stale result was not previewed.",
@@ -973,14 +1124,15 @@ export class DesktopController {
         );
         await yieldForCancellation();
         if (
-          fingerprintGeometryDocument(this.#session.state.project.document) !==
-          documentFingerprint
+          guidedDocumentFingerprint(this.#session.state.project.document) !==
+            documentFingerprint ||
+          (sourceMustRemainSelected && this.#selectedRasterSource !== selected)
         ) {
           throw new Error(
             "The document changed while raster tracing was running; the stale result was not previewed.",
           );
         }
-        this.#session.previewRasterTrace(result.candidate, basename(filePath));
+        this.#session.previewRasterTrace(result.candidate, selected.sourceName);
         this.#rasterPreview = {
           operationId,
           ...encodedPreview,
@@ -1020,6 +1172,8 @@ export class DesktopController {
       const accepted = this.#session.commitRasterTrace();
       this.#invalidateCutability();
       this.#rasterPreview = null;
+      this.#selectedRasterSource = null;
+      await this.#advanceImportGuidanceStep("prepare-source");
       await this.#analyzeCutability(
         randomUUID(),
         accepted.editor.selectionIds,
@@ -1029,9 +1183,11 @@ export class DesktopController {
   }
 
   public async rejectRasterTrace(): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       this.#session.cancelRasterTrace();
       this.#rasterPreview = null;
+      this.#selectedRasterSource = null;
+      await this.#returnImportGuidanceToSourceSelection();
     });
   }
 
@@ -1508,7 +1664,7 @@ export class DesktopController {
     request: VectorExportRequest,
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      this.#assertCreateGuidanceReadyForExport();
+      this.#assertGuidedWorkflowReadyForExport();
       if (this.#dialogs.chooseExportVector === undefined) {
         throw new Error("Vector export is not available in this desktop host.");
       }
@@ -1525,7 +1681,9 @@ export class DesktopController {
         : exportDxf(current.project.document);
       await this.#vectorStorage.write(filePath, artifact.content, request.format);
       this.#lastExportSummary = artifact.summary;
-      await this.#advanceCreateGuidanceStep("save-export");
+      if (!(await this.#advanceCreateGuidanceStep("save-export"))) {
+        await this.#advanceImportGuidanceStep("export-result");
+      }
     });
   }
 
@@ -1639,7 +1797,7 @@ export class DesktopController {
         objectIds,
         objectCutabilityScope(objectIds),
       );
-      await this.#advanceCreateGuidanceAfterWholeDesignAnalysis();
+      await this.#advanceGuidanceAfterWholeDesignAnalysis();
     });
   }
 
@@ -2022,7 +2180,7 @@ export class DesktopController {
           layerName: null,
         });
       }
-      await this.#advanceCreateGuidanceAfterWholeDesignAnalysis();
+      await this.#advanceGuidanceAfterWholeDesignAnalysis();
     });
   }
 
@@ -2036,15 +2194,18 @@ export class DesktopController {
     request: EditorActionRequest,
   ): Promise<CommandResult> {
     return this.#run(async () => {
-      const before = fingerprintCutabilityDocument(
-        this.#session.state.project.document,
-      );
+      const documentBefore = this.#session.state.project.document;
+      const cutabilityBefore = fingerprintCutabilityDocument(documentBefore);
+      const guidedBefore = guidedDocumentFingerprint(documentBefore);
       this.#session.performEditorAction(request);
-      const after = fingerprintCutabilityDocument(
-        this.#session.state.project.document,
-      );
-      if (after !== before) this.#invalidateCutability();
+      const documentAfter = this.#session.state.project.document;
+      const cutabilityAfter = fingerprintCutabilityDocument(documentAfter);
+      const guidedAfter = guidedDocumentFingerprint(documentAfter);
+      if (cutabilityAfter !== cutabilityBefore || guidedAfter !== guidedBefore) {
+        this.#invalidateCutability();
+      }
       await this.#advanceCreateGuidanceFromDocumentOutcome();
+      await this.#advanceImportGuidanceFromDocumentOutcome();
     });
   }
 
@@ -2288,8 +2449,8 @@ export class DesktopController {
         const didStart = next !== this.#guidedWorkflow;
         await this.#applyGuidedWorkflow(next, { dismissed: false });
         if (didStart) {
-          this.#createGuidancePreviewCompletion = null;
-          this.#createGuidanceAnalysisCompletion = null;
+          this.#guidedPreviewCompletion = null;
+          this.#guidedAnalysisCompletion = null;
         }
         return;
       }
@@ -2333,10 +2494,16 @@ export class DesktopController {
         }
         await this.#applyGuidedWorkflow(next, { dismissed: false });
         if (didResume) {
-          this.#createGuidanceAnalysisCompletion =
-            next.definition?.goal === "create-first-sign" &&
+          const isOutcomeGuidedGoal =
+            next.definition?.goal === "create-first-sign" ||
+            next.definition?.goal === "import-own-design";
+          const finalStepId = next.definition?.goal === "create-first-sign"
+            ? "save-export"
+            : "export-result";
+          this.#guidedAnalysisCompletion =
+            isOutcomeGuidedGoal &&
             (next.currentStepId === "physical-preview" ||
-              next.currentStepId === "save-export") &&
+              next.currentStepId === finalStepId) &&
             next.completedStepIds.includes("analyze-cutability") &&
             next.completedStepIds.includes("resolve-findings") &&
             next.runToken !== null
@@ -2347,9 +2514,9 @@ export class DesktopController {
                   ),
                 }
               : null;
-          this.#createGuidancePreviewCompletion =
-            next.definition?.goal === "create-first-sign" &&
-            next.currentStepId === "save-export" &&
+          this.#guidedPreviewCompletion =
+            isOutcomeGuidedGoal &&
+            next.currentStepId === finalStepId &&
             next.completedStepIds.includes("physical-preview") &&
             next.runToken !== null
               ? {
@@ -2364,6 +2531,8 @@ export class DesktopController {
       }
 
       if (request.type === "exit") {
+        const exitingImportGuidance =
+          this.#guidedWorkflow.definition?.goal === "import-own-design";
         const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
           type: "dismiss",
           runToken: request.runToken,
@@ -2371,13 +2540,16 @@ export class DesktopController {
         const didExit = next !== this.#guidedWorkflow;
         await this.#applyGuidedWorkflow(next);
         if (didExit) {
-          this.#createGuidancePreviewCompletion = null;
-          this.#createGuidanceAnalysisCompletion = null;
+          this.#guidedPreviewCompletion = null;
+          this.#guidedAnalysisCompletion = null;
+          if (exitingImportGuidance) this.#clearPendingImportSource();
         }
         return;
       }
 
       if (request.type === "back") {
+        const previousGoal = this.#guidedWorkflow.definition?.goal;
+        const previousStepId = this.#guidedWorkflow.currentStepId;
         const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
           type: "back",
           expectedStepId: request.expectedStepId,
@@ -2385,8 +2557,19 @@ export class DesktopController {
         });
         const didBack = next !== this.#guidedWorkflow;
         await this.#applyGuidedWorkflow(next);
-        if (didBack && next.definition?.goal === "create-first-sign") {
-          this.#createGuidancePreviewCompletion = null;
+        if (
+          didBack &&
+          (next.definition?.goal === "create-first-sign" ||
+            next.definition?.goal === "import-own-design")
+        ) {
+          this.#guidedPreviewCompletion = null;
+        }
+        if (
+          didBack &&
+          previousGoal === "import-own-design" &&
+          previousStepId === "prepare-source"
+        ) {
+          this.#clearPendingImportSource();
         }
         return;
       }
@@ -2411,8 +2594,13 @@ export class DesktopController {
         return;
       }
 
-      let acceptedCreatePreviewFingerprint: string | null = null;
-      let acceptedCreateResolution = false;
+      let acceptedGuidedPreviewFingerprint: string | null = null;
+      let acceptedGuidedAnalysis = false;
+      let acceptedGuidedResolution = false;
+      const guidedGoalId = this.#guidedWorkflow.definition?.goal;
+      const isOutcomeGuidedGoal =
+        guidedGoalId === "create-first-sign" ||
+        guidedGoalId === "import-own-design";
       const isResolutionStep =
         this.#guidedWorkflow.currentStepId === "resolve-findings";
       if (isResolutionStep) {
@@ -2430,6 +2618,14 @@ export class DesktopController {
             "The findings changed. Review the current analysis before continuing.",
           );
         }
+        if (
+          isOutcomeGuidedGoal &&
+          !this.#hasCurrentGuidedAnalysisEvidence()
+        ) {
+          throw new Error(
+            "The physical document changed after analysis. Run Analyze all again before continuing.",
+          );
+        }
         const permitted =
           request.completion.trigger === "automatic"
             ? shouldAutoCompleteResolution(liveCounts)
@@ -2437,9 +2633,8 @@ export class DesktopController {
         if (!permitted) {
           throw new Error("Blocking findings must be resolved before continuing.");
         }
-        acceptedCreateResolution =
-          this.#guidedWorkflow.definition?.goal === "create-first-sign";
-      } else if (this.#guidedWorkflow.definition?.goal === "create-first-sign") {
+        acceptedGuidedResolution = isOutcomeGuidedGoal;
+      } else if (guidedGoalId === "create-first-sign") {
         switch (this.#guidedWorkflow.currentStepId) {
           case "choose-size-material":
             if (request.completion.kind !== "step") {
@@ -2474,6 +2669,7 @@ export class DesktopController {
                 "Keep real physical material and content in the design, then run Analyze all before continuing. Selection or layer-only analysis is not sufficient.",
               );
             }
+            acceptedGuidedAnalysis = true;
             break;
           case "physical-preview":
             if (request.completion.kind !== "physical-preview") {
@@ -2481,14 +2677,72 @@ export class DesktopController {
                 "Open the required 3D preview and render it, or explicitly acknowledge its current failure route.",
               );
             }
-            this.#assertCreatePhysicalPreviewCompletion(request.completion);
-            acceptedCreatePreviewFingerprint = fingerprintPhysicalPreviewInput(
+            this.#assertGuidedPhysicalPreviewCompletion(request.completion);
+            acceptedGuidedPreviewFingerprint = fingerprintPhysicalPreviewInput(
               this.#session.state.project,
             );
             break;
           case "save-export":
             throw new Error(
               "Export SVG or DXF successfully to complete Create My First Sign.",
+            );
+          default:
+            if (request.completion.kind !== "step") {
+              throw new Error("That completion does not match this guidance checkpoint.");
+            }
+        }
+      } else if (guidedGoalId === "import-own-design") {
+        switch (this.#guidedWorkflow.currentStepId) {
+          case "choose-file":
+            throw new Error(
+              "Choose an SVG, DXF, PNG, or JPEG source before continuing.",
+            );
+          case "prepare-source":
+            throw new Error(
+              "Accept the vector import or traced editable paths before continuing.",
+            );
+          case "assign-physical":
+            if (request.completion.kind !== "step") {
+              throw new Error("Confirm the imported physical-layer setup first.");
+            }
+            if (
+              !this.#createGuidanceHasPhysicalStock() ||
+              !this.#createGuidanceHasPhysicalContent()
+            ) {
+              throw new Error(
+                "Assign material, thickness, and a physical role to an imported layer that contains editable geometry.",
+              );
+            }
+            break;
+          case "analyze-cutability":
+            if (request.completion.kind !== "step") {
+              throw new Error("Confirm the current whole-design analysis first.");
+            }
+            if (
+              !this.#createGuidanceHasPhysicalStock() ||
+              !this.#createGuidanceHasPhysicalContent() ||
+              !this.#hasCurrentWholeDesignAnalysis()
+            ) {
+              throw new Error(
+                "Keep the imported editable geometry on a physical layer, then run Analyze all. Selection or layer-only analysis is not sufficient.",
+              );
+            }
+            acceptedGuidedAnalysis = true;
+            break;
+          case "physical-preview":
+            if (request.completion.kind !== "physical-preview") {
+              throw new Error(
+                "Open the required 3D preview and render it, or explicitly acknowledge its current failure route.",
+              );
+            }
+            this.#assertGuidedPhysicalPreviewCompletion(request.completion);
+            acceptedGuidedPreviewFingerprint = fingerprintPhysicalPreviewInput(
+              this.#session.state.project,
+            );
+            break;
+          case "export-result":
+            throw new Error(
+              "Export SVG or DXF successfully to complete Import My Own Design.",
             );
           default:
             if (request.completion.kind !== "step") {
@@ -2518,17 +2772,19 @@ export class DesktopController {
       await this.#applyGuidedWorkflow(next);
       if (
         didAdvance &&
-        (acceptedCreateResolution ||
-          (next.definition?.goal === "create-first-sign" &&
+        (acceptedGuidedAnalysis ||
+          acceptedGuidedResolution ||
+          ((next.definition?.goal === "create-first-sign" ||
+            next.definition?.goal === "import-own-design") &&
             next.currentStepId === "physical-preview" &&
             this.#hasCurrentWholeDesignAnalysis()))
       ) {
-        this.#recordCreateGuidanceAnalysisCompletion();
+        this.#recordGuidedAnalysisCompletion();
       }
-      if (didAdvance && acceptedCreatePreviewFingerprint !== null) {
-        this.#createGuidancePreviewCompletion = {
+      if (didAdvance && acceptedGuidedPreviewFingerprint !== null) {
+        this.#guidedPreviewCompletion = {
           runToken: request.runToken,
-          inputFingerprint: acceptedCreatePreviewFingerprint,
+          inputFingerprint: acceptedGuidedPreviewFingerprint,
         };
       }
     });
@@ -2903,6 +3159,8 @@ export class DesktopController {
     this.#physicalPreviewAbortControllers.clear();
     this.#rasterJob = null;
     this.#rasterPreview = null;
+    this.#selectedVectorSource = null;
+    this.#selectedRasterSource = null;
     this.#cutabilityProjection = null;
     this.#productionExportSummary = null;
     this.#cutabilityJob = null;
@@ -2913,8 +3171,8 @@ export class DesktopController {
     this.#physicalPreviewAssemblyFingerprint = null;
     this.#physicalPreviewFailureFingerprint = null;
     this.#physicalPreviewCapture = null;
-    this.#createGuidancePreviewCompletion = null;
-    this.#createGuidanceAnalysisCompletion = null;
+    this.#guidedPreviewCompletion = null;
+    this.#guidedAnalysisCompletion = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;
@@ -3104,6 +3362,24 @@ export class DesktopController {
     };
   }
 
+  #previewSelectedVectorSource(
+    selected: {
+      sourceName: string;
+      format: VectorFileFormat;
+      contents: string;
+    },
+    unitlessDxfUnit: VectorImportPreviewRequest["unitlessDxfUnit"],
+  ): void {
+    const candidate = selected.format === "svg"
+      ? importSvg(selected.contents)
+      : importDxf(selected.contents, {
+          ...(unitlessDxfUnit === null
+            ? {}
+            : { unitlessUnit: unitlessDxfUnit }),
+        });
+    this.#session.previewVectorImport(candidate, selected.sourceName);
+  }
+
   #currentResolutionCounts(): ResolutionFindingCounts | null {
     const projection = this.#cutabilityProjection;
     const analysis = projection?.cutability ?? null;
@@ -3166,9 +3442,9 @@ export class DesktopController {
     return this.#currentResolutionCounts() !== null;
   }
 
-  #recordCreateGuidanceAnalysisCompletion(): void {
+  #recordGuidedAnalysisCompletion(): void {
     if (this.#guidedWorkflow.runToken === null) return;
-    this.#createGuidanceAnalysisCompletion = {
+    this.#guidedAnalysisCompletion = {
       runToken: this.#guidedWorkflow.runToken,
       documentFingerprint: guidedDocumentFingerprint(
         this.#session.state.project.document,
@@ -3176,9 +3452,8 @@ export class DesktopController {
     };
   }
 
-  #hasCurrentCreateGuidanceAnalysisEvidence(): boolean {
-    if (this.#hasCurrentWholeDesignAnalysis()) return true;
-    const evidence = this.#createGuidanceAnalysisCompletion;
+  #hasCurrentGuidedAnalysisEvidence(): boolean {
+    const evidence = this.#guidedAnalysisCompletion;
     return (
       evidence !== null &&
       evidence.runToken === this.#guidedWorkflow.runToken &&
@@ -3206,6 +3481,61 @@ export class DesktopController {
     return true;
   }
 
+  async #advanceImportGuidanceStep(expectedStepId: string): Promise<boolean> {
+    if (
+      this.#guidedWorkflow.status !== "active" ||
+      this.#guidedWorkflow.definition?.goal !== "import-own-design" ||
+      this.#guidedWorkflow.currentStepId !== expectedStepId ||
+      this.#guidedWorkflow.runToken === null
+    ) {
+      return false;
+    }
+    const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+      type: "advance",
+      expectedStepId,
+      runToken: this.#guidedWorkflow.runToken,
+    });
+    if (next === this.#guidedWorkflow) return false;
+    await this.#applyGuidedWorkflow(next);
+    return true;
+  }
+
+  async #advanceOutcomeGuidanceStep(expectedStepId: string): Promise<boolean> {
+    if (this.#guidedWorkflow.definition?.goal === "create-first-sign") {
+      return this.#advanceCreateGuidanceStep(expectedStepId);
+    }
+    if (this.#guidedWorkflow.definition?.goal === "import-own-design") {
+      return this.#advanceImportGuidanceStep(expectedStepId);
+    }
+    return false;
+  }
+
+  async #returnImportGuidanceToSourceSelection(): Promise<void> {
+    if (
+      this.#guidedWorkflow.status !== "active" ||
+      this.#guidedWorkflow.definition?.goal !== "import-own-design" ||
+      this.#guidedWorkflow.currentStepId !== "prepare-source" ||
+      this.#guidedWorkflow.runToken === null
+    ) {
+      return;
+    }
+    await this.#applyGuidedWorkflow(
+      reduceGuidedWorkflow(this.#guidedWorkflow, {
+        type: "back",
+        expectedStepId: "prepare-source",
+        runToken: this.#guidedWorkflow.runToken,
+      }),
+    );
+  }
+
+  #clearPendingImportSource(): void {
+    this.#session.cancelVectorImport();
+    this.#session.cancelRasterTrace();
+    this.#selectedVectorSource = null;
+    this.#selectedRasterSource = null;
+    this.#rasterPreview = null;
+  }
+
   async #advanceCreateGuidanceFromDocumentOutcome(): Promise<void> {
     if (
       this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
@@ -3228,9 +3558,22 @@ export class DesktopController {
     }
   }
 
-  async #advanceCreateGuidanceAfterWholeDesignAnalysis(): Promise<void> {
+  async #advanceImportGuidanceFromDocumentOutcome(): Promise<void> {
     if (
-      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
+      this.#guidedWorkflow.definition?.goal === "import-own-design" &&
+      this.#guidedWorkflow.status === "active" &&
+      this.#guidedWorkflow.currentStepId === "assign-physical" &&
+      this.#createGuidanceHasPhysicalStock() &&
+      this.#createGuidanceHasPhysicalContent()
+    ) {
+      await this.#advanceImportGuidanceStep("assign-physical");
+    }
+  }
+
+  async #advanceGuidanceAfterWholeDesignAnalysis(): Promise<void> {
+    const guidedGoal = this.#guidedWorkflow.definition?.goal;
+    if (
+      (guidedGoal !== "create-first-sign" && guidedGoal !== "import-own-design") ||
       this.#guidedWorkflow.status !== "active" ||
       !this.#createGuidanceHasPhysicalStock() ||
       !this.#createGuidanceHasPhysicalContent() ||
@@ -3238,21 +3581,19 @@ export class DesktopController {
     ) {
       return;
     }
+    this.#recordGuidedAnalysisCompletion();
     if (this.#guidedWorkflow.currentStepId === "analyze-cutability") {
-      await this.#advanceCreateGuidanceStep("analyze-cutability");
+      await this.#advanceOutcomeGuidanceStep("analyze-cutability");
     }
     if (this.#guidedWorkflow.currentStepId === "resolve-findings") {
       const counts = this.#currentResolutionCounts();
       if (counts !== null && shouldAutoCompleteResolution(counts)) {
-        await this.#advanceCreateGuidanceStep("resolve-findings");
+        await this.#advanceOutcomeGuidanceStep("resolve-findings");
       }
-    }
-    if (this.#guidedWorkflow.currentStepId === "physical-preview") {
-      this.#recordCreateGuidanceAnalysisCompletion();
     }
   }
 
-  #assertCreatePhysicalPreviewCompletion(
+  #assertGuidedPhysicalPreviewCompletion(
     completion: Extract<
       Extract<OnboardingActionRequest, { type: "advance" }>["completion"],
       { kind: "physical-preview" }
@@ -3261,7 +3602,7 @@ export class DesktopController {
     if (
       !this.#createGuidanceHasPhysicalStock() ||
       !this.#createGuidanceHasPhysicalContent() ||
-      !this.#hasCurrentCreateGuidanceAnalysisEvidence()
+      !this.#hasCurrentGuidedAnalysisEvidence()
     ) {
       throw new Error(
         "The physical setup, sign content, or whole-design analysis changed. Restore it and run Analyze all again before continuing.",
@@ -3312,24 +3653,30 @@ export class DesktopController {
     }
   }
 
-  #assertCreateGuidanceReadyForExport(): void {
+  #assertGuidedWorkflowReadyForExport(): void {
+    const guidedGoal = this.#guidedWorkflow.definition?.goal;
+    const expectedStepId = guidedGoal === "create-first-sign"
+      ? "save-export"
+      : guidedGoal === "import-own-design"
+        ? "export-result"
+        : null;
     if (
       this.#guidedWorkflow.status !== "active" ||
-      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
-      this.#guidedWorkflow.currentStepId !== "save-export"
+      expectedStepId === null ||
+      this.#guidedWorkflow.currentStepId !== expectedStepId
     ) {
       return;
     }
     if (
       !this.#createGuidanceHasPhysicalStock() ||
       !this.#createGuidanceHasPhysicalContent() ||
-      !this.#hasCurrentCreateGuidanceAnalysisEvidence()
+      !this.#hasCurrentGuidedAnalysisEvidence()
     ) {
       throw new Error(
         "The design changed after its guided checks. Go back, restore the physical setup, and run Analyze all again before export.",
       );
     }
-    const evidence = this.#createGuidancePreviewCompletion;
+    const evidence = this.#guidedPreviewCompletion;
     if (
       evidence === null ||
       evidence.runToken !== this.#guidedWorkflow.runToken ||
@@ -3399,8 +3746,8 @@ export class DesktopController {
       type: "project-replaced",
     });
     await this.#applyGuidedWorkflow(next);
-    this.#createGuidancePreviewCompletion = null;
-    this.#createGuidanceAnalysisCompletion = null;
+    this.#guidedPreviewCompletion = null;
+    this.#guidedAnalysisCompletion = null;
     this.#onboardingRecoveryNotice =
       "Guidance ended because the open project was replaced.";
   }

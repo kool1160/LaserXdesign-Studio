@@ -26,6 +26,7 @@ export const IPC_CHANNELS = {
   openRecent: "laserx:project:open-recent",
   saveProject: "laserx:project:save",
   saveProjectAs: "laserx:project:save-as",
+  selectImportSource: "laserx:import:select-source",
   previewVectorImport: "laserx:vector:preview-import",
   configureVectorImport: "laserx:vector:configure-import",
   focusVectorImportFinding: "laserx:vector:focus-import-finding",
@@ -928,6 +929,8 @@ export const vectorImportPreviewRequestSchema = z.strictObject({
   unitlessDxfUnit: z.enum(["millimeters", "inches"]).nullable(),
 });
 
+export const selectImportSourceRequestSchema = vectorImportPreviewRequestSchema;
+
 export const configureVectorImportRequestSchema = z.strictObject({
   fitMode: z.enum(["resize-stock", "scale-artwork", "keep"]),
   marginMm: z.number().min(0).max(1_000),
@@ -1270,6 +1273,24 @@ export const desktopStateSchema = z.strictObject({
     recoveryNotice: z.string().nullable(),
   }),
   interchange: z.strictObject({
+    sourceSelection: z
+      .discriminatedUnion("kind", [
+        z.strictObject({
+          kind: z.literal("vector"),
+          sourceName: z.string().min(1),
+          format: z.enum(["svg", "dxf"]),
+        }),
+        z.strictObject({
+          kind: z.literal("raster"),
+          sourceName: z.string().min(1),
+          format: z.enum(["png", "jpeg"]),
+          widthPx: z.number().int().positive(),
+          heightPx: z.number().int().positive(),
+          sourceBytes: z.number().int().positive(),
+          decodedBytes: z.number().int().positive(),
+        }),
+      ])
+      .nullable(),
     exportSummary: vectorExportSummarySchema.nullable(),
   }),
   production: z.strictObject({
@@ -1578,6 +1599,9 @@ export type CancelGeometryOperationRequest = z.infer<
 export type VectorImportPreviewRequest = z.infer<
   typeof vectorImportPreviewRequestSchema
 >;
+export type SelectImportSourceRequest = z.infer<
+  typeof selectImportSourceRequestSchema
+>;
 export type ConfigureVectorImportRequest = z.infer<
   typeof configureVectorImportRequestSchema
 >;
@@ -1611,6 +1635,7 @@ export interface LaserxDesktopApi {
   openRecent(request: OpenRecentRequest): Promise<CommandResult>;
   saveProject(): Promise<CommandResult>;
   saveProjectAs(): Promise<CommandResult>;
+  selectImportSource(request: SelectImportSourceRequest): Promise<CommandResult>;
   previewVectorImport(request: VectorImportPreviewRequest): Promise<CommandResult>;
   configureVectorImport(request: ConfigureVectorImportRequest): Promise<CommandResult>;
   focusVectorImportFinding(request: FocusVectorImportFindingRequest): Promise<CommandResult>;

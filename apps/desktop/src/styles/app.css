@@ -151,12 +151,14 @@
  * existing authoritative layer editor. Keep that editor visible and scoped
  * to the tools relevant to the current outcome. */
 .guidance-step-choose-size-material .content-grid,
-.guidance-step-add-content .content-grid {
+.guidance-step-add-content .content-grid,
+.guidance-step-assign-physical .content-grid {
   grid-template-columns: 300px minmax(0, 1fr) 320px;
 }
 
 .guidance-step-choose-size-material .editing-sidebar,
-.guidance-step-add-content .editing-sidebar {
+.guidance-step-add-content .editing-sidebar,
+.guidance-step-assign-physical .editing-sidebar {
   display: block;
 }
 
@@ -164,7 +166,8 @@
 .guidance-step-add-content .editing-sidebar > #edit-selection,
 .guidance-step-add-content .editing-sidebar > #edit-geometry,
 .guidance-step-add-content .editing-sidebar > #edit-transform,
-.guidance-step-add-content .editing-sidebar > #edit-layers {
+.guidance-step-add-content .editing-sidebar > #edit-layers,
+.guidance-step-assign-physical .editing-sidebar > #edit-layers {
   display: block;
 }
 
