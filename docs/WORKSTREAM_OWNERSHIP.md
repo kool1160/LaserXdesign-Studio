@@ -14,11 +14,11 @@ This assignment supersedes ADR 0026's Claude implementation assignment and the l
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G3 — vector import and raster trace contextual guidance**
-- Active task: make **Import My Own Design** source-aware and truthful across the existing SVG/DXF vector-import and PNG/JPEG raster-trace branches, then carry accepted editable geometry through the already-established manufacturing, cutability, 3D, save, and export checkpoints.
-- G4 grouped repair, G5 full Learn Mode, and G6 owner usability validation remain held.
+- Active slice: **G4 — grouped repair decisions and Fix safe problems workflow**
+- Active task: turn current repair/manufacturing findings into truthful grouped decisions, preview deterministic safe repairs without mutation, then apply accepted safe batches coherently with undo and reanalysis.
+- G5 full Learn Mode and G6 owner usability validation remain held.
 
-PR #72 completed and merged G2 at `c9a834a811db831207da6ca695ee8c46d6a88ca4` after exact-head READY review of `9da334207d29da27948863bb95f21155737f65b8` with Repository Guard and Canonical Verification green. The owner explicitly accepted and advanced G2 in the designated primary operations chat on 2026-08-07.
+PR #73 completed and merged G3 at `f2a54d732ec9ee661c921d421da08e2b83c01b14` after exact-head READY review of `4df406869bf23c175069b9b93dda9d97b5cb8cab` with Repository Guard and Canonical Verification green. The owner explicitly accepted and advanced G3 in the designated primary operations chat on 2026-08-07.
 
 ## Owner authority
 
@@ -46,11 +46,11 @@ Codex is the sole active implementation surface. The repository does not choose 
 
 Only `Continue LaserX` goes to the Codex implementation session. Codex owns reading live truth, repairing review and CI blockers first, implementing the smallest active slice, adding regression coverage, using one focused draft PR, running required verification, pushing exact-head evidence, and stopping at `AWAITING_REVIEW` or `BLOCKED`.
 
-For active G3, Codex must reuse the existing vector-import and raster-trace preview/commit systems. The selected source type controls which preparation surface is presented: SVG/DXF never exposes raster trace controls, and raster preprocessing/trace appears only after PNG/JPEG is selected. Guidance may observe and coordinate those systems; it must not create parallel import state or claim a preview/commit happened when it did not.
+For active G4, Codex must group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** without inventing a second finding truth. Deterministic safe eligibility is initially limited to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance.
 
-After committed editable geometry exists, Codex must reuse the accepted physical-layer, whole-design cutability, ADR 0027 resolution, required physical 3D, Save/Save As, and SVG/DXF export checkpoints. G4 grouped repair and safe-fix behavior remain out of scope.
+**Fix safe problems** must be preview-first and non-mutating until acceptance. Accepted safe repairs should form one coherent undoable transaction whenever technically practical, report fixed/skipped/remaining counts, re-run analysis, and never imply that automated repair proves cut readiness or physical safety. Suggested or ambiguous fixes must never be silently applied.
 
-Codex must preserve ADR 0027 and G1/G2 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, and non-trapping Exit guidance.
+Codex must preserve ADR 0027 and G1–G3 guarantees for fresh run tokens, exact-project resume, synchronous `project-replaced`, project/document/fingerprint binding, transient recovery, contextual controls, required checkpoints, Save/Export semantics, and non-trapping Exit guidance.
 
 Codex must never merge its PR, close the active issue, change the active gate, approve its own work, rewrite ownership authority, create speculative future infrastructure, run later-milestone work, poll in the background, or continue after `AWAITING_REVIEW` without another owner command.
 
@@ -75,4 +75,4 @@ Critical geometry, manufacturing truth, schema/migration, filesystem, IPC, crede
 
 ## Explicit exclusions
 
-No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, public beta work, or native DWG support becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
+No later milestone, wholesale experiment merge, general CAD rewrite, CAM expansion, machine control, material expansion, licensing implementation, public beta work, analytics platform, or native DWG support becomes active merely because an agent has capacity, code has merged, or a draft branch exists.
