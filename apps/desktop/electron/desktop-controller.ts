@@ -2205,7 +2205,6 @@ export class DesktopController {
         this.#invalidateCutability();
       }
       await this.#advanceCreateGuidanceFromDocumentOutcome();
-      await this.#advanceImportGuidanceFromDocumentOutcome();
     });
   }
 
@@ -3555,18 +3554,6 @@ export class DesktopController {
       this.#createGuidanceHasPhysicalContent()
     ) {
       await this.#advanceCreateGuidanceStep("add-content");
-    }
-  }
-
-  async #advanceImportGuidanceFromDocumentOutcome(): Promise<void> {
-    if (
-      this.#guidedWorkflow.definition?.goal === "import-own-design" &&
-      this.#guidedWorkflow.status === "active" &&
-      this.#guidedWorkflow.currentStepId === "assign-physical" &&
-      this.#createGuidanceHasPhysicalStock() &&
-      this.#createGuidanceHasPhysicalContent()
-    ) {
-      await this.#advanceImportGuidanceStep("assign-physical");
     }
   }
 

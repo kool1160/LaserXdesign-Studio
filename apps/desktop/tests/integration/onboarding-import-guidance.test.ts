@@ -245,11 +245,12 @@ function activeIdentity(controller: DesktopController): {
 
 function faceManufacturing(
   material: ManufacturingLayerMetadata["material"] = "mild-steel",
+  thicknessMm = 3,
 ): ManufacturingLayerMetadata {
   return {
     role: "face",
     material,
-    thicknessMm: 3,
+    thicknessMm,
     process: "laser",
     notes: "",
     registrationGroup: null,
@@ -409,6 +410,22 @@ describe("Import My Own Design guidance", () => {
       layerId,
       manufacturing: faceManufacturing(),
     });
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "assign-physical",
+    );
+    await controller.editorAction({
+      type: "layer.set-manufacturing",
+      layerId,
+      manufacturing: faceManufacturing("acrylic", 6),
+    });
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "assign-physical",
+    );
+    expect(await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: { kind: "step" },
+    })).toMatchObject({ ok: true });
     expect(controller.state.onboarding.workflow.currentStepId).toBe(
       "analyze-cutability",
     );

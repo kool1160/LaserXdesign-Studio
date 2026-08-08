@@ -272,6 +272,16 @@ test("packaged Import My Own Design keeps vector preparation isolated and comple
     expect(importedLayerName).toBeDefined();
     await page.getByLabel(`Activate ${importedLayerName as string}`).click();
     await page.getByLabel("Manufacturing layer role").selectOption("face");
+    await expect(page.getByText("Set physical details", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Layer material", { exact: true })).toBeVisible();
+    await expect(page.getByLabel(/^Layer thickness /u)).toBeVisible();
+    await page.getByLabel("Layer material", { exact: true }).selectOption("acrylic");
+    await page.getByLabel(/^Layer thickness /u).fill("6");
+    await expect(page.getByText("Set physical details", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("guidance-continue")).toHaveText(
+      "Use imported physical setup",
+    );
+    await page.getByTestId("guidance-continue").click();
     await expect(page.getByText("Check the design", { exact: true })).toBeVisible();
 
     await page.getByTestId("run-cutability-analysis").click();
