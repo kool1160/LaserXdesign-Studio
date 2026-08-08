@@ -10,7 +10,9 @@ import {
   applyAffineTransform,
   boundsContainPoint,
   boundsFromPoints,
+  cleanupEditablePath,
   composeAffineTransforms,
+  distancePointToSegment,
   findPathSelfIntersections,
   flattenEditablePath,
   maximumAffineStretch,
@@ -23,6 +25,8 @@ import {
 
 export const MAX_CUTABILITY_SEGMENTS = 50_000;
 export const CUTABILITY_FLATTENING_TOLERANCE_MM = 0.01;
+export const SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM =
+  CUTABILITY_FLATTENING_TOLERANCE_MM;
 
 export type CutabilityIssueCode =
   | "OPEN_CONTOUR"
@@ -40,6 +44,12 @@ export type CutabilityIssueCode =
 
 export type CutabilitySeverity = "warning" | "error";
 
+export type CutabilityRepairHint =
+  | "exact-duplicate-geometry"
+  | "zero-length-entity"
+  | "redundant-collinear-point"
+  | "eligible-near-closure";
+
 export interface CutabilityIssue {
   id: string;
   code: CutabilityIssueCode;
@@ -53,6 +63,7 @@ export interface CutabilityIssue {
   location: PointMm;
   message: string;
   suggestion: string;
+  repairHint: CutabilityRepairHint | null;
 }
 
 export type RegionDisposition = "retained" | "removed" | "ambiguous";
@@ -496,6 +507,7 @@ function issue(
   location: PointMm,
   message: string,
   suggestion: string,
+  repairHint: CutabilityRepairHint | null = null,
 ): CutabilityIssue {
   return {
     id: `${code}:${String(sequence)}`,
@@ -510,7 +522,26 @@ function issue(
     location: clonePoint(location),
     message,
     suggestion,
+    repairHint,
   };
+}
+
+function duplicateObjectSignature(object: DocumentObject): string {
+  return JSON.stringify({ ...object, id: "" });
+}
+
+function duplicateObjectPairKey(firstId: string, secondId: string): string {
+  return firstId < secondId
+    ? `${firstId}\u0000${secondId}`
+    : `${secondId}\u0000${firstId}`;
+}
+
+function hasNonemptyHandles(object: PathObject): boolean {
+  return (
+    object.handles?.some(
+      (handles) => handles.incoming !== null || handles.outgoing !== null,
+    ) ?? false
+  );
 }
 
 function relatedSegments(first: Segment, second: Segment): boolean {
@@ -669,21 +700,163 @@ export function analyzeDocumentCutability(
     location: PointMm,
     message: string,
     suggestion: string,
+    repairHint: CutabilityRepairHint | null = null,
   ): void => {
     issueSequence += 1;
-    issues.push(issue(code, issueSequence, severity, objectIds, segmentIndices, measured, limit, location, message, suggestion));
+    issues.push(issue(code, issueSequence, severity, objectIds, segmentIndices, measured, limit, location, message, suggestion, repairHint));
   };
+  const editableVisibleLayerIds = new Set(
+    document.layers
+      .filter((layer) => layer.visible && !layer.locked)
+      .map((layer) => layer.id),
+  );
+  const analyzedTopLevelIds =
+    options.objectIds === undefined || options.objectIds.length === 0
+      ? null
+      : new Set(options.objectIds);
+  const editableTopLevelObjects = document.objects.filter(
+    (object) =>
+      editableVisibleLayerIds.has(object.layerId) &&
+      (analyzedTopLevelIds === null || analyzedTopLevelIds.has(object.id)),
+  );
+  const editableTopLevelById = new Map(
+    editableTopLevelObjects.map((object) => [object.id, object]),
+  );
+  const exactDuplicatePairs = new Set<string>();
+  const objectsBySignature = new Map<string, DocumentObject[]>();
+  for (const object of editableTopLevelObjects) {
+    const signature = duplicateObjectSignature(object);
+    const matches = objectsBySignature.get(signature);
+    if (matches === undefined) {
+      objectsBySignature.set(signature, [object]);
+    } else {
+      for (const match of matches) {
+        exactDuplicatePairs.add(duplicateObjectPairKey(match.id, object.id));
+      }
+      matches.push(object);
+    }
+  }
   let ambiguous = false;
   for (const path of paths) {
     if (!path.closed) {
       ambiguous = true;
       const ends = [path.points[0], path.points.at(-1)].filter((point): point is PointMm => point !== undefined);
       const gap = ends.length === 2 ? Math.hypot((ends[0] as PointMm).xMm - (ends[1] as PointMm).xMm, (ends[0] as PointMm).yMm - (ends[1] as PointMm).yMm) : 0;
-      record("OPEN_CONTOUR", "error", [path.objectId], [], gap, settings.minimumGapMm, ends[0] ?? { xMm: 0, yMm: 0 }, "This contour is open, so retained and removed regions are ambiguous.", "Join or close the endpoints before relying on manufacturing preview.");
+      const source = editableTopLevelById.get(path.objectId);
+      const repairHint =
+        source?.type === "path" &&
+        source.points.length >= 3 &&
+        gap <= SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM
+          ? "eligible-near-closure"
+          : null;
+      record("OPEN_CONTOUR", "error", [path.objectId], [], gap, SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM, ends[0] ?? { xMm: 0, yMm: 0 }, "This contour is open, so retained and removed regions are ambiguous.", repairHint === null ? "Join or close the endpoints before relying on manufacturing preview." : `Preview closing this endpoint gap within the explicit ${SAFE_REPAIR_NEAR_CLOSURE_TOLERANCE_MM.toFixed(3)} mm safe-repair tolerance.`, repairHint);
     }
     if (path.closed && (path.points.length < 3 || Math.abs(signedArea(path.points)) <= GEOMETRY_ENGINE_TOLERANCE_MM)) {
       ambiguous = true;
       record("UNSUPPORTED_GEOMETRY", "error", [path.objectId], [], Math.abs(signedArea(path.points)), GEOMETRY_ENGINE_TOLERANCE_MM, path.points[0] ?? { xMm: 0, yMm: 0 }, "This contour has no stable enclosed area.", "Repair or replace the degenerate contour before manufacturing analysis.");
+    }
+  }
+
+  for (const object of editableTopLevelObjects) {
+    if (object.type === "line") {
+      const worldStart = applyAffineTransform(object.start, object.transform);
+      const worldEnd = applyAffineTransform(object.end, object.transform);
+      const lengthMm = Math.hypot(
+        worldEnd.xMm - worldStart.xMm,
+        worldEnd.yMm - worldStart.yMm,
+      );
+      if (lengthMm <= GEOMETRY_ENGINE_TOLERANCE_MM) {
+        record(
+          "UNSUPPORTED_GEOMETRY",
+          "error",
+          [object.id],
+          [0],
+          lengthMm,
+          GEOMETRY_ENGINE_TOLERANCE_MM,
+          worldStart,
+          "This entity has zero usable length.",
+          "Preview removing this zero-length entity.",
+          "zero-length-entity",
+        );
+      }
+      continue;
+    }
+    if (object.type !== "path") continue;
+    const stretch = maximumAffineStretch(object.transform);
+    const localToleranceMm = stretch === 0
+      ? GEOMETRY_ENGINE_TOLERANCE_MM
+      : GEOMETRY_ENGINE_TOLERANCE_MM / stretch;
+    const cleaned = cleanupEditablePath(
+      {
+        closed: object.closed,
+        points: object.points,
+        ...(object.handles === undefined ? {} : { handles: object.handles }),
+      },
+      localToleranceMm,
+    );
+    if (cleaned.removedNodeCount === 0) continue;
+    const hasZeroLengthSegment = object.points.some((point, index) => {
+      const next = object.points[
+        object.closed ? (index + 1) % object.points.length : index + 1
+      ];
+      return (
+        next !== undefined &&
+        Math.hypot(next.xMm - point.xMm, next.yMm - point.yMm) <=
+          localToleranceMm
+      );
+    });
+    const hasRedundantCollinearPoint =
+      !hasNonemptyHandles(object) &&
+      object.points.some((point, index) => {
+        if (!object.closed && (index === 0 || index === object.points.length - 1)) {
+          return false;
+        }
+        const previous = object.points[
+          (index - 1 + object.points.length) % object.points.length
+        ];
+        const next = object.points[(index + 1) % object.points.length];
+        if (previous === undefined || next === undefined) return false;
+        if (
+          Math.hypot(point.xMm - previous.xMm, point.yMm - previous.yMm) <=
+            localToleranceMm ||
+          Math.hypot(point.xMm - next.xMm, point.yMm - next.yMm) <=
+            localToleranceMm
+        ) {
+          return false;
+        }
+        return distancePointToSegment(point, previous, next) <= localToleranceMm;
+      });
+    const location = applyAffineTransform(
+      object.points[0] ?? { xMm: 0, yMm: 0 },
+      object.transform,
+    );
+    if (hasZeroLengthSegment) {
+      record(
+        "UNSUPPORTED_GEOMETRY",
+        "error",
+        [object.id],
+        [],
+        0,
+        GEOMETRY_ENGINE_TOLERANCE_MM,
+        location,
+        "This path contains a zero-length entity.",
+        "Preview removing the zero-length entity without changing the remaining path.",
+        "zero-length-entity",
+      );
+    }
+    if (hasRedundantCollinearPoint) {
+      record(
+        "UNSUPPORTED_GEOMETRY",
+        "warning",
+        [object.id],
+        [],
+        0,
+        GEOMETRY_ENGINE_TOLERANCE_MM,
+        location,
+        "This path contains redundant collinear points.",
+        "Preview removing points that do not change the path within geometry-engine tolerance.",
+        "redundant-collinear-point",
+      );
     }
   }
 
@@ -698,8 +871,14 @@ export function analyzeDocumentCutability(
     if (duplicates.length < 2) continue;
     ambiguous = true;
     const first = duplicates[0] as Segment;
-    const second = duplicates[1] as Segment;
-    record("DUPLICATE_SEGMENT", "error", [first.path.objectId, second.path.objectId], [first.index, second.index], 0, GEOMETRY_ENGINE_TOLERANCE_MM, midpoint(first.start, first.end), "Two segments occupy the same cut line.", "Delete the duplicate segment or merge the overlapping contours.");
+    for (const second of duplicates.slice(1)) {
+      const repairHint = exactDuplicatePairs.has(
+        duplicateObjectPairKey(first.path.objectId, second.path.objectId),
+      )
+        ? "exact-duplicate-geometry"
+        : null;
+      record("DUPLICATE_SEGMENT", "error", [first.path.objectId, second.path.objectId], [first.index, second.index], 0, GEOMETRY_ENGINE_TOLERANCE_MM, midpoint(first.start, first.end), "Two segments occupy the same cut line.", repairHint === null ? "Delete the duplicate segment or merge the overlapping contours." : "Preview removing the mechanically identical duplicate object.", repairHint);
+    }
   }
   for (const path of paths) {
     const intersections = findPathSelfIntersections(

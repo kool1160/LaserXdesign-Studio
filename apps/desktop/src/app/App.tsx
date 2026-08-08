@@ -42,7 +42,11 @@ import {
   guidedGoal,
   guidedStep,
 } from "../features/onboarding/guidedWorkflowDefinitions.js";
-import { isStepSkippable } from "../features/onboarding/guidedWorkflowState.js";
+import {
+  canCompleteResolution,
+  isStepSkippable,
+  resolutionPrimaryAction,
+} from "../features/onboarding/guidedWorkflowState.js";
 import {
   centerGuideCommand,
   displayScalar,
@@ -638,13 +642,30 @@ export function App() {
     unit === "inches" ? thickness * MILLIMETERS_PER_INCH : thickness;
   const unitLabel = unit === "inches" ? "in" : "mm";
   const cutability = state.analysis.cutability;
+  const repairGroups = state.analysis.repairGroups;
   const focusedCutabilityIssue = cutability?.issues.find(
     (issue) => issue.id === state.analysis.focusedIssueId,
   ) ?? null;
-  const visibleCutabilityIssues = (cutability?.issues ?? []).filter(
-    (issue) =>
-      issueSeverityFilter === "all" || issue.severity === issueSeverityFilter,
+  const cutabilityIssueById = new Map(
+    (cutability?.issues ?? []).map((issue) => [issue.id, issue]),
   );
+  const repairFindingGroups = repairGroups === null
+    ? []
+    : [
+        repairGroups.safeToFix,
+        repairGroups.suggestedFix,
+        repairGroups.needsYourDecision,
+      ].map((group) => ({
+        ...group,
+        issues: group.findingIds
+          .map((id) => cutabilityIssueById.get(id))
+          .filter(
+            (issue): issue is NonNullable<typeof issue> =>
+              issue !== undefined &&
+              (issueSeverityFilter === "all" ||
+                issue.severity === issueSeverityFilter),
+          ),
+      }));
   const workspaceIsEmpty =
     document.objects.length === 0 &&
     state.editor.importPreview === null &&
@@ -667,10 +688,15 @@ export function App() {
     guidanceGoal !== null &&
     isStepSkippable(guidanceGoal.definition, guidance.currentStepId);
   const guidanceResolutionCounts = {
-    safeFixableCount: 0,
-    needsDecisionCount: cutability?.warningCount ?? 0,
+    safeFixableCount: repairGroups?.safeToFix.findingCount ?? 0,
+    needsDecisionCount:
+      (repairGroups?.suggestedFix.findingCount ?? 0) +
+      (repairGroups?.needsYourDecision.findingCount ?? 0),
     blockingCount: cutability?.errorCount ?? 0,
   };
+  const guidanceResolutionPrimaryAction = resolutionPrimaryAction(
+    guidanceResolutionCounts,
+  );
   const guidanceIsCreateFirstSign =
     guidanceActive && guidance.goal === "create-first-sign";
   const guidanceIsImportOwnDesign =
@@ -707,7 +733,11 @@ export function App() {
         : guidanceStep?.id === "analyze-cutability" && guidedWholeDesignAnalysisReady
           ? "Use current whole-design check"
           : guidanceStep?.id === "resolve-findings"
-            ? "Continue after review"
+            ? guidanceResolutionPrimaryAction === "fix-safe-problems"
+              ? "Fix safe problems"
+              : guidanceResolutionPrimaryAction === "review-decisions"
+                ? "Review decisions"
+                : "Continue"
             : null
     : guidanceIsImportOwnDesign
       ? guidanceStep?.id === "assign-physical" &&
@@ -717,7 +747,11 @@ export function App() {
         : guidanceStep?.id === "analyze-cutability" && guidedWholeDesignAnalysisReady
           ? "Use current whole-design check"
           : guidanceStep?.id === "resolve-findings"
-            ? "Continue after review"
+            ? guidanceResolutionPrimaryAction === "fix-safe-problems"
+              ? "Fix safe problems"
+              : guidanceResolutionPrimaryAction === "review-decisions"
+                ? "Review decisions"
+                : "Continue"
             : null
       : "Continue";
   const guidedPhysicalPreviewIdentity =
@@ -1114,27 +1148,69 @@ export function App() {
                 disabled={
                   busy ||
                   (guidanceStep.id === "resolve-findings" &&
-                    (!guidedWholeDesignAnalysisReady ||
-                      guidanceResolutionCounts.blockingCount > 0))
+                    !guidedWholeDesignAnalysisReady)
                 }
                 data-testid="guidance-continue"
-                onClick={() => void run(() => window.laserx.onboardingAction({
-                  type: "advance",
-                  expectedStepId: guidanceStep.id,
-                  runToken: guidance.runToken as string,
-                  completion:
-                    guidanceStep.id === "resolve-findings"
-                      ? {
-                          kind: "resolution",
-                          trigger: "user",
-                          counts: guidanceResolutionCounts,
-                        }
-                      : { kind: "step" },
-                }))}
+                onClick={() => {
+                  if (
+                    guidanceStep.id === "resolve-findings" &&
+                    guidanceResolutionPrimaryAction === "fix-safe-problems"
+                  ) {
+                    void run(() => window.laserx.previewSafeRepairs());
+                    globalThis.document
+                      .getElementById("workflow-analyze")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                    return;
+                  }
+                  if (
+                    guidanceStep.id === "resolve-findings" &&
+                    guidanceResolutionPrimaryAction === "review-decisions"
+                  ) {
+                    globalThis.document
+                      .getElementById("workflow-analyze")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                    return;
+                  }
+                  void run(() => window.laserx.onboardingAction({
+                    type: "advance",
+                    expectedStepId: guidanceStep.id,
+                    runToken: guidance.runToken as string,
+                    completion:
+                      guidanceStep.id === "resolve-findings"
+                        ? {
+                            kind: "resolution",
+                            trigger: "user",
+                            counts: guidanceResolutionCounts,
+                          }
+                        : { kind: "step" },
+                  }));
+                }}
               >
                 {guidedOutcomeConfirmation}
               </button>
             )}
+            {guidanceStep.id === "resolve-findings" &&
+              guidanceResolutionPrimaryAction !== "continue" &&
+              canCompleteResolution(guidanceResolutionCounts) && (
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={busy || !guidedWholeDesignAnalysisReady}
+                  data-testid="guidance-resolution-continue"
+                  onClick={() => void run(() => window.laserx.onboardingAction({
+                    type: "advance",
+                    expectedStepId: guidanceStep.id,
+                    runToken: guidance.runToken as string,
+                    completion: {
+                      kind: "resolution",
+                      trigger: "user",
+                      counts: guidanceResolutionCounts,
+                    },
+                  }))}
+                >
+                  Continue after review
+                </button>
+              )}
             <button
               type="button"
               className="guidance-exit"
@@ -1961,28 +2037,112 @@ export function App() {
                     <option value="warning">Warnings</option>
                   </select>
                 </label>
-                <ul className="cutability-issues" data-testid="cutability-issues">
-                  {visibleCutabilityIssues.map((issue) => (
-                    <li key={issue.id}>
+                {repairGroups !== null && (
+                  <div className="repair-groups" data-testid="repair-groups">
+                    <div className="repair-group-actions">
+                      <span>
+                        Near-closure tolerance: {repairGroups.tolerances.nearClosureMm.toFixed(3)} mm. Zero-length and collinear tolerance: {repairGroups.tolerances.collinearMm.toFixed(6)} mm.
+                      </span>
+                      {repairGroups.safeToFix.findingCount > 0 &&
+                        state.analysis.safeRepairProposal === null && (
+                          <button
+                            type="button"
+                            data-testid="preview-safe-repairs"
+                            disabled={busy}
+                            onClick={() =>
+                              void run(() => window.laserx.previewSafeRepairs())
+                            }
+                          >
+                            Fix safe problems
+                          </button>
+                        )}
+                    </div>
+                    {repairFindingGroups.map((group) => (
+                      <section
+                        className={`repair-finding-group ${group.id}`}
+                        data-repair-group={group.id}
+                        key={group.id}
+                      >
+                        <div className="repair-finding-group-heading">
+                          <strong>{group.label}</strong>
+                          <span>
+                            {group.findingCount} finding(s) · {group.affectedObjectCount} object(s)
+                          </span>
+                        </div>
+                        <p>{group.description}</p>
+                        {group.issues.length === 0 ? (
+                          <small>No findings in the current severity filter.</small>
+                        ) : (
+                          <ul className="cutability-issues">
+                            {group.issues.slice(0, 6).map((issue) => (
+                              <li key={issue.id}>
+                                <button
+                                  type="button"
+                                  className={state.analysis.focusedIssueId === issue.id ? "active" : ""}
+                                  data-issue-code={issue.code}
+                                  onClick={() =>
+                                    void run(() =>
+                                      window.laserx.focusCutabilityIssue({ issueId: issue.id }),
+                                    )
+                                  }
+                                >
+                                  <strong>{issue.code.replaceAll("_", " ")}</strong>
+                                  <span>{issue.message}</span>
+                                  <small>
+                                    {issue.measuredValueMm.toFixed(3)} mm measured / {issue.configuredLimitMm.toFixed(3)} mm limit
+                                  </small>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {group.issues.length > 6 && (
+                          <small data-testid={`repair-group-overflow-${group.id}`}>
+                            {group.issues.length - 6} more finding(s) summarized in this group.
+                          </small>
+                        )}
+                      </section>
+                    ))}
+                  </div>
+                )}
+                {state.analysis.safeRepairProposal !== null && (
+                  <div className="bridge-preview-summary" data-testid="safe-repair-preview">
+                    <strong>{state.analysis.safeRepairProposal.summary}</strong>
+                    <span>{state.analysis.safeRepairProposal.disclaimer}</span>
+                    <ul>
+                      {state.analysis.safeRepairProposal.changes.slice(0, 6).map((change) => (
+                        <li key={`${change.kind}:${change.objectId}`}>
+                          {change.description} ({change.findingCount} finding(s))
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="button-grid compact">
                       <button
                         type="button"
-                        className={state.analysis.focusedIssueId === issue.id ? "active" : ""}
-                        data-issue-code={issue.code}
-                        onClick={() =>
-                          void run(() =>
-                            window.laserx.focusCutabilityIssue({ issueId: issue.id }),
-                          )
-                        }
+                        data-testid="accept-safe-repairs"
+                        disabled={busy}
+                        onClick={() => void run(() => window.laserx.acceptSafeRepairs())}
                       >
-                        <strong>{issue.code.replaceAll("_", " ")}</strong>
-                        <span>{issue.message}</span>
-                        <small>
-                          {issue.measuredValueMm.toFixed(3)} mm measured / {issue.configuredLimitMm.toFixed(3)} mm limit
-                        </small>
+                        Accept safe repairs
                       </button>
-                    </li>
-                  ))}
-                </ul>
+                      <button
+                        type="button"
+                        className="quiet"
+                        data-testid="reject-safe-repairs"
+                        disabled={busy}
+                        onClick={() => void run(() => window.laserx.rejectSafeRepairs())}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {state.analysis.safeRepairResult !== null && (
+                  <div className="repair-result" data-testid="safe-repair-result">
+                    <strong>{state.analysis.safeRepairResult.summary}</strong>
+                    <span>{state.analysis.safeRepairResult.disclaimer}</span>
+                  </div>
+                )}
                 {focusedCutabilityIssue?.code === "DISCONNECTED_ISLAND" && (
                   <div className="bridge-controls" data-testid="bridge-controls">
                     <label>

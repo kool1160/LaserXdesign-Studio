@@ -1272,7 +1272,9 @@ button:disabled {
 .analysis-progress,
 .cutability-summary,
 .bridge-preview-summary,
-.bridge-controls {
+.bridge-controls,
+.repair-groups,
+.repair-result {
   display: grid;
   gap: 8px;
 }
@@ -1319,6 +1321,63 @@ button:disabled {
 
 .cutability-issues small {
   color: #73818b;
+}
+
+.repair-group-actions,
+.repair-finding-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.repair-group-actions {
+  padding: 8px;
+  border: 1px solid #34434d;
+  border-radius: 7px;
+  background: #111a20;
+}
+
+.repair-group-actions span,
+.repair-finding-group p,
+.repair-result span {
+  margin: 0;
+  color: #87959e;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.repair-finding-group {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid #303a42;
+  border-radius: 7px;
+  background: #12191e;
+}
+
+.repair-finding-group.safe-to-fix {
+  border-color: #386b58;
+}
+
+.repair-finding-group.suggested-fix {
+  border-color: #5c5837;
+}
+
+.repair-finding-group.needs-your-decision {
+  border-color: #684843;
+}
+
+.repair-finding-group-heading span {
+  color: #91a0a8;
+  font-size: 10px;
+}
+
+.repair-result {
+  padding: 9px;
+  border: 1px solid #386b58;
+  border-radius: 7px;
+  background: #13211c;
 }
 
 .manufacturing-region {

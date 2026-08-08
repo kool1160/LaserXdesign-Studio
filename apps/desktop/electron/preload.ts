@@ -334,6 +334,21 @@ const api: LaserxDesktopApi = Object.freeze({
       await ipcRenderer.invoke(IPC_CHANNELS.focusCutabilityIssue, validated),
     );
   },
+  async previewSafeRepairs() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.previewSafeRepairs),
+    );
+  },
+  async acceptSafeRepairs() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.acceptSafeRepairs),
+    );
+  },
+  async rejectSafeRepairs() {
+    return commandResultSchema.parse(
+      await ipcRenderer.invoke(IPC_CHANNELS.rejectSafeRepairs),
+    );
+  },
   async runPhysicalPreview(request: RunPhysicalPreviewRequest) {
     const validated = runPhysicalPreviewRequestSchema.parse(request);
     return commandResultSchema.parse(

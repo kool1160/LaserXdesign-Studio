@@ -64,6 +64,9 @@ export const IPC_CHANNELS = {
   runManufacturingLayerAnalysis: "laserx:manufacturing:analyze-layer",
   cancelCutabilityAnalysis: "laserx:manufacturing:cancel-analysis",
   focusCutabilityIssue: "laserx:manufacturing:focus-issue",
+  previewSafeRepairs: "laserx:manufacturing:preview-safe-repairs",
+  acceptSafeRepairs: "laserx:manufacturing:accept-safe-repairs",
+  rejectSafeRepairs: "laserx:manufacturing:reject-safe-repairs",
   previewBridge: "laserx:manufacturing:preview-bridge",
   acceptBridge: "laserx:manufacturing:accept-bridge",
   rejectBridge: "laserx:manufacturing:reject-bridge",
@@ -1083,6 +1086,16 @@ export const physicalPreviewAssemblySchema = z.strictObject({
   fingerprint: z.string(),
 });
 
+const repairFindingGroupSchema = z.strictObject({
+  id: z.enum(["safe-to-fix", "suggested-fix", "needs-your-decision"]),
+  label: z.enum(["Safe to fix", "Suggested fix", "Needs your decision"]),
+  description: z.string().min(1),
+  findingIds: z.array(z.string().min(1)),
+  findingCount: z.number().int().nonnegative(),
+  affectedObjectIds: z.array(z.uuid()),
+  affectedObjectCount: z.number().int().nonnegative(),
+});
+
 export const desktopStateSchema = z.strictObject({
   project: z.strictObject({
     id: z.uuid(),
@@ -1434,6 +1447,62 @@ export const desktopStateSchema = z.strictObject({
         warnings: z.array(z.string()),
       })
       .nullable(),
+    repairGroups: z
+      .strictObject({
+        documentFingerprint: z.string().min(1),
+        analysisFingerprint: z.string().min(1),
+        tolerances: z.strictObject({
+          zeroLengthMm: positiveNumber,
+          collinearMm: positiveNumber,
+          nearClosureMm: positiveNumber,
+        }),
+        safeToFix: repairFindingGroupSchema,
+        suggestedFix: repairFindingGroupSchema,
+        needsYourDecision: repairFindingGroupSchema,
+      })
+      .nullable(),
+    safeRepairProposal: z
+      .strictObject({
+        id: z.string().min(1),
+        documentFingerprint: z.string().min(1),
+        analysisFingerprint: z.string().min(1),
+        tolerances: z.strictObject({
+          zeroLengthMm: positiveNumber,
+          collinearMm: positiveNumber,
+          nearClosureMm: positiveNumber,
+        }),
+        findingCount: z.number().int().positive(),
+        plannedFindingCount: z.number().int().nonnegative(),
+        skippedFindingCount: z.number().int().nonnegative(),
+        affectedObjectIds: z.array(z.uuid()).min(1),
+        changes: z
+          .array(
+            z.strictObject({
+              kind: z.enum([
+                "remove-exact-duplicate",
+                "remove-zero-length",
+                "remove-redundant-collinear-points",
+                "close-near-closure",
+              ]),
+              objectId: z.uuid(),
+              findingCount: z.number().int().nonnegative(),
+              description: z.string().min(1),
+            }),
+          )
+          .min(1),
+        summary: z.string().min(1),
+        disclaimer: z.string().min(1),
+      })
+      .nullable(),
+    safeRepairResult: z
+      .strictObject({
+        fixedCount: z.number().int().nonnegative(),
+        skippedCount: z.number().int().nonnegative(),
+        remainingCount: z.number().int().nonnegative(),
+        summary: z.string().min(1),
+        disclaimer: z.string().min(1),
+      })
+      .nullable(),
     cutability: z
       .strictObject({
         operationId: z.uuid().nullable(),
@@ -1445,7 +1514,7 @@ export const desktopStateSchema = z.strictObject({
         closedPathCount: z.number().int().nonnegative(),
         openPathCount: z.number().int().nonnegative(),
         segmentCount: z.number().int().nonnegative(),
-        smallestSegmentMm: positiveNumber.nullable(),
+        smallestSegmentMm: nonnegativeNumber.nullable(),
         issueCount: z.number().int().nonnegative(),
         errorCount: z.number().int().nonnegative(),
         warningCount: z.number().int().nonnegative(),
@@ -1476,6 +1545,14 @@ export const desktopStateSchema = z.strictObject({
             location: pointSchema,
             message: z.string().min(1),
             suggestion: z.string().min(1),
+            repairHint: z
+              .enum([
+                "exact-duplicate-geometry",
+                "zero-length-entity",
+                "redundant-collinear-point",
+                "eligible-near-closure",
+              ])
+              .nullable(),
           }),
         ),
         regions: z.array(z.strictObject({
@@ -1685,6 +1762,9 @@ export interface LaserxDesktopApi {
   focusCutabilityIssue(
     request: FocusCutabilityIssueRequest,
   ): Promise<CommandResult>;
+  previewSafeRepairs(): Promise<CommandResult>;
+  acceptSafeRepairs(): Promise<CommandResult>;
+  rejectSafeRepairs(): Promise<CommandResult>;
   previewBridge(request: BridgeProposalRequestDto): Promise<CommandResult>;
   acceptBridge(): Promise<CommandResult>;
   rejectBridge(): Promise<CommandResult>;

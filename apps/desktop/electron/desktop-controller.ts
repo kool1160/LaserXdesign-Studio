@@ -28,10 +28,15 @@ import {
 import {
   CutabilityAnalysisCache,
   fingerprintCutabilityDocument,
+  fingerprintCutabilityAnalysis,
+  groupCutabilityFindings,
   materializeBridgeProposal,
   proposeBridge,
+  proposeSafeRepairs,
   type BridgeProposal,
   type CutabilityAnalysisSummary,
+  type CutabilityRepairGroups,
+  type SafeRepairProposal,
 } from "@laserx/cutability";
 import {
   identityTransform,
@@ -475,6 +480,15 @@ export class DesktopController {
   } | null = null;
   #focusedCutabilityIssueId: string | null = null;
   #bridgeProposal: BridgeProposal | null = null;
+  #repairGroups: CutabilityRepairGroups | null = null;
+  #safeRepairProposal: SafeRepairProposal | null = null;
+  #safeRepairResult: {
+    fixedCount: number;
+    skippedCount: number;
+    remainingCount: number;
+    summary: string;
+    disclaimer: string;
+  } | null = null;
   #physicalPreviewJob: {
     operationId: string;
     percent: number;
@@ -742,6 +756,39 @@ export class DesktopController {
           this.#bridgeProposal === null
             ? null
             : structuredClone(this.#bridgeProposal),
+        repairGroups:
+          this.#repairGroups === null
+            ? null
+            : structuredClone(this.#repairGroups),
+        safeRepairProposal:
+          this.#safeRepairProposal === null
+            ? null
+            : {
+                id: this.#safeRepairProposal.id,
+                documentFingerprint: this.#safeRepairProposal.documentFingerprint,
+                analysisFingerprint: this.#safeRepairProposal.analysisFingerprint,
+                tolerances: { ...this.#safeRepairProposal.tolerances },
+                findingCount: this.#safeRepairProposal.findingIds.length,
+                plannedFindingCount:
+                  this.#safeRepairProposal.plannedFindingIds.length,
+                skippedFindingCount:
+                  this.#safeRepairProposal.skippedFindingIds.length,
+                affectedObjectIds: [
+                  ...this.#safeRepairProposal.affectedObjectIds,
+                ],
+                changes: this.#safeRepairProposal.changes.map((change) => ({
+                  kind: change.kind,
+                  objectId: change.objectId,
+                  findingCount: change.findingIds.length,
+                  description: change.description,
+                })),
+                summary: this.#safeRepairProposal.summary,
+                disclaimer: this.#safeRepairProposal.disclaimer,
+              },
+        safeRepairResult:
+          this.#safeRepairResult === null
+            ? null
+            : { ...this.#safeRepairResult },
         cutability:
           this.#cutabilityProjection === null
             ? null
@@ -2075,6 +2122,171 @@ export class DesktopController {
     });
   }
 
+  public async previewSafeRepairs(): Promise<CommandResult> {
+    return this.#run(() => {
+      const projection = this.#cutabilityProjection;
+      if (projection === null) {
+        throw new RangeError("Run manufacturing analysis before previewing safe repairs.");
+      }
+      this.#safeRepairProposal = proposeSafeRepairs(
+        this.#session.state.project.document,
+        projection.cutability,
+      );
+      this.#safeRepairResult = null;
+    });
+  }
+
+  public async acceptSafeRepairs(): Promise<CommandResult> {
+    return this.#run(async () => {
+      const proposal = this.#safeRepairProposal;
+      const projection = this.#cutabilityProjection;
+      if (proposal === null) {
+        throw new RangeError("There is no safe-repair preview to accept.");
+      }
+      if (projection === null) {
+        throw new Error("The repair findings changed after this preview. Run analysis again.");
+      }
+      const before = this.#session.state.project.document;
+      if (
+        fingerprintCutabilityDocument(before) !== proposal.documentFingerprint ||
+        fingerprintCutabilityAnalysis(projection.cutability) !==
+          proposal.analysisFingerprint
+      ) {
+        throw new Error(
+          "The document or repair findings changed after this preview. Preview safe repairs again.",
+        );
+      }
+      const plannedIssues = projection.cutability.issues.filter((issue) =>
+        proposal.plannedFindingIds.includes(issue.id),
+      );
+
+      const replacementIds = new Set(
+        proposal.replacements.map((object) => object.id),
+      );
+      const beforeNodeCount = before.objects.reduce(
+        (count, object) =>
+          object.type === "path" && replacementIds.has(object.id)
+            ? count + object.points.length
+            : count,
+        0,
+      );
+      this.#session.beginTransaction("Fix safe problems");
+      try {
+        if (proposal.deleteObjectIds.length > 0) {
+          this.#session.executeEditorCommand({
+            type: "objects.delete",
+            objectIds: proposal.deleteObjectIds,
+          });
+        }
+        if (proposal.replacements.length > 0) {
+          this.#session.applyTopologyReplacement(
+            {
+              type: "objects.replace-topology",
+              sourceObjectIds: proposal.replacements.map((object) => object.id),
+              replacements: proposal.replacements,
+            },
+            {
+              operation: "Fix safe problems",
+              beforeNodeCount,
+              afterNodeCount: proposal.replacements.reduce(
+                (count, object) => count + object.points.length,
+                0,
+              ),
+              replacedObjectIds: proposal.replacements.map(
+                (object) => object.id,
+              ),
+              discardedObjectIds: [...proposal.deleteObjectIds],
+              warnings: [
+                "Automated cleanup does not prove cut readiness or physical safety.",
+              ],
+              message: proposal.summary,
+            },
+          );
+        }
+        this.#session.commitTransaction();
+      } catch (error) {
+        this.#session.cancelTransaction();
+        throw error;
+      }
+
+      const scope = projection.scope;
+      this.#invalidateCutability();
+      const document = this.#session.state.project.document;
+      if (scope.kind === "manufacturing-layer") {
+        const layer = document.layers.find(
+          (candidate) => candidate.id === scope.layerId,
+        );
+        if (layer === undefined) {
+          throw new RangeError("That manufacturing layer is unavailable.");
+        }
+        await this.#analyzeCutability(
+          randomUUID(),
+          manufacturingLayerObjectIds(document, scope.layerId),
+          {
+            kind: "manufacturing-layer",
+            layerId: scope.layerId,
+            layerName: layer.name,
+          },
+        );
+      } else if (scope.kind === "selection") {
+        const availableIds = new Set(
+          document.objects.map((object) => object.id),
+        );
+        const objectIds = scope.objectIds.filter((id) => availableIds.has(id));
+        if (objectIds.length === 0) {
+          await this.#analyzeCutability(randomUUID(), [], {
+            kind: "whole-design",
+            layerId: null,
+            layerName: null,
+          });
+        } else {
+          await this.#analyzeCutability(randomUUID(), objectIds, {
+            kind: "selection",
+            layerId: null,
+            layerName: null,
+            objectIds,
+          });
+        }
+      } else {
+        await this.#analyzeCutability(randomUUID(), [], {
+          kind: "whole-design",
+          layerId: null,
+          layerName: null,
+        });
+      }
+
+      const currentIssues = this.#cutabilityProjection?.cutability.issues ?? [];
+      const stillPresentPlannedCount = plannedIssues.filter((planned) =>
+        currentIssues.some(
+          (current) =>
+            current.repairHint === planned.repairHint &&
+            current.objectIds.some((id) => planned.objectIds.includes(id)),
+        ),
+      ).length;
+      const fixedCount = Math.max(
+        0,
+        plannedIssues.length - stillPresentPlannedCount,
+      );
+      const remainingCount =
+        this.#cutabilityProjection?.cutability.issueCount ?? 0;
+      this.#safeRepairResult = {
+        fixedCount,
+        skippedCount: proposal.skippedFindingIds.length,
+        remainingCount,
+        summary: `Fixed ${String(fixedCount)}, skipped ${String(proposal.skippedFindingIds.length)}, ${String(remainingCount)} finding(s) remain after reanalysis.`,
+        disclaimer:
+          "The design was reanalyzed. Automated cleanup does not prove cut readiness or physical safety.",
+      };
+      await this.#advanceGuidanceAfterWholeDesignAnalysis();
+    });
+  }
+
+  public async rejectSafeRepairs(): Promise<CommandResult> {
+    return this.#run(() => {
+      this.#safeRepairProposal = null;
+    });
+  }
+
   public async previewBridge(
     request: BridgeProposalRequestDto,
   ): Promise<CommandResult> {
@@ -3165,6 +3377,9 @@ export class DesktopController {
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
+    this.#repairGroups = null;
+    this.#safeRepairProposal = null;
+    this.#safeRepairResult = null;
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
     this.#physicalPreviewAssemblyFingerprint = null;
@@ -3210,6 +3425,9 @@ export class DesktopController {
     this.#cutabilityJob = null;
     this.#focusedCutabilityIssueId = null;
     this.#bridgeProposal = null;
+    this.#repairGroups = null;
+    this.#safeRepairProposal = null;
+    this.#safeRepairResult = null;
   }
 
   async #analyzeCutability(
@@ -3348,8 +3566,13 @@ export class DesktopController {
       scope: publishedScope,
       cutability: analysis,
     };
+    this.#repairGroups = groupCutabilityFindings(
+      this.#session.state.project.document,
+      analysis,
+    );
     this.#focusedCutabilityIssueId = analysis.issues[0]?.id ?? null;
     this.#bridgeProposal = null;
+    this.#safeRepairProposal = null;
   }
 
   #liveGuidedBinding(): GuidedProjectBinding {
@@ -3382,8 +3605,10 @@ export class DesktopController {
   #currentResolutionCounts(): ResolutionFindingCounts | null {
     const projection = this.#cutabilityProjection;
     const analysis = projection?.cutability ?? null;
+    const groups = this.#repairGroups;
     if (
       analysis === null ||
+      groups === null ||
       projection?.scope.kind !== "whole-design" ||
       analysis.documentFingerprint !==
         fingerprintCutabilityDocument(this.#session.state.project.document)
@@ -3391,10 +3616,9 @@ export class DesktopController {
       return null;
     }
     return {
-      // G4 owns safe-repair classification. Until that engine exists, G1
-      // truthfully reports none instead of guessing which finding is safe.
-      safeFixableCount: 0,
-      needsDecisionCount: analysis.warningCount,
+      safeFixableCount: groups.safeToFix.findingCount,
+      needsDecisionCount:
+        groups.suggestedFix.findingCount + groups.needsYourDecision.findingCount,
       blockingCount: analysis.errorCount,
     };
   }

@@ -31,6 +31,9 @@ const OUTER_ID = "c0000000-0000-4000-8000-000000000001";
 const SECOND_OUTER_ID = "c0000000-0000-4000-8000-000000000002";
 const ISLAND_ID = "d0000000-0000-4000-8000-000000000001";
 const SECOND_ISLAND_ID = "d0000000-0000-4000-8000-000000000002";
+const SAFE_DUPLICATE_ID = "c0000000-0000-4000-8000-000000000003";
+const SAFE_COLLINEAR_ID = "c0000000-0000-4000-8000-000000000004";
+const SAFE_AMBIGUOUS_ID = "c0000000-0000-4000-8000-000000000005";
 const temporaryDirectories: string[] = [];
 const controllers: DesktopController[] = [];
 
@@ -171,6 +174,61 @@ function twoLayerNestedProject(): LaserxProject {
   });
 }
 
+function safeRepairProject(): LaserxProject {
+  const square = (id: string) => ({
+    id,
+    type: "path" as const,
+    layerId: LAYER_ID,
+    transform: identityTransform(),
+    closed: true,
+    points: [
+      { xMm: 10, yMm: 10 },
+      { xMm: 50, yMm: 10 },
+      { xMm: 50, yMm: 50 },
+      { xMm: 10, yMm: 50 },
+    ],
+  });
+  return createBlankProject({
+    id: "e0000000-0000-4000-8000-000000000005",
+    documentId: "e0000000-0000-4000-8000-000000000006",
+    now: "2026-08-08T12:00:00.000Z",
+    width: 150,
+    height: 120,
+    layers: [{ id: LAYER_ID, name: "Repair", visible: true, locked: false }],
+    activeLayerId: LAYER_ID,
+    objects: [
+      square(OUTER_ID),
+      square(SAFE_DUPLICATE_ID),
+      {
+        id: SAFE_COLLINEAR_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: true,
+        points: [
+          { xMm: 70, yMm: 10 },
+          { xMm: 90, yMm: 10 },
+          { xMm: 110, yMm: 10 },
+          { xMm: 110, yMm: 50 },
+          { xMm: 70, yMm: 50 },
+        ],
+      },
+      {
+        id: SAFE_AMBIGUOUS_ID,
+        type: "path",
+        layerId: LAYER_ID,
+        transform: identityTransform(),
+        closed: false,
+        points: [
+          { xMm: 20, yMm: 80 },
+          { xMm: 60, yMm: 80 },
+          { xMm: 60, yMm: 105 },
+        ],
+      },
+    ],
+  });
+}
+
 function immediateWorker(counter?: { calls: number }): CutabilityWorkerPort {
   return {
     run: (request, _signal, onProgress) => {
@@ -224,6 +282,79 @@ afterEach(async () => {
 });
 
 describe("cutability worker coordination", () => {
+  it("previews, rejects, accepts, reanalyzes, reports, and undoes one safe batch", async () => {
+    const counter = { calls: 0 };
+    const controller = await desktop(
+      immediateWorker(counter),
+      safeRepairProject(),
+    );
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    const before = JSON.stringify(controller.state.project.document);
+    expect(controller.state.analysis.repairGroups?.safeToFix.findingCount)
+      .toBeGreaterThan(0);
+
+    expect(await controller.previewSafeRepairs()).toMatchObject({ ok: true });
+    expect(JSON.stringify(controller.state.project.document)).toBe(before);
+    expect(controller.state.editor.history.undoDepth).toBe(0);
+    expect(controller.state.analysis.safeRepairProposal).toMatchObject({
+      skippedFindingCount: 0,
+    });
+    expect(await controller.rejectSafeRepairs()).toMatchObject({ ok: true });
+    expect(JSON.stringify(controller.state.project.document)).toBe(before);
+    expect(controller.state.analysis.safeRepairProposal).toBeNull();
+    expect(controller.state.editor.history.undoDepth).toBe(0);
+
+    await controller.previewSafeRepairs();
+    expect(await controller.acceptSafeRepairs()).toMatchObject({ ok: true });
+    expect(counter.calls).toBe(2);
+    expect(controller.state.editor.history.undoDepth).toBe(1);
+    expect(controller.state.project.document.objects.some(
+      (object) => object.id === SAFE_DUPLICATE_ID,
+    )).toBe(false);
+    const cleaned = controller.state.project.document.objects.find(
+      (object) => object.id === SAFE_COLLINEAR_ID,
+    );
+    expect(cleaned?.type === "path" ? cleaned.points.length : 0).toBe(4);
+    expect(controller.state.analysis.safeRepairResult).toMatchObject({
+      skippedCount: 0,
+      remainingCount: controller.state.analysis.cutability?.issueCount,
+    });
+    expect(controller.state.analysis.safeRepairResult?.fixedCount)
+      .toBeGreaterThan(0);
+    expect(controller.state.analysis.cutability).not.toBeNull();
+    expect(controller.state.analysis.repairGroups?.needsYourDecision.findingCount)
+      .toBeGreaterThan(0);
+
+    await controller.editorAction({ type: "history.undo" });
+    expect(JSON.stringify(controller.state.project.document)).toBe(before);
+    expect(controller.state.analysis.cutability).toBeNull();
+  });
+
+  it("refuses a repair preview after the document basis changes", async () => {
+    const controller = await desktop(
+      immediateWorker(),
+      safeRepairProject(),
+    );
+    await controller.runCutabilityAnalysis(OPERATION_ID, []);
+    await controller.previewSafeRepairs();
+    await controller.editorAction({
+      type: "objects.move",
+      objectIds: [OUTER_ID],
+      deltaXmm: 1,
+      deltaYmm: 0,
+    });
+    const afterEdit = JSON.stringify(controller.state.project.document);
+
+    expect(await controller.acceptSafeRepairs()).toMatchObject({
+      ok: false,
+      error: "There is no safe-repair preview to accept.",
+    });
+    expect(JSON.stringify(controller.state.project.document)).toBe(afterEdit);
+    expect(controller.state.project.document.objects.some(
+      (object) => object.id === SAFE_DUPLICATE_ID,
+    )).toBe(true);
+  });
+
   it("caches exact analysis and invalidates it after a document command", async () => {
     const counter = { calls: 0 };
     const controller = await desktop(immediateWorker(counter));
