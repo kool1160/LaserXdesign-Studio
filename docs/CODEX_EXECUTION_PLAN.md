@@ -18,34 +18,35 @@ Claude, Anthropic, Fable, and other external paid implementation, review, contin
 
 The LaserX Design Studio primary operations chat alone may plan, lock, review, report status, change holds, merge, close, or advance. Every other chat is read-only for those mutations. If identity is uncertain, fail closed and use the exact return-to-primary response in `docs/CHAT_AUTHORITY.md`.
 
-Every other chat is read-only for those mutations.
-
 There is no automatic routine merge.
 
 ## Active M15 task
 
-Implement **G4 — grouped repair decisions and Fix safe problems workflow** from current `main`.
+Implement **G5 — Learn Mode, replay, recovery, and contextual explanations** from current `main`.
 
 Required scope:
 
-- group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** without creating parallel finding truth;
-- limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance;
-- make **Fix safe problems** preview-first and non-mutating until acceptance;
-- refuse stale repair proposals when their document/finding basis changes;
-- apply accepted safe repairs as one coherent undoable transaction whenever technically practical, with truthful fixed/skipped/remaining counts;
-- re-run current analysis after acceptance and keep unresolved suggested/decision findings visible;
-- never claim automated repair proves cut readiness or physical safety;
-- never silently apply suggested fixes, bridge/island decisions, ambiguous near-closures, or unproven classes;
-- reuse existing geometry/history/cutability and G2/G3 guided-resolution systems;
-- preserve exact-project resume, run-token protection, project replacement, contextual controls, security, Save/Export, and non-trapping Exit guidance;
-- add focused unit/integration and packaged Windows E2E for preview non-mutation, safe/ambiguous separation, acceptance/reject/undo, grouped large-finding presentation, reanalysis, stale-proposal refusal, and a negative/non-trapping route;
+- add a permanent optional Learn/Help entry point that enables/disables contextual teaching without mutating project geometry or requiring a new project;
+- teach through real LaserX controls and current workflow state rather than a disconnected slideshow;
+- provide normal-shop-language **what it does / why it matters** explanations for core M15 concepts: physical layers, material/thickness, cutability findings, Safe to fix / Suggested fix / Needs your decision, bridge/island intent, physical 3D, and export;
+- allow guided workflows/tutorials to be skipped, replayed, and reopened later from Learn/Help;
+- replay with a fresh run token and current project/document identity, without overwriting current project state or reviving stale/transient previews;
+- preserve exact-project resume, wrong-project protection, project-replacement invalidation, stable-checkpoint recovery, and non-trapping global Exit from G1–G4;
+- keep educational completion state separate from manufacturing/document truth;
+- ensure opening/dismissing/replaying explanations cannot mutate geometry, accept repairs, complete required checkpoints, create analysis/3D evidence, or export on the user's behalf;
+- reuse the accepted guided-workflow reducer, onboarding preferences, contextual controls, geometry/history/cutability, and G4 repair systems instead of creating a parallel tutorial/workflow engine;
+- add focused unit/integration and packaged Windows E2E for Learn Mode toggle, contextual explanation, skip/replay/reopen, fresh-token replay, restart/resume recovery, wrong-project/project replacement, and non-trapping Exit;
 - open one focused draft PR and stop at `AWAITING_REVIEW`.
 
-Do not begin G5 or G6, broad geometry-engine work, speculative safe classifications, new AI capability, material expansion, process/export profiles, licensing, public beta, CAD/CAM, machine control, or native DWG support.
+Do not begin G6, owner-observed usability validation, new AI capability, future material/process tutorial expansion, broad material expansion, process/export profiles, licensing, public beta, CAD/CAM, machine control, or native DWG support.
+
+## G4 completion record
+
+PR #75 delivered grouped repair decisions and preview-first **Fix safe problems** at reviewed head `fb6caaeddb4117f308685314082102e65e231989` and squash merge `daf48515fa54e1dfd3276173d84d597b7dd14492`. Repository Guard and Canonical Verification, including packaged Windows verification, were green; all review threads were resolved. The owner explicitly accepted G4 with `Advance LaserX` in the designated primary operations chat on 2026-08-08.
 
 ## G3 post-merge repair completion record
 
-PR #74 repaired the late G3 P1 at reviewed head `66dab265b3073145e48667639b0a303691733f7b` and squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`. Repository Guard and Canonical Verification, including packaged Windows verification, passed on the reviewed head. The owner explicitly accepted the repair with `Advance LaserX` in the designated primary operations chat on 2026-08-08. The repair keeps imported **Set physical details** open until explicit confirmation after role/material/thickness review.
+PR #74 repaired the late G3 P1 at reviewed head `66dab265b3073145e48667639b0a303691733f7b` and squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`. Repository Guard and Canonical Verification, including packaged Windows verification, passed on the reviewed head. The owner explicitly accepted the repair with `Advance LaserX` in the designated primary operations chat on 2026-08-08.
 
 ## Active M15 G1 task — historical completion marker
 
