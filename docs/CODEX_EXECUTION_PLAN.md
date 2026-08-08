@@ -22,19 +22,9 @@ Every other chat is read-only for those mutations.
 
 There is no automatic routine merge.
 
-## Current hold — G3 post-merge repair PR #74
+## Active M15 task
 
-PR #73 was accepted and merged, then a late P1 review finding proved that imported **Set physical details** could auto-advance when choosing a physical role populated default material and thickness.
-
-PR #74 fixes that defect and is now READY at reviewed head `66dab265b3073145e48667639b0a303691733f7b` with Repository Guard and Canonical Verification, including packaged Windows verification, green.
-
-Codex must **not begin G4 while PR #74 remains unmerged**. If `Continue LaserX` is received during this hold, re-read current truth and stop `BLOCKED` with the repair acceptance hold as the blocker. Do not modify G4 code, do not create a G4 branch, and do not merge PR #74.
-
-The next valid owner action is `Advance LaserX` in the primary operations chat. That command accepts/merges PR #74 and restores G4 as active; it does not advance to G5.
-
-## Held next task — M15 G4
-
-After PR #74 is explicitly accepted and merged, implement **G4 — grouped repair decisions and Fix safe problems workflow** from then-current `main`.
+Implement **G4 — grouped repair decisions and Fix safe problems workflow** from current `main`.
 
 Required scope:
 
@@ -52,6 +42,10 @@ Required scope:
 - open one focused draft PR and stop at `AWAITING_REVIEW`.
 
 Do not begin G5 or G6, broad geometry-engine work, speculative safe classifications, new AI capability, material expansion, process/export profiles, licensing, public beta, CAD/CAM, machine control, or native DWG support.
+
+## G3 post-merge repair completion record
+
+PR #74 repaired the late G3 P1 at reviewed head `66dab265b3073145e48667639b0a303691733f7b` and squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`. Repository Guard and Canonical Verification, including packaged Windows verification, passed on the reviewed head. The owner explicitly accepted the repair with `Advance LaserX` in the designated primary operations chat on 2026-08-08. The repair keeps imported **Set physical details** open until explicit confirmation after role/material/thickness review.
 
 ## Active M15 G1 task — historical completion marker
 
