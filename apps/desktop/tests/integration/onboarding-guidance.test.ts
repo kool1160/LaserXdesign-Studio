@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -113,6 +113,132 @@ afterEach(async () => {
 });
 
 describe("desktop onboarding guidance", () => {
+  it("persists learning preferences without changing project or manufacturing truth", async () => {
+    const { userDataPath, projectPath } = await setup();
+    const first = makeController(userDataPath, projectPath);
+    await first.initialize();
+    const beforeProject = JSON.stringify(first.state.project);
+    const beforeHistory = structuredClone(first.state.editor.history);
+    const beforeAnalysis = structuredClone(first.state.analysis);
+    const beforePreview = structuredClone(first.state.physicalPreview);
+
+    expect(first.state.onboarding.preferences).toMatchObject({
+      schemaVersion: 2,
+      learnModeEnabled: false,
+      completedLearnTopics: [],
+    });
+    expect(
+      await first.onboardingAction({ type: "set-learn-mode", enabled: true }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await first.onboardingAction({
+        type: "complete-learn-topic",
+        topic: "repair-groups",
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(JSON.stringify(first.state.project)).toBe(beforeProject);
+    expect(first.state.editor.history).toEqual(beforeHistory);
+    expect(first.state.analysis).toEqual(beforeAnalysis);
+    expect(first.state.physicalPreview).toEqual(beforePreview);
+    expect(first.state.onboarding.preferences).toMatchObject({
+      learnModeEnabled: true,
+      completedLearnTopics: ["repair-groups"],
+      completedGoals: [],
+    });
+    first.stop();
+
+    const second = makeController(userDataPath, projectPath);
+    await second.initialize();
+    expect(second.state.onboarding.preferences).toMatchObject({
+      schemaVersion: 2,
+      learnModeEnabled: true,
+      completedLearnTopics: ["repair-groups"],
+    });
+    const beforeReopenProject = JSON.stringify(second.state.project);
+    await second.onboardingAction({
+      type: "reopen-learn-topic",
+      topic: "repair-groups",
+    });
+    expect(second.state.onboarding.preferences.completedLearnTopics).toEqual([]);
+    expect(JSON.stringify(second.state.project)).toBe(beforeReopenProject);
+  });
+
+  it("migrates shipped v1 preferences without unexpectedly enabling Learn Mode", async () => {
+    const { userDataPath, projectPath } = await setup();
+    await mkdir(userDataPath, { recursive: true });
+    await writeFile(
+      join(userDataPath, "onboarding-preferences.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        completedGoals: ["create-first-sign"],
+        dismissed: true,
+        activeWorkflow: null,
+      }),
+      "utf8",
+    );
+
+    const controller = makeController(userDataPath, projectPath);
+    await controller.initialize();
+    expect(controller.state.onboarding.preferences).toEqual({
+      schemaVersion: 2,
+      completedGoals: ["create-first-sign"],
+      dismissed: true,
+      activeWorkflow: null,
+      learnModeEnabled: false,
+      completedLearnTopics: [],
+    });
+
+    await controller.onboardingAction({ type: "set-learn-mode", enabled: true });
+    const persisted = JSON.parse(
+      await readFile(join(userDataPath, "onboarding-preferences.json"), "utf8"),
+    ) as { schemaVersion: number; learnModeEnabled: boolean };
+    expect(persisted).toMatchObject({ schemaVersion: 2, learnModeEnabled: true });
+  });
+
+  it("replays a skipped tutorial with a fresh token against the current project", async () => {
+    const { userDataPath, projectPath } = await setup();
+    const controller = makeController(userDataPath, projectPath);
+    await controller.initialize();
+    const projectId = controller.state.project.id;
+    const beforeProject = JSON.stringify(controller.state.project);
+
+    await controller.onboardingAction({
+      type: "start",
+      goal: "create-first-sign",
+    });
+    const firstRun = activeIdentity(controller);
+    await controller.onboardingAction({
+      type: "exit",
+      runToken: firstRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow.status).toBe("dismissed");
+    expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
+
+    await controller.onboardingAction({
+      type: "replay",
+      goal: "create-first-sign",
+      expectedRunToken: firstRun.runToken,
+    });
+    const replay = activeIdentity(controller);
+    expect(replay.runToken).not.toBe(firstRun.runToken);
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "choose-size-material",
+    );
+    expect(
+      controller.state.onboarding.preferences.activeWorkflow?.projectBinding.projectId,
+    ).toBe(projectId);
+    expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
+    expect(JSON.stringify(controller.state.project)).toBe(beforeProject);
+
+    await controller.onboardingAction({
+      type: "replay",
+      goal: "create-first-sign",
+      expectedRunToken: firstRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow.runToken).toBe(replay.runToken);
+  });
+
   it("persists and resumes an exact stable checkpoint with a fresh run token", async () => {
     const { userDataPath, projectPath } = await setup();
     const first = makeController(userDataPath, projectPath);

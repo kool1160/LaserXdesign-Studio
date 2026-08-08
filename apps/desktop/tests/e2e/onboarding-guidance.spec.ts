@@ -92,6 +92,114 @@ test("clean first launch offers exactly three goals and a global exit", async ()
   }
 });
 
+test("packaged Learn Mode is persistent, contextual, non-mutating, and replays with a fresh token", async () => {
+  const first = await launchPackaged();
+  try {
+    const page = await first.electronApp.firstWindow();
+    const before = await page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        project: state.project,
+        history: state.editor.history,
+        analysis: state.analysis,
+        physicalPreview: state.physicalPreview,
+        production: state.production,
+      };
+    });
+
+    await expect(page.getByTestId("learn-help")).toBeVisible();
+    await expect(page.getByTestId("learn-note-physical-preview")).toHaveCount(0);
+    await expect(page.getByTestId("learn-note-export-output")).toHaveCount(0);
+    await page.getByTestId("learn-help").click();
+    await expect(page.getByTestId("learn-center")).toBeVisible();
+    await expect(page.locator('[data-testid^="learn-topic-"]')).toHaveCount(7);
+    await page.getByTestId("learn-mode-toggle").check();
+    await expect(page.getByTestId("learn-note-physical-preview")).toBeVisible();
+    await expect(page.getByTestId("learn-note-export-output")).toBeVisible();
+    await page.getByTestId("learn-mode-toggle").uncheck();
+    await expect(page.getByTestId("learn-note-physical-preview")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(async () => {
+      const state = await window.laserx.getState();
+      return {
+        learnModeEnabled: state.onboarding.preferences.learnModeEnabled,
+        project: state.project,
+        history: state.editor.history,
+        analysis: state.analysis,
+        physicalPreview: state.physicalPreview,
+        production: state.production,
+      };
+    })).toEqual({ learnModeEnabled: false, ...before });
+    await kill(first);
+
+    const second = await launchPackaged(first.directory);
+    try {
+      const resumedPage = await second.electronApp.firstWindow();
+      await expect(resumedPage.getByTestId("learn-help")).toBeVisible();
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(resumedPage.getByTestId("learn-mode-toggle")).not.toBeChecked();
+      await resumedPage.getByTestId("learn-mode-toggle").check();
+      await expect(resumedPage.getByTestId("learn-note-physical-preview")).toBeVisible();
+
+      await resumedPage.getByTestId("learn-topic-physical-layers").click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toBeVisible();
+      await resumedPage.getByTestId("learn-note-physical-layers").getByRole("button", { name: "Got it" }).click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toHaveCount(0);
+      await resumedPage.getByTestId("learn-help").click();
+      await expect(
+        resumedPage.getByTestId("learn-topic-physical-layers"),
+      ).toContainText("Learned · show again");
+      await resumedPage.getByTestId("learn-topic-physical-layers").click();
+      await expect(resumedPage.getByTestId("learn-note-physical-layers")).toBeVisible();
+
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-goal-create-first-sign").click();
+      const firstRunToken = await resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.runToken,
+      );
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-skip-tutorial").click();
+      await expect(resumedPage.getByTestId("guidance-shell")).toHaveCount(0);
+      await expect(
+        resumedPage.getByTestId("learn-goal-create-first-sign"),
+      ).toHaveText("Replay");
+      await resumedPage.getByTestId("learn-goal-create-first-sign").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.status,
+      )).toBe("active");
+      const replayed = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          token: state.onboarding.workflow.runToken,
+          step: state.onboarding.workflow.currentStepId,
+          completedGoals: state.onboarding.preferences.completedGoals,
+          objectCount: state.project.document.objects.length,
+          undoDepth: state.editor.history.undoDepth,
+          analysis: state.analysis.cutability,
+          preview: state.physicalPreview.assembly,
+          exported: state.production.exportSummary,
+        };
+      });
+      expect(replayed).toEqual({
+        token: expect.any(String),
+        step: "choose-size-material",
+        completedGoals: [],
+        objectCount: 0,
+        undoDepth: 0,
+        analysis: null,
+        preview: null,
+        exported: null,
+      });
+      expect(replayed.token).not.toBe(firstRunToken);
+      await resumedPage.getByTestId("guidance-exit").click();
+    } finally {
+      await killAndRemove(second);
+    }
+  } catch (error) {
+    await killAndRemove(first);
+    throw error;
+  }
+});
+
 test("packaged Create My First Sign follows real outcomes through whole-design analysis, rendered 3D, save, and SVG export", async () => {
   const directory = await mkdtemp(join(tmpdir(), "laserx-first-sign-e2e-"));
   const exportPath = join(directory, "my-first-sign.svg");

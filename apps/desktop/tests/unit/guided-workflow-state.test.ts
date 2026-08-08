@@ -1748,6 +1748,7 @@ describe("guided workflow -- exported initial values are frozen", () => {
   it("initialOnboardingPreferences is frozen at the top level and in its owned list", () => {
     expect(Object.isFrozen(initialOnboardingPreferences)).toBe(true);
     expect(Object.isFrozen(initialOnboardingPreferences.completedGoals)).toBe(true);
+    expect(Object.isFrozen(initialOnboardingPreferences.completedLearnTopics)).toBe(true);
 
     expect(() => {
       (initialOnboardingPreferences as { dismissed: boolean }).dismissed = true;
@@ -1755,8 +1756,14 @@ describe("guided workflow -- exported initial values are frozen", () => {
     expect(() =>
       (initialOnboardingPreferences.completedGoals as GuidedGoal[]).push("create-first-sign"),
     ).toThrow();
+    expect(() =>
+      (initialOnboardingPreferences.completedLearnTopics as string[]).push("physical-layers"),
+    ).toThrow();
 
+    expect(initialOnboardingPreferences.schemaVersion).toBe(2);
     expect(initialOnboardingPreferences.dismissed).toBe(false);
     expect(initialOnboardingPreferences.completedGoals).toEqual([]);
+    expect(initialOnboardingPreferences.learnModeEnabled).toBe(false);
+    expect(initialOnboardingPreferences.completedLearnTopics).toEqual([]);
   });
 });

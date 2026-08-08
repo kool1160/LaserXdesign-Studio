@@ -93,6 +93,15 @@ const guidedGoalSchema = z.enum([
   "import-own-design",
   "describe-with-ai",
 ]);
+const learnTopicSchema = z.enum([
+  "physical-layers",
+  "material-thickness",
+  "cutability-findings",
+  "repair-groups",
+  "bridge-islands",
+  "physical-preview",
+  "export-output",
+]);
 const guidedWorkflowStatusSchema = z.enum([
   "idle",
   "active",
@@ -121,10 +130,12 @@ const onboardingWorkflowSnapshotSchema = z.strictObject({
   }),
 });
 const onboardingPreferencesSchema = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   completedGoals: z.array(guidedGoalSchema),
   dismissed: z.boolean(),
   activeWorkflow: onboardingWorkflowSnapshotSchema.nullable(),
+  learnModeEnabled: z.boolean(),
+  completedLearnTopics: z.array(learnTopicSchema),
 });
 const manufacturingProcessSchema = z.enum(["laser", "plasma", "waterjet", "router"]);
 const objectIdsSchema = z.array(z.uuid()).min(1);
@@ -892,6 +903,14 @@ const resolutionFindingCountsSchema = z.strictObject({
 export const onboardingActionRequestSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("start"), goal: guidedGoalSchema }),
   z.strictObject({ type: z.literal("resume") }),
+  z.strictObject({
+    type: z.literal("replay"),
+    goal: guidedGoalSchema,
+    expectedRunToken: z.string().min(1),
+  }),
+  z.strictObject({ type: z.literal("set-learn-mode"), enabled: z.boolean() }),
+  z.strictObject({ type: z.literal("complete-learn-topic"), topic: learnTopicSchema }),
+  z.strictObject({ type: z.literal("reopen-learn-topic"), topic: learnTopicSchema }),
   z.strictObject({ type: z.literal("back"), ...guidedStepIdentitySchema }),
   z.strictObject({ type: z.literal("skip"), ...guidedStepIdentitySchema }),
   z.strictObject({ type: z.literal("exit"), runToken: z.string().min(1) }),

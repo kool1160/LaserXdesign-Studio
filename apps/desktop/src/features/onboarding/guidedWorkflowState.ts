@@ -23,6 +23,22 @@
 export type GuidedGoal = "create-first-sign" | "import-own-design" | "describe-with-ai";
 
 /**
+ * Stable identities for the contextual explanations introduced in M15 G5.
+ *
+ * These are preference/progress keys only. The explanatory copy and its UI
+ * placement stay in the presentation layer, while this pure module continues
+ * to own no project or editor data.
+ */
+export type LearnTopic =
+  | "physical-layers"
+  | "material-thickness"
+  | "cutability-findings"
+  | "repair-groups"
+  | "bridge-islands"
+  | "physical-preview"
+  | "export-output";
+
+/**
  * `canceled` is deliberately absent: `cancel` restores the pre-guided state,
  * which is exactly `idle`. A status the reducer can never produce would be a
  * state the rest of the system must handle but can never observe.
@@ -206,28 +222,33 @@ export interface OnboardingWorkflowSnapshot {
 }
 
 /**
- * Shape locked by ADR 0027 for `userData` persistence. The store
- * implementation, its IPC surface, and its wiring are G1 work; only the shape
- * is fixed here so G1 builds against an already-agreed contract.
+ * Version 2 adds G5 learning preferences without mixing learning progress into
+ * manufacturing or guided-checkpoint truth. The persistence adapter migrates
+ * the shipped version-1 shape.
  */
 export interface OnboardingPreferences {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly completedGoals: readonly GuidedGoal[];
   readonly dismissed: boolean;
   readonly activeWorkflow: OnboardingWorkflowSnapshot | null;
+  readonly learnModeEnabled: boolean;
+  readonly completedLearnTopics: readonly LearnTopic[];
 }
 
 /** Freezes a preferences object and its owned list. See `freezeState`. */
 function freezePreferences(preferences: OnboardingPreferences): OnboardingPreferences {
   Object.freeze(preferences.completedGoals);
+  Object.freeze(preferences.completedLearnTopics);
   return Object.freeze(preferences);
 }
 
 export const initialOnboardingPreferences: OnboardingPreferences = freezePreferences({
-  schemaVersion: 1,
+  schemaVersion: 2,
   completedGoals: [],
   dismissed: false,
   activeWorkflow: null,
+  learnModeEnabled: false,
+  completedLearnTopics: [],
 });
 
 /**
