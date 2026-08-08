@@ -12,6 +12,8 @@ import {
   type DesktopDialogs,
 } from "../../electron/desktop-controller.js";
 import type { CutabilityWorkerPort } from "../../electron/cutability-worker-service.js";
+import type { PhysicalPreviewWorkerPort } from "../../electron/physical-preview-worker-service.js";
+import { runPhysicalPreviewTask } from "../../../../packages/physical-preview-3d/src/task.js";
 
 const directories: string[] = [];
 const controllers: DesktopController[] = [];
@@ -24,11 +26,15 @@ const cutabilityWorker: CutabilityWorkerPort = {
       }),
     ),
 };
+const physicalPreviewWorker: PhysicalPreviewWorkerPort = {
+  run: (request) => Promise.resolve(runPhysicalPreviewTask(request)),
+};
 
 async function setup(): Promise<{
   directory: string;
   userDataPath: string;
   projectPath: string;
+  exportPath: string;
 }> {
   const directory = await mkdtemp(join(tmpdir(), "laserx-onboarding-"));
   directories.push(directory);
@@ -36,16 +42,20 @@ async function setup(): Promise<{
     directory,
     userDataPath: join(directory, "user-data"),
     projectPath: join(directory, "guided.laserx"),
+    exportPath: join(directory, "guided.svg"),
   };
 }
 
 function makeController(
   userDataPath: string,
   projectPath: string,
+  exportPath = join(userDataPath, "guided.svg"),
+  previewWorker: PhysicalPreviewWorkerPort = physicalPreviewWorker,
 ): DesktopController {
   const dialogs: DesktopDialogs = {
     chooseOpenProject: () => Promise.resolve(projectPath),
     chooseSaveProject: () => Promise.resolve(projectPath),
+    chooseExportVector: () => Promise.resolve(exportPath),
     confirmUnsavedChanges: () => Promise.resolve("discard"),
   };
   const controller = new DesktopController({
@@ -53,9 +63,30 @@ function makeController(
     dialogs,
     onStateChanged: () => undefined,
     cutabilityWorker,
+    physicalPreviewWorker: previewWorker,
   });
   controllers.push(controller);
   return controller;
+}
+
+async function assignActiveLayerAsPhysical(
+  controller: DesktopController,
+): Promise<void> {
+  const layerId = controller.state.project.document.activeLayerId;
+  const result = await controller.editorAction({
+    type: "layer.set-manufacturing",
+    layerId,
+    manufacturing: {
+      role: "face",
+      material: "mild-steel",
+      thicknessMm: 3,
+      process: "laser",
+      notes: "",
+      registrationGroup: null,
+      registrationHoleIds: [],
+    },
+  });
+  expect(result.ok).toBe(true);
 }
 
 function activeIdentity(controller: DesktopController): {
@@ -89,16 +120,11 @@ describe("desktop onboarding guidance", () => {
     await first.saveProjectAs();
     await first.onboardingAction({ type: "start", goal: "create-first-sign" });
     const started = activeIdentity(first);
-    await first.onboardingAction({
-      type: "advance",
-      ...started,
-      completion: { kind: "step" },
-    });
-    expect(first.state.onboarding.workflow.currentStepId).toBe("add-content");
     await first.createDocument({ width: 20, height: 10, inputUnit: "inches" });
-    await first.editorAction({ type: "object.create", objectType: "rectangle" });
+    await assignActiveLayerAsPhysical(first);
+    expect(first.state.onboarding.workflow.currentStepId).toBe("add-content");
     await first.saveProject();
-    expect(first.state.project.document.objects).toHaveLength(1);
+    expect(first.state.project.document.objects).toHaveLength(0);
     first.stop();
 
     const second = makeController(userDataPath, projectPath);
@@ -135,14 +161,15 @@ describe("desktop onboarding guidance", () => {
     await first.initialize();
     await first.saveProjectAs();
     await first.onboardingAction({ type: "start", goal: "create-first-sign" });
-    for (let index = 0; index < 3; index += 1) {
-      await first.onboardingAction({
-        type: "advance",
-        ...activeIdentity(first),
-        completion: { kind: "step" },
-      });
-    }
+    await first.createDocument({ width: 200, height: 100, inputUnit: "millimeters" });
+    await assignActiveLayerAsPhysical(first);
+    await first.editorAction({ type: "object.create", objectType: "line" });
+    await first.runCutabilityAnalysis(
+      "c0000000-0000-4000-8000-000000000010",
+      [],
+    );
     expect(first.state.onboarding.workflow.currentStepId).toBe("resolve-findings");
+    await first.saveProject();
     first.stop();
 
     const second = makeController(userDataPath, projectPath);
@@ -180,13 +207,9 @@ describe("desktop onboarding guidance", () => {
     const controller = makeController(userDataPath, projectPath);
     await controller.initialize();
     await controller.onboardingAction({ type: "start", goal: "create-first-sign" });
-    for (let index = 0; index < 2; index += 1) {
-      await controller.onboardingAction({
-        type: "advance",
-        ...activeIdentity(controller),
-        completion: { kind: "step" },
-      });
-    }
+    await controller.createDocument({ width: 200, height: 100, inputUnit: "millimeters" });
+    await assignActiveLayerAsPhysical(controller);
+    await controller.editorAction({ type: "object.create", objectType: "rectangle" });
     expect(controller.state.onboarding.workflow.currentStepId).toBe(
       "analyze-cutability",
     );
@@ -199,15 +222,246 @@ describe("desktop onboarding guidance", () => {
       errorCount: 0,
       warningCount: 0,
     });
-    await controller.onboardingAction({
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "physical-preview",
+    );
+  });
+
+  it("completes Create My First Sign only from real whole-design, preview, save, and export outcomes", async () => {
+    const { userDataPath, projectPath, exportPath } = await setup();
+    const controller = makeController(userDataPath, projectPath, exportPath);
+    await controller.initialize();
+    await controller.onboardingAction({ type: "start", goal: "create-first-sign" });
+
+    const beforeRejectedAdvance = fingerprintGeometryDocument(
+      controller.state.project.document,
+    );
+    const rejectedSetupAdvance = await controller.onboardingAction({
       type: "advance",
       ...activeIdentity(controller),
       completion: { kind: "step" },
     });
+    expect(rejectedSetupAdvance.ok).toBe(false);
+    if (rejectedSetupAdvance.ok) throw new Error("Expected setup rejection.");
+    expect(rejectedSetupAdvance.error).toContain("physical layer");
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "choose-size-material",
+    );
+    expect(
+      fingerprintGeometryDocument(controller.state.project.document),
+    ).toBe(beforeRejectedAdvance);
 
+    await controller.createDocument({
+      width: 240,
+      height: 120,
+      inputUnit: "millimeters",
+    });
+    await assignActiveLayerAsPhysical(controller);
+    expect(controller.state.onboarding.workflow.currentStepId).toBe("add-content");
+
+    await controller.editorAction({ type: "object.create", objectType: "rectangle" });
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "analyze-cutability",
+    );
+    const objectId = controller.state.project.document.objects[0]?.id;
+    expect(objectId).toBeDefined();
+
+    await controller.runCutabilityAnalysis(
+      "c0000000-0000-4000-8000-000000000020",
+      [objectId as string],
+    );
+    expect(controller.state.analysis.scope?.kind).toBe("selection");
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "analyze-cutability",
+    );
+    const rejectedSelectionAdvance = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: { kind: "step" },
+    });
+    expect(rejectedSelectionAdvance.ok).toBe(false);
+    if (rejectedSelectionAdvance.ok) throw new Error("Expected selection rejection.");
+    expect(rejectedSelectionAdvance.error).toContain("Analyze all");
+
+    await controller.runCutabilityAnalysis(
+      "c0000000-0000-4000-8000-000000000021",
+      [],
+    );
+    expect(controller.state.analysis.scope?.kind).toBe("whole-design");
     expect(controller.state.onboarding.workflow.currentStepId).toBe(
       "physical-preview",
     );
+
+    const rejectedGenericPreviewAdvance = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: { kind: "step" },
+    });
+    expect(rejectedGenericPreviewAdvance.ok).toBe(false);
+    if (rejectedGenericPreviewAdvance.ok) {
+      throw new Error("Expected generic preview rejection.");
+    }
+    expect(rejectedGenericPreviewAdvance.error).toContain("required 3D preview");
+
+    const previewBuild = await controller.runPhysicalPreview(
+      "c0000000-0000-4000-8000-000000000022",
+    );
+    expect(
+      previewBuild.ok,
+      previewBuild.ok ? undefined : previewBuild.error,
+    ).toBe(true);
+    const assembly = controller.state.physicalPreview.assembly;
+    expect(assembly).toMatchObject({ status: "complete" });
+    const previewResult = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: {
+        kind: "physical-preview",
+        result: "rendered",
+        assemblyFingerprint: assembly?.fingerprint as string,
+      },
+    });
+    expect(previewResult.ok).toBe(true);
+    expect(controller.state.onboarding.workflow.currentStepId).toBe("save-export");
+
+    const rejectedFinalAdvance = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: { kind: "step" },
+    });
+    expect(rejectedFinalAdvance.ok).toBe(false);
+    if (rejectedFinalAdvance.ok) throw new Error("Expected export rejection.");
+    expect(rejectedFinalAdvance.error).toContain("Export SVG or DXF");
+
+    await controller.editorAction({ type: "history.undo" });
+    expect(controller.state.project.document.objects).toHaveLength(0);
+    const staleExport = await controller.exportVector({ format: "svg" });
+    expect(staleExport.ok).toBe(false);
+    if (staleExport.ok) throw new Error("Expected stale-design export rejection.");
+    expect(staleExport.error).toContain("design changed");
+    await expect(readFile(exportPath, "utf8")).rejects.toThrow();
+
+    await controller.editorAction({ type: "history.redo" });
+    expect(controller.state.project.document.objects).toHaveLength(1);
+
+    expect((await controller.saveProjectAs()).ok).toBe(true);
+    expect(JSON.parse(await readFile(projectPath, "utf8"))).toMatchObject({
+      document: { objects: [{ type: "rectangle" }] },
+    });
+    expect(controller.state.onboarding.workflow.currentStepId).toBe("save-export");
+
+    expect(await controller.exportVector({ format: "svg" })).toMatchObject({ ok: true });
+    expect(await readFile(exportPath, "utf8")).toContain("<svg");
+    expect(controller.state.onboarding.workflow.status).toBe("completed");
+    expect(controller.state.onboarding.preferences.completedGoals).toContain(
+      "create-first-sign",
+    );
+    expect(controller.state.onboarding.preferences.activeWorkflow).toBeNull();
+  });
+
+  it("allows the required preview checkpoint to use only a current explicit build-failure route", async () => {
+    const { userDataPath, projectPath, exportPath } = await setup();
+    const failedWorker: PhysicalPreviewWorkerPort = {
+      run: () => Promise.reject(new Error("Simulated 3D worker failure.")),
+    };
+    const controller = makeController(
+      userDataPath,
+      projectPath,
+      exportPath,
+      failedWorker,
+    );
+    await controller.initialize();
+    await controller.onboardingAction({ type: "start", goal: "create-first-sign" });
+    await controller.createDocument({ width: 200, height: 100, inputUnit: "millimeters" });
+    await assignActiveLayerAsPhysical(controller);
+    await controller.editorAction({ type: "object.create", objectType: "rectangle" });
+    await controller.runCutabilityAnalysis(
+      "c0000000-0000-4000-8000-000000000030",
+      [],
+    );
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "physical-preview",
+    );
+
+    const prematureAcknowledgement = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: {
+        kind: "physical-preview",
+        result: "unavailable",
+        reason: "build-failed",
+        assemblyFingerprint: null,
+      },
+    });
+    expect(prematureAcknowledgement).toMatchObject({ ok: false });
+    expect(controller.state.onboarding.workflow.currentStepId).toBe(
+      "physical-preview",
+    );
+
+    const buildResult = await controller.runPhysicalPreview(
+      "c0000000-0000-4000-8000-000000000031",
+    );
+    expect(buildResult).toMatchObject({
+      ok: false,
+      error: "Simulated 3D worker failure.",
+    });
+    const acknowledged = await controller.onboardingAction({
+      type: "advance",
+      ...activeIdentity(controller),
+      completion: {
+        kind: "physical-preview",
+        result: "unavailable",
+        reason: "build-failed",
+        assemblyFingerprint: null,
+      },
+    });
+    expect(acknowledged.ok).toBe(true);
+    expect(controller.state.onboarding.workflow.currentStepId).toBe("save-export");
+  });
+
+  it("resumes the exact saved export checkpoint with bound analysis and preview evidence", async () => {
+    const { userDataPath, projectPath, exportPath } = await setup();
+    const first = makeController(userDataPath, projectPath, exportPath);
+    await first.initialize();
+    await first.onboardingAction({ type: "start", goal: "create-first-sign" });
+    await first.createDocument({ width: 200, height: 100, inputUnit: "millimeters" });
+    await assignActiveLayerAsPhysical(first);
+    await first.editorAction({ type: "object.create", objectType: "rectangle" });
+    await first.runCutabilityAnalysis(
+      "c0000000-0000-4000-8000-000000000040",
+      [],
+    );
+    await first.runPhysicalPreview(
+      "c0000000-0000-4000-8000-000000000041",
+    );
+    const assemblyFingerprint =
+      first.state.physicalPreview.assembly?.fingerprint;
+    expect(assemblyFingerprint).toBeDefined();
+    await first.onboardingAction({
+      type: "advance",
+      ...activeIdentity(first),
+      completion: {
+        kind: "physical-preview",
+        result: "rendered",
+        assemblyFingerprint: assemblyFingerprint as string,
+      },
+    });
+    expect(first.state.onboarding.workflow.currentStepId).toBe("save-export");
+    await first.saveProjectAs();
+    first.stop();
+
+    const second = makeController(userDataPath, projectPath, exportPath);
+    await second.initialize();
+    await second.openProject();
+    expect(second.state.onboarding.resumeEligibility).toBe("available");
+    await second.onboardingAction({ type: "resume" });
+    expect(second.state.onboarding.workflow.currentStepId).toBe("save-export");
+    expect(second.state.analysis.cutability).toBeNull();
+    expect(second.state.physicalPreview.assembly).toBeNull();
+
+    expect(await second.exportVector({ format: "svg" })).toMatchObject({ ok: true });
+    expect(await readFile(exportPath, "utf8")).toContain("<svg");
+    expect(second.state.onboarding.workflow.status).toBe("completed");
   });
 
   it("rejects a stale snapshot without mutating the open document", async () => {

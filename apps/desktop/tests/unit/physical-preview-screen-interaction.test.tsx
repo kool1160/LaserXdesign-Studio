@@ -186,4 +186,22 @@ describe("PhysicalPreviewScreen keyboard and layer-visibility interaction", () =
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("offers an explicit guided unavailable outcome when WebGL cannot render", () => {
+    const onUnavailable = vi.fn();
+    render(
+      <PhysicalPreviewScreen
+        assembly={twoLayerAssembly()}
+        onClose={() => undefined}
+        onUnavailable={onUnavailable}
+        {...captureProps}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByTestId("physical-preview-acknowledge-webgl-unavailable"),
+    );
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    expect(onUnavailable).toHaveBeenCalledWith("webgl-unavailable");
+  });
 });

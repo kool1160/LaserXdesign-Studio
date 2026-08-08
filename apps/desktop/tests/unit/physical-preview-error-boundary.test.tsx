@@ -63,11 +63,15 @@ describe("PhysicalPreviewErrorBoundary", () => {
     }
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const onClose = vi.fn();
+    const onUnavailable = vi.fn();
 
     render(
       <div>
         <div data-testid="sibling-app-content">Still editing in 2D</div>
-        <PhysicalPreviewErrorBoundary onClose={onClose}>
+        <PhysicalPreviewErrorBoundary
+          onClose={onClose}
+          onUnavailable={onUnavailable}
+        >
           <ThrowingScene />
         </PhysicalPreviewErrorBoundary>
       </div>,
@@ -75,6 +79,9 @@ describe("PhysicalPreviewErrorBoundary", () => {
 
     expect(screen.queryByTestId("physical-preview-crashed")).not.toBeNull();
     expect(screen.queryByTestId("sibling-app-content")).not.toBeNull();
+    screen.getByTestId("physical-preview-acknowledge-crash").click();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
 
     consoleError.mockRestore();
   });

@@ -33,6 +33,31 @@ describe("typed IPC validation", () => {
     expect(
       onboardingActionRequestSchema.safeParse({
         type: "advance",
+        expectedStepId: "physical-preview",
+        runToken: "run-1",
+        completion: {
+          kind: "physical-preview",
+          result: "rendered",
+          assemblyFingerprint: "assembly-1",
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "advance",
+        expectedStepId: "physical-preview",
+        runToken: "run-1",
+        completion: {
+          kind: "physical-preview",
+          result: "unavailable",
+          reason: "invented-failure",
+          assemblyFingerprint: null,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "advance",
         expectedStepId: "resolve-findings",
         runToken: "run-1",
         completion: {
