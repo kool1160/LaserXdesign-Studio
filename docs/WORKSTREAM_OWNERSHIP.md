@@ -12,10 +12,10 @@ Claude, Anthropic, Fable, and other external paid implementation, repair, review
 
 - Milestone: **M15 — Guided Onboarding, Workflow-First UI, and Learn Mode**
 - Active issue: **#45**
-- Active slice: **G4 — grouped repair decisions and Fix safe problems workflow**
-- G5 full Learn Mode and G6 owner usability validation remain held.
+- Active slice: **G5 — Learn Mode, replay, recovery, and contextual explanations**
+- G6 packaged accessibility and owner-observed first-session validation remains held.
 
-PR #74 completed the late G3 physical-confirmation repair at reviewed head `66dab265b3073145e48667639b0a303691733f7b` and squash merge `df0d3463470afb7f69724ca808c25df0b8317d87`. Repository Guard and Canonical Verification, including packaged Windows verification, were green. The owner explicitly accepted the repair on 2026-08-08.
+G4 was accepted and merged through PR #75 at reviewed head `fb6caaeddb4117f308685314082102e65e231989` and squash merge `daf48515fa54e1dfd3276173d84d597b7dd14492`. Repository Guard and Canonical Verification, including packaged Windows verification, were green; all review threads were resolved. The owner explicitly advanced on 2026-08-08.
 
 ## Owner authority
 
@@ -31,9 +31,9 @@ The primary operations chat owns planning, durable decisions, exact-head `Check 
 
 Codex may implement and repair only the bounded task authorized by current repository truth. It never merges or advances.
 
-For active G4, Codex must build grouped repair decisions and preview-first **Fix safe problems** on top of authoritative geometry/history/cutability and the accepted guided resolution checkpoint. Safe eligibility is limited to the approved deterministic classes; ambiguous or risky changes remain user decisions.
+For active G5, Codex must add the permanent optional Learn Mode and replay/recovery behavior on top of the existing guided-workflow system. Teaching must attach to real controls, explain **what** and **why** in normal shop language, and remain separate from authoritative manufacturing/document truth.
 
-Codex must preserve all G1–G3 security, persistence, resume, project-replacement, Save/Export, undo/history, and Exit-guidance guarantees.
+Codex must preserve all G1–G4 security, persistence, resume, project-replacement, Save/Export, undo/history, repair-preview, and Exit-guidance guarantees. Replay must use fresh run identity and may not revive stale transient UI state or silently mutate the current project.
 
 ## Removed external routes
 
@@ -52,4 +52,4 @@ There is no automatic routine merge.
 
 ## Explicit exclusions
 
-No later milestone, broad geometry rewrite, CAM, machine control, material expansion, licensing, public beta, native DWG, or speculative safe-repair class becomes active merely because an agent has capacity or a branch exists.
+G6, later milestones, owner-observed usability acceptance, broad material/process expansion, new AI capability, CAD/CAM, machine control, licensing, public beta, native DWG, or unrelated scope does not become active merely because an agent has capacity or a branch exists.
