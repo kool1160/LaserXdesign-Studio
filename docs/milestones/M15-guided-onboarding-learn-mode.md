@@ -6,9 +6,9 @@
 
 Active issue: #45.
 
-Current slice: **G3 — vector import and raster trace contextual guidance**.
+Current slice: **G4 — grouped repair decisions and Fix safe problems workflow**.
 
-G0 is accepted through PR #67, the governance/CI prerequisite through PR #70, G1 through PR #71, and G2 through PR #72 at squash merge `c9a834a811db831207da6ca695ee8c46d6a88ca4`.
+G0 is accepted through PR #67, the governance/CI prerequisite through PR #70, G1 through PR #71, G2 through PR #72, and G3 through PR #73 at squash merge `f2a54d732ec9ee661c921d421da08e2b83c01b14`.
 
 ## User-visible outcome
 
@@ -38,7 +38,15 @@ Guided steps highlight the exact control, explain what it does and why it matter
 
 ### Guided repair and broken-file recovery
 
-Vector import and manufacturing review must not dump hundreds or thousands of raw findings into the main interface. G4 owns grouped repair categories and **Fix safe problems**; G3 must not pre-implement them.
+Vector import and manufacturing review must not dump hundreds or thousands of raw findings into the main interface. LaserX groups current repair decisions into:
+
+1. **Safe to fix**
+2. **Suggested fix**
+3. **Needs your decision**
+
+The main repair workflow includes a prominent **Fix safe problems** action that previews deterministic eligible repairs, leaves authoritative geometry unchanged until accepted, applies accepted batch repairs as one undoable transaction whenever technically practical, reports fixed/skipped/remaining counts, preserves reject/undo, re-runs analysis, and never claims automated repair proves cut readiness or physical safety.
+
+Safe eligibility requires deterministic rules and regression tests. Initial safe classes are limited to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures only within an explicit approved tolerance. Any additional class requires evidence before being labeled safe.
 
 ### Learn Mode and recovery
 
@@ -53,8 +61,8 @@ Vector import and manufacturing review must not dump hundreds or thousands of ra
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted.
 2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted.
 3. **G2 — Create My First Sign guided vertical slice** — merged and accepted.
-4. **G3 — vector import and raster trace contextual guidance** — **active**.
-5. **G4 — grouped repair decisions and Fix safe problems workflow** — held.
+4. **G3 — vector import and raster trace contextual guidance** — merged and accepted.
+5. **G4 — grouped repair decisions and Fix safe problems workflow** — **active**.
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held.
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held.
 
@@ -89,58 +97,77 @@ PR #72 completed **Create My First Sign** as a truthful deterministic vertical s
 - Exact-head Repository Guard: success
 - Exact-head Canonical Verification: success, including packaged Windows verification
 - Result: accepted after READY review and explicit owner `Advance LaserX` on 2026-08-07
-- Proven outcomes: real size/material, physical-layer content, whole-design cutability evidence, ADR 0027 resolution rules, required rendered/unavailable physical 3D route, Save/Save As, and successful SVG/DXF export.
+
+### G3
+
+PR #73 completed **Import My Own Design** as a source-aware guided workflow over the existing SVG/DXF and PNG/JPEG systems.
+
+- Reviewed head: `4df406869bf23c175069b9b93dda9d97b5cb8cab`
+- Squash merge: `f2a54d732ec9ee661c921d421da08e2b83c01b14`
+- Exact-head Repository Guard: success
+- Exact-head Canonical Verification: success, including packaged Windows verification
+- Result: accepted after READY review and explicit owner `Advance LaserX` on 2026-08-07
+- Proven outcomes: generic source selection, source-specific vector/raster isolation, real units/fit and real raster tracing, non-destructive cancel/reject, transient resume to source selection, accepted editable geometry, physical assignment, whole-design analysis, required physical 3D, Save/Save As, successful export, and guided evidence invalidation when manufacturing-layer state changes.
 
 ADR 0027 remains binding for the goals, linear step definitions, contextual-control matrix, skip/back/resume/replay/cancel/failure semantics, run identity, project replacement, transient recovery, resolution checkpoint behavior, persistence shape, and non-mutation boundary.
 
-## Active G3 contract — vector import and raster trace contextual guidance
+## Active G4 contract — grouped repair decisions and Fix safe problems workflow
 
-G3 completes the **Import My Own Design** guided path using the real source-specific import systems. One stable source-preparation checkpoint may present different vector or raster controls based on live selected-file state, consistent with ADR 0027; guidance identity does not fork merely because the file type changes.
+G4 makes repair understandable and safe at scale. Large finding sets become a small number of decision categories, while geometry changes remain explicit, previewable, undoable, and mechanically bounded.
 
 ### Required journey
 
-1. **Choose the source**
-   - Start from **Import My Own Design** in the accepted chooser.
-   - Before file selection, present a generic bring-in-a-file action. Do not expose raster trace controls before a raster source is known.
+1. **Summarize current findings**
+   - Group current repair/manufacturing findings into **Safe to fix**, **Suggested fix**, and **Needs your decision**.
+   - Show counts and affected scope clearly enough that the user does not have to scan an entity-level wall.
+   - Preserve the current authoritative finding data; grouping is presentation/decision structure, not a second analysis truth.
 
-2. **Prepare and commit the source**
-   - **SVG/DXF:** use the existing vector-import preview and commit path, including source units, scale/fit, proposed document size, layers, warnings/findings, preview, accept, and cancel. Raster trace controls stay hidden.
-   - **PNG/JPEG:** expose the existing preprocessing and trace controls only after raster selection. Use the existing raster preview/commit path and require accepted editable geometry before advancing.
-   - Accept/commit advances. Cancel/reject returns to source selection without claiming completion.
-   - Vector/raster preview state is transient. Resume from an interrupted preview returns to source selection rather than reopening vanished transient state.
+2. **Classify safe repairs deterministically**
+   - Initial safe classes are limited to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures only within an explicit approved tolerance.
+   - Each safe class requires focused regression evidence.
+   - Suggested/decision classes remain non-automatic. No bridge/island or ambiguous repair becomes safe merely because it is convenient.
 
-3. **Physical setup and cutability**
-   - Once editable geometry is committed, reuse existing physical-layer material/thickness assignment.
-   - Run whole-design cutability against the exact current document; stale, selection-only, or layer-only evidence must not satisfy the guided checkpoint.
-   - Preserve ADR 0027 resolution behavior. Do not add G4 safe-fix classification, grouped repair, or batch repair.
+3. **Preview Fix safe problems**
+   - The prominent action builds a deterministic proposal from the current document/finding set.
+   - Preview must not mutate authoritative geometry, dirty state, history, save/export output, or current analysis truth.
+   - Stale proposals fail closed if the document/finding basis changes before acceptance.
 
-4. **3D and export**
-   - Require the existing physical 3D preview or its truthful explicit unavailable/failure route.
-   - Use existing Save/Save As and SVG/DXF export.
-   - Complete the import goal only after a real successful export.
+4. **Accept or reject the safe batch**
+   - Accept applies the eligible batch as one coherent undoable transaction whenever technically practical.
+   - Reject leaves the document unchanged.
+   - Report fixed, skipped, and remaining counts truthfully.
+   - Preserve undo and reanalysis.
 
-### G3 integration rules
+5. **Re-check the design**
+   - Re-run current analysis after acceptance.
+   - Remaining suggested/decision findings stay visible and navigable.
+   - Never claim that automated repair proves cut readiness or physical safety.
 
-- Reuse authoritative import/raster, project, geometry, cutability, physical-preview, save, and export systems.
-- Do not create parallel preview, geometry, or project truth inside guidance.
-- Preserve undo/history and existing accept/cancel semantics.
-- Preserve G1/G2 exact-project resume, fresh run tokens, project-replacement invalidation, contextual controls, security boundaries, and non-trapping Exit guidance.
-- Native DWG remains out of scope.
+### G4 integration rules
 
-### G3 verification
+- Reuse existing geometry/history/cutability and guided-resolution systems.
+- Do not create a parallel geometry model, hidden destructive edit path, or independent finding truth.
+- Preserve G1–G3 exact-project resume, fresh run tokens, project-replacement invalidation, contextual controls, security boundaries, Save/Export semantics, and non-trapping Exit guidance.
+- Safe-repair tolerances and eligibility are explicit product contracts, not implicit heuristics.
+- Any new safe class beyond the initial set requires separate evidence before acceptance.
+
+### G4 verification
 
 Required evidence includes:
 
-- unit/integration tests for source classification, transient recovery, truthful commit/cancel progression, and stale evidence refusal;
-- packaged Windows E2E for at least one SVG/DXF import and one PNG/JPEG trace path;
-- packaged proof that SVG/DXF does not expose trace controls and that trace controls appear only after raster selection;
-- at least one cancel/reject or stale-preview recovery case proving the user is not trapped and authoritative geometry is not falsely committed;
+- focused unit tests for every initial safe class and representative non-safe/ambiguous cases;
+- proof that preview is non-mutating and stale proposals are refused;
+- proof that accepted repairs are undoable and reject is non-mutating;
+- proof that fixed/skipped/remaining counts correspond to actual post-transaction state;
+- proof that analysis is re-run and unresolved findings remain visible;
+- packaged Windows E2E with a representative large-finding fixture showing grouped decisions rather than raw overload;
+- packaged negative/non-trapping coverage for stale proposal, reject, or ambiguous decision behavior;
 - exact-head Repository Guard and Canonical Verification;
 - one focused draft PR that stops at `AWAITING_REVIEW`.
 
-### G3 non-goals
+### G4 non-goals
 
-No G4 grouped repair/**Fix safe problems**, G5 full Learn Mode/replay content, G6 owner-observed usability validation, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
+No G5 full Learn Mode/replay content, G6 owner-observed usability validation, open-ended geometry-engine rewrite, speculative safe classes, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
 
 ## Milestone acceptance tests
 
@@ -149,7 +176,7 @@ No G4 grouped repair/**Fix safe problems**, G5 full Learn Mode/replay content, G
 3. SVG/DXF import shows scale, units, layers, findings, preview, and accept/cancel without exposing raster trace controls.
 4. PNG/JPEG import shows preprocessing and trace controls only after raster input is selected.
 5. A representative broken DXF with a large finding count is summarized into understandable repair decisions by G4.
-6. **Fix safe problems** behavior is proven in G4.
+6. **Fix safe problems** previews deterministic eligible repairs, changes nothing before acceptance, commits accepted repairs coherently with undo, and reports fixed/skipped/remaining counts.
 7. Remaining ambiguous findings are navigable by grouped category in G4.
 8. A user can import SVG or DXF, understand conversion/repair findings, assign physical information, preview, and export.
 9. The optional AI path remains unavailable or clearly optional without breaking the normal product.
@@ -166,8 +193,8 @@ No G4 grouped repair/**Fix safe problems**, G5 full Learn Mode/replay content, G
 - [x] Tutorial architecture and state boundaries are documented.
 - [x] Workflow-aware contextual-control architecture is documented.
 - [x] Create My First Sign guided vertical slice passes.
-- [ ] Vector-import and raster-trace guided paths pass.
-- [ ] SVG/DXF import does not expose irrelevant trace controls.
+- [x] Vector-import and raster-trace guided paths pass.
+- [x] SVG/DXF import does not expose irrelevant trace controls.
 - [ ] Grouped repair confidence and **Fix safe problems** preview/accept/undo behavior pass.
 - [ ] Large finding sets reduce to understandable repair decisions.
 - [ ] Learn Mode covers the core manufacturing and repair concepts.
