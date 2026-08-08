@@ -6,8 +6,7 @@
 
 - Active issue: **#45**
 - Active milestone specification: `docs/milestones/M15-guided-onboarding-learn-mode.md`
-- Current slice: **G3 post-merge repair acceptance hold — PR #74**
-- Next intended slice: **G4 — grouped repair decisions and Fix safe problems workflow — held until PR #74 is accepted and merged**
+- Current slice: **G4 — grouped repair decisions and Fix safe problems workflow**
 - Implementation surface: **Codex**
 - Implementation model: **selected by the owner inside Codex for each session; the repository does not choose or auto-route a model**
 - Planning, orchestration, exact-head review, status, holds, and advancement: **LaserX Design Studio primary operations chat only**
@@ -56,49 +55,48 @@ Only `Continue LaserX` goes to Codex. `Plan LaserX`, `Lock that into LaserX`, `C
 - Required exact-head checks: **Repository Guard — success; Canonical Verification — success, including packaged Windows verification**
 - Result: **accepted and merged on explicit owner `Advance LaserX`**
 
-## G3 post-merge repair hold
+### G3 post-merge physical-confirmation repair
 
-A late P1 review finding on merged PR #73 proved that **Set physical details** could auto-advance immediately when choosing a physical layer role populated default material/thickness, preventing the user from reviewing non-default physical settings before analysis.
-
-PR **#74 — M15 G3 repair: require physical setup confirmation** fixes that defect by removing import-guidance auto-advance from generic editor actions. The explicit guided Continue remains the only route out of the checkpoint and validates current physical stock + imported content.
-
+- PR **#74**
 - Reviewed head: `66dab265b3073145e48667639b0a303691733f7b`
-- Repository Guard: **success**
-- Canonical Verification: **success, including packaged Windows verification**
-- Review result: **READY**
-- Unresolved review threads: **0**
-- Merge/acceptance: **pending explicit owner command**
+- Squash merge: `df0d3463470afb7f69724ca808c25df0b8317d87`
+- Required exact-head checks: **Repository Guard — success; Canonical Verification — success, including packaged Windows verification**
+- Review result: **READY**, no unresolved review threads
+- Result: **accepted and merged on explicit owner `Advance LaserX` on 2026-08-08**
+- Delivered: imported **Set physical details** no longer auto-advances when role assignment populates default material/thickness; role/material/thickness remain editable until explicit guided confirmation.
 
-**G4 is held.** No G4 implementation work may begin until PR #74 is explicitly accepted and merged. Because this is a repair hold, the next owner `Advance LaserX` command accepts/merges PR #74 and restores G4 as the active slice; it does **not** advance to G5.
-
-## Held G4 contract — grouped repair decisions and Fix safe problems
+## Active G4 contract — grouped repair decisions and Fix safe problems
 
 G4 turns large manufacturing/repair finding sets into a small number of truthful user decisions without hiding risk or mutating authoritative geometry before acceptance.
 
 Required outcome:
 
 1. Group current findings into **Safe to fix**, **Suggested fix**, and **Needs your decision** with truthful affected scope/counts.
-2. Limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance.
+2. Limit deterministic safe eligibility to exact duplicate geometry, zero-length entities, redundant collinear points, and eligible near-closures within an explicit approved tolerance. Any additional class requires evidence before being labeled safe.
 3. **Fix safe problems** is preview-first and leaves authoritative geometry unchanged until acceptance.
-4. Accepted safe repairs form one coherent undoable transaction whenever technically practical and report fixed/skipped/remaining counts truthfully.
-5. Re-run current analysis after acceptance; never claim automated repair proves cut readiness or physical safety.
-6. Never silently apply suggested fixes, bridge/island decisions, ambiguous near-closures, or unproven safe classes.
-7. Reuse existing geometry/history/cutability and the accepted guided resolution checkpoint.
-8. Preserve exact-project resume, run tokens, project replacement, contextual controls, security, Save/Export, and global Exit guidance.
-9. Add focused unit/integration and packaged Windows evidence for preview non-mutation, separation of safe/ambiguous findings, accept/reject/undo, grouped large-finding presentation, reanalysis, stale-proposal refusal, and non-trapping recovery.
-10. Open one focused draft PR and stop at `AWAITING_REVIEW`.
+4. Refuse stale repair proposals if their document/finding basis changes before acceptance.
+5. Apply accepted safe repairs as one coherent undoable transaction whenever technically practical and report fixed/skipped/remaining counts truthfully.
+6. Re-run current analysis after acceptance; keep unresolved suggested/decision findings visible; never claim automated repair proves cut readiness or physical safety.
+7. Never silently apply suggested fixes, bridge/island decisions, ambiguous near-closures, or unproven safe classes.
+8. Reuse existing geometry/history/cutability and the accepted guided resolution checkpoint rather than creating parallel geometry or finding truth.
+9. Preserve exact-project resume, run tokens, project replacement, contextual controls, security, Save/Export, and global Exit guidance.
+10. Add focused unit/integration and packaged Windows evidence for preview non-mutation, safe/ambiguous separation, accept/reject/undo, grouped large-finding presentation, reanalysis, stale-proposal refusal, and a negative/non-trapping route.
+11. Open one focused draft PR and stop at `AWAITING_REVIEW`.
 
-## One repo, one hold, one next command
+## G4 non-goals
 
-- PR #74 is the only current acceptance target.
-- G4 is held until PR #74 is merged.
+No G5 full Learn Mode/replay content, G6 owner-observed usability validation, broad geometry-engine rewrite, speculative safe classifications, new AI capability, material-catalog expansion, process profiles, export profiles, licensing, public beta, analytics platform, general-purpose CAD, CAM, machine control, or native DWG support.
+
+## One repo, one active gate, one next command
+
+- G4 is the only active implementation target.
 - G5 and G6 remain held.
 - M16 and later milestones remain blocked.
 - PR #69 remains draft/held planning input and is not authority for the active gate.
 - PR #68 remains held outside active M15 work.
 - No implementation agent merges, advances, changes the active gate, or starts another task on its own.
-- While this hold exists, `Continue LaserX` must stop `BLOCKED`; it must not begin G4.
-- Next valid command: **`Advance LaserX`** in the LaserX Design Studio primary operations chat.
+- One `Continue LaserX` command authorizes one bounded Codex pass, then Codex stops.
+- Next valid command: **`Continue LaserX`**
 
 ## Mandatory product interpretation
 
@@ -111,8 +109,8 @@ LaserX remains an affordable, premium-feeling, machine-independent idea-to-manuf
 1. **G0 — guided-workflow architecture and first-run contract** — merged and accepted
 2. **G1 — first-launch goal chooser and resumable guidance shell** — merged and accepted
 3. **G2 — Create My First Sign guided vertical slice** — merged and accepted
-4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; **post-merge repair PR #74 READY, acceptance pending**
-5. **G4 — grouped repair decisions and Fix safe problems workflow** — **held by PR #74 repair acceptance**
+4. **G3 — vector import and raster trace contextual guidance** — merged and accepted; post-merge repair PR #74 merged and accepted
+5. **G4 — grouped repair decisions and Fix safe problems workflow** — **active**
 6. **G5 — Learn Mode, replay, recovery, and contextual explanations** — held
 7. **G6 — packaged accessibility and owner-observed first-session validation** — held
 
@@ -124,4 +122,4 @@ M14 is complete and accepted. Issue #30 contains the exact component merges, Win
 
 ## Private-testing boundary
 
-LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in this repair hold or G4.
+LaserX remains private test software until a later milestone explicitly approves outside distribution. Trusted public signing, publication, pricing activation, telemetry, and public support do not belong in G4.
