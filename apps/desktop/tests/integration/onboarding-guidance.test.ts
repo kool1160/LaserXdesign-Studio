@@ -196,12 +196,18 @@ describe("desktop onboarding guidance", () => {
     expect(persisted).toMatchObject({ schemaVersion: 2, learnModeEnabled: true });
   });
 
-  it("replays a skipped tutorial with a fresh token against the current project", async () => {
+  it("switches and replays skipped tutorials with fresh tokens without changing project truth", async () => {
     const { userDataPath, projectPath } = await setup();
     const controller = makeController(userDataPath, projectPath);
     await controller.initialize();
     const projectId = controller.state.project.id;
-    const beforeProject = JSON.stringify(controller.state.project);
+    const beforeTruth = JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    });
 
     await controller.onboardingAction({
       type: "start",
@@ -216,27 +222,65 @@ describe("desktop onboarding guidance", () => {
     expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
 
     await controller.onboardingAction({
-      type: "replay",
-      goal: "create-first-sign",
+      type: "switch-goal",
+      goal: "import-own-design",
       expectedRunToken: firstRun.runToken,
     });
-    const replay = activeIdentity(controller);
-    expect(replay.runToken).not.toBe(firstRun.runToken);
-    expect(controller.state.onboarding.workflow.currentStepId).toBe(
-      "choose-size-material",
-    );
+    const secondRun = activeIdentity(controller);
+    expect(secondRun.runToken).not.toBe(firstRun.runToken);
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      goal: "import-own-design",
+      currentStepId: "choose-file",
+    });
     expect(
       controller.state.onboarding.preferences.activeWorkflow?.projectBinding.projectId,
     ).toBe(projectId);
     expect(controller.state.onboarding.preferences.completedGoals).toEqual([]);
-    expect(JSON.stringify(controller.state.project)).toBe(beforeProject);
+    expect(JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    })).toBe(beforeTruth);
 
     await controller.onboardingAction({
-      type: "replay",
+      type: "exit",
+      runToken: secondRun.runToken,
+    });
+    expect(controller.state.onboarding.workflow.status).toBe("dismissed");
+
+    // A delayed choice from the first terminal run cannot replace the newer
+    // terminal run.
+    await controller.onboardingAction({
+      type: "switch-goal",
       goal: "create-first-sign",
       expectedRunToken: firstRun.runToken,
     });
-    expect(controller.state.onboarding.workflow.runToken).toBe(replay.runToken);
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      status: "dismissed",
+      goal: "import-own-design",
+      runToken: secondRun.runToken,
+    });
+
+    await controller.onboardingAction({
+      type: "replay",
+      goal: "import-own-design",
+      expectedRunToken: secondRun.runToken,
+    });
+    const replay = activeIdentity(controller);
+    expect(replay.runToken).not.toBe(secondRun.runToken);
+    expect(controller.state.onboarding.workflow).toMatchObject({
+      goal: "import-own-design",
+      currentStepId: "choose-file",
+    });
+    expect(JSON.stringify({
+      project: controller.state.project,
+      history: controller.state.editor.history,
+      analysis: controller.state.analysis,
+      physicalPreview: controller.state.physicalPreview,
+      production: controller.state.production,
+    })).toBe(beforeTruth);
   });
 
   it("persists and resumes an exact stable checkpoint with a fresh run token", async () => {

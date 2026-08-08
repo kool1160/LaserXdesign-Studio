@@ -106,6 +106,7 @@ import {
   canResumeSnapshot,
   initialGuidedWorkflowState,
   initialOnboardingPreferences,
+  isTerminalStatus,
   isStepSkippable,
   reduceGuidedWorkflow,
   resolveResumeStepId,
@@ -2779,6 +2780,42 @@ export class DesktopController {
           this.#guidedPreviewCompletion = null;
           this.#guidedAnalysisCompletion = null;
         }
+        return;
+      }
+
+      if (request.type === "switch-goal") {
+        if (
+          !isTerminalStatus(this.#guidedWorkflow.status) ||
+          this.#guidedWorkflow.runToken !== request.expectedRunToken ||
+          this.#guidedWorkflow.definition?.goal === request.goal
+        ) {
+          return;
+        }
+        if (
+          request.goal === "describe-with-ai" &&
+          this.#aiConnection.status !== "connected"
+        ) {
+          throw new Error(
+            "AI guidance is optional and is available after an AI account is connected.",
+          );
+        }
+
+        // Keep the reducer's source-status contract intact: leave the exact
+        // terminal run first, then start the selected goal from idle. The
+        // expected terminal token makes a delayed choice a no-op rather than
+        // allowing it to replace a newer run.
+        const idle = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "cancel",
+        });
+        const next = reduceGuidedWorkflow(idle, {
+          type: "start",
+          definition: guidedGoal(request.goal).definition,
+          runToken: randomUUID(),
+          projectId: this.#session.state.project.project.id,
+        });
+        await this.#applyGuidedWorkflow(next, { dismissed: false });
+        this.#guidedPreviewCompletion = null;
+        this.#guidedAnalysisCompletion = null;
         return;
       }
 

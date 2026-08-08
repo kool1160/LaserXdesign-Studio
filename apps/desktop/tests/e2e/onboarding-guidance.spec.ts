@@ -151,6 +151,16 @@ test("packaged Learn Mode is persistent, contextual, non-mutating, and replays w
       await resumedPage.getByTestId("learn-topic-physical-layers").click();
       await expect(resumedPage.getByTestId("learn-note-physical-layers")).toBeVisible();
 
+      const beforeTutorialTruth = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          project: state.project,
+          history: state.editor.history,
+          analysis: state.analysis,
+          physicalPreview: state.physicalPreview,
+          production: state.production,
+        };
+      });
       await resumedPage.getByTestId("learn-help").click();
       await resumedPage.getByTestId("learn-goal-create-first-sign").click();
       const firstRunToken = await resumedPage.evaluate(
@@ -162,34 +172,61 @@ test("packaged Learn Mode is persistent, contextual, non-mutating, and replays w
       await expect(
         resumedPage.getByTestId("learn-goal-create-first-sign"),
       ).toHaveText("Replay");
-      await resumedPage.getByTestId("learn-goal-create-first-sign").click();
+      await expect(
+        resumedPage.getByTestId("learn-goal-import-own-design"),
+      ).toBeEnabled();
+      await resumedPage.getByTestId("learn-goal-import-own-design").click();
       await expect.poll(() => resumedPage.evaluate(
         async () => (await window.laserx.getState()).onboarding.workflow.status,
       )).toBe("active");
+      const switched = await resumedPage.evaluate(async () => {
+        const state = await window.laserx.getState();
+        return {
+          token: state.onboarding.workflow.runToken,
+          goal: state.onboarding.workflow.goal,
+          step: state.onboarding.workflow.currentStepId,
+          completedGoals: state.onboarding.preferences.completedGoals,
+          truth: {
+            project: state.project,
+            history: state.editor.history,
+            analysis: state.analysis,
+            physicalPreview: state.physicalPreview,
+            production: state.production,
+          },
+        };
+      });
+      expect(switched).toEqual({
+        token: expect.any(String),
+        goal: "import-own-design",
+        step: "choose-file",
+        completedGoals: [],
+        truth: beforeTutorialTruth,
+      });
+      expect(switched.token).not.toBe(firstRunToken);
+
+      await resumedPage.getByTestId("learn-help").click();
+      await resumedPage.getByTestId("learn-skip-tutorial").click();
+      await expect(
+        resumedPage.getByTestId("learn-goal-import-own-design"),
+      ).toHaveText("Replay");
+      await resumedPage.getByTestId("learn-goal-import-own-design").click();
+      await expect.poll(() => resumedPage.evaluate(
+        async () => (await window.laserx.getState()).onboarding.workflow.runToken,
+      )).not.toBe(switched.token);
       const replayed = await resumedPage.evaluate(async () => {
         const state = await window.laserx.getState();
         return {
           token: state.onboarding.workflow.runToken,
+          goal: state.onboarding.workflow.goal,
           step: state.onboarding.workflow.currentStepId,
-          completedGoals: state.onboarding.preferences.completedGoals,
-          objectCount: state.project.document.objects.length,
-          undoDepth: state.editor.history.undoDepth,
-          analysis: state.analysis.cutability,
-          preview: state.physicalPreview.assembly,
-          exported: state.production.exportSummary,
         };
       });
       expect(replayed).toEqual({
         token: expect.any(String),
-        step: "choose-size-material",
-        completedGoals: [],
-        objectCount: 0,
-        undoDepth: 0,
-        analysis: null,
-        preview: null,
-        exported: null,
+        goal: "import-own-design",
+        step: "choose-file",
       });
-      expect(replayed.token).not.toBe(firstRunToken);
+      expect(replayed.token).not.toBe(switched.token);
       await resumedPage.getByTestId("guidance-exit").click();
     } finally {
       await killAndRemove(second);

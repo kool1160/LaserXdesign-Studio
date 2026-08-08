@@ -908,6 +908,11 @@ export const onboardingActionRequestSchema = z.discriminatedUnion("type", [
     goal: guidedGoalSchema,
     expectedRunToken: z.string().min(1),
   }),
+  z.strictObject({
+    type: z.literal("switch-goal"),
+    goal: guidedGoalSchema,
+    expectedRunToken: z.string().min(1),
+  }),
   z.strictObject({ type: z.literal("set-learn-mode"), enabled: z.boolean() }),
   z.strictObject({ type: z.literal("complete-learn-topic"), topic: learnTopicSchema }),
   z.strictObject({ type: z.literal("reopen-learn-topic"), topic: learnTopicSchema }),

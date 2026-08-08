@@ -99,6 +99,19 @@ describe("typed IPC validation", () => {
     ).toBe(false);
     expect(
       onboardingActionRequestSchema.safeParse({
+        type: "switch-goal",
+        goal: "import-own-design",
+        expectedRunToken: "finished-run",
+      }).success,
+    ).toBe(true);
+    expect(
+      onboardingActionRequestSchema.safeParse({
+        type: "switch-goal",
+        goal: "import-own-design",
+      }).success,
+    ).toBe(false);
+    expect(
+      onboardingActionRequestSchema.safeParse({
         type: "set-learn-mode",
         enabled: false,
       }).success,

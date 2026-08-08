@@ -851,17 +851,17 @@ export function App() {
   };
   const startOrReplayGuidance = (goal: GuidedGoal): void => {
     if (
-      guidance.goal === goal &&
       guidance.runToken !== null &&
       (guidance.status === "completed" ||
         guidance.status === "dismissed" ||
         guidance.status === "failed")
     ) {
-      void run(() => window.laserx.onboardingAction({
-        type: "replay",
-        goal,
-        expectedRunToken: guidance.runToken as string,
-      }));
+      const expectedRunToken = guidance.runToken;
+      void run(() => window.laserx.onboardingAction(
+        guidance.goal === goal
+          ? { type: "replay", goal, expectedRunToken }
+          : { type: "switch-goal", goal, expectedRunToken },
+      ));
       setLearnCenterOpen(false);
       return;
     }
@@ -1192,7 +1192,11 @@ export function App() {
                     (guidance.status === "completed" ||
                       guidance.status === "dismissed" ||
                       guidance.status === "failed");
-                  const canOpen = guidance.status === "idle" || isTerminalCurrent;
+                  const canOpen =
+                    guidance.status === "idle" ||
+                    guidance.status === "completed" ||
+                    guidance.status === "dismissed" ||
+                    guidance.status === "failed";
                   const wasCompleted =
                     state.onboarding.preferences.completedGoals.includes(goalId);
                   const aiUnavailable =
@@ -1231,8 +1235,10 @@ export function App() {
               {guidance.status !== "idle" && (
                 <div className="learn-guidance-controls">
                   <small className="learn-guidance-state">
-                    Exit the current tutorial before choosing a different one.
-                    Replay always starts with a fresh run against the current project.
+                    {guidance.status === "active"
+                      ? "Skip the current tutorial before choosing a different one."
+                      : "Replay this tutorial or choose another one."}
+                    {" "}Every new run starts fresh against the current project.
                   </small>
                   {guidance.status === "active" && guidance.runToken !== null && (
                     <button
