@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
   onClose: () => void;
+  onUnavailable?: () => void;
   children: ReactNode;
 }
 
@@ -42,9 +43,19 @@ export class PhysicalPreviewErrorBoundary extends Component<Props, State> {
             the project was changed, and normal editing and saving remain
             available.
           </p>
-          <button type="button" onClick={this.props.onClose}>
-            Close preview
-          </button>
+          {this.props.onUnavailable === undefined ? (
+            <button type="button" onClick={this.props.onClose}>
+              Close preview
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="physical-preview-acknowledge-crash"
+              onClick={this.props.onUnavailable}
+            >
+              Continue with 3D unavailable
+            </button>
+          )}
         </div>
       );
     }

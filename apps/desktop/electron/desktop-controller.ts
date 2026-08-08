@@ -424,6 +424,14 @@ export class DesktopController {
   #recentProjects: RecentProject[] = [];
   #pendingRecovery: RecoverySnapshot | null = null;
   #guidedWorkflow: GuidedWorkflowState = initialGuidedWorkflowState;
+  #createGuidancePreviewCompletion: {
+    runToken: string;
+    inputFingerprint: string;
+  } | null = null;
+  #createGuidanceAnalysisCompletion: {
+    runToken: string;
+    documentFingerprint: string;
+  } | null = null;
   #onboardingPreferences: OnboardingPreferences = initialOnboardingPreferences;
   #onboardingRecoveryNotice: string | null = null;
   #stopAutosave: (() => void) | null = null;
@@ -459,6 +467,12 @@ export class DesktopController {
     stage: "preparing" | "building";
   } | null = null;
   #physicalPreviewAssembly: PhysicalPreviewAssembly | null = null;
+  /**
+   * Records a real worker/build failure against the exact physical input that
+   * produced it. Guided onboarding may acknowledge that explicit failure,
+   * but a stale failure can never satisfy a later document.
+   */
+  #physicalPreviewFailureFingerprint: string | null = null;
   #physicalPreviewCapture: {
     status: "saved" | "canceled" | "failed";
     targetPath: string | null;
@@ -759,12 +773,13 @@ export class DesktopController {
   public async createDocument(
     request: CreateDocumentRequest,
   ): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       this.#session.dispatch({
         type: "project.create-document",
         ...request,
       });
       this.#clearRasterState();
+      await this.#advanceCreateGuidanceFromDocumentOutcome();
     });
   }
 
@@ -1042,6 +1057,7 @@ export class DesktopController {
       const objectIds = preview.objects.map((object) => object.id);
       this.#session.acceptSignToolPreview();
       this.#invalidateCutability();
+      await this.#advanceCreateGuidanceFromDocumentOutcome();
       await this.#analyzeCutability(
         randomUUID(),
         objectIds,
@@ -1492,6 +1508,7 @@ export class DesktopController {
     request: VectorExportRequest,
   ): Promise<CommandResult> {
     return this.#run(async () => {
+      this.#assertCreateGuidanceReadyForExport();
       if (this.#dialogs.chooseExportVector === undefined) {
         throw new Error("Vector export is not available in this desktop host.");
       }
@@ -1508,6 +1525,7 @@ export class DesktopController {
         : exportDxf(current.project.document);
       await this.#vectorStorage.write(filePath, artifact.content, request.format);
       this.#lastExportSummary = artifact.summary;
+      await this.#advanceCreateGuidanceStep("save-export");
     });
   }
 
@@ -1621,6 +1639,7 @@ export class DesktopController {
         objectIds,
         objectCutabilityScope(objectIds),
       );
+      await this.#advanceCreateGuidanceAfterWholeDesignAnalysis();
     });
   }
 
@@ -2003,6 +2022,7 @@ export class DesktopController {
           layerName: null,
         });
       }
+      await this.#advanceCreateGuidanceAfterWholeDesignAnalysis();
     });
   }
 
@@ -2015,7 +2035,7 @@ export class DesktopController {
   public async editorAction(
     request: EditorActionRequest,
   ): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       const before = fingerprintCutabilityDocument(
         this.#session.state.project.document,
       );
@@ -2024,6 +2044,7 @@ export class DesktopController {
         this.#session.state.project.document,
       );
       if (after !== before) this.#invalidateCutability();
+      await this.#advanceCreateGuidanceFromDocumentOutcome();
     });
   }
 
@@ -2091,7 +2112,7 @@ export class DesktopController {
   public async createText(
     request: TextLayoutRequest,
   ): Promise<CommandResult> {
-    return this.#run(() => {
+    return this.#run(async () => {
       const layout = this.#fontEngine.layout(request);
       if (layout.missingCodePoints.length > 0) {
         throw new RangeError(
@@ -2152,6 +2173,7 @@ export class DesktopController {
         objects: [object],
       });
       this.#invalidateCutability();
+      await this.#advanceCreateGuidanceFromDocumentOutcome();
     });
   }
 
@@ -2263,7 +2285,12 @@ export class DesktopController {
           runToken: randomUUID(),
           projectId: this.#session.state.project.project.id,
         });
+        const didStart = next !== this.#guidedWorkflow;
         await this.#applyGuidedWorkflow(next, { dismissed: false });
+        if (didStart) {
+          this.#createGuidancePreviewCompletion = null;
+          this.#createGuidanceAnalysisCompletion = null;
+        }
         return;
       }
 
@@ -2299,32 +2326,68 @@ export class DesktopController {
           runToken: randomUUID(),
           liveBinding,
         });
+        const didResume = next !== this.#guidedWorkflow;
         if (resumeStepId !== snapshot.currentStepId) {
           this.#onboardingRecoveryNotice =
             "LaserX returned to the nearest saved checkpoint because the previous preview or analysis was temporary.";
         }
         await this.#applyGuidedWorkflow(next, { dismissed: false });
+        if (didResume) {
+          this.#createGuidanceAnalysisCompletion =
+            next.definition?.goal === "create-first-sign" &&
+            (next.currentStepId === "physical-preview" ||
+              next.currentStepId === "save-export") &&
+            next.completedStepIds.includes("analyze-cutability") &&
+            next.completedStepIds.includes("resolve-findings") &&
+            next.runToken !== null
+              ? {
+                  runToken: next.runToken,
+                  documentFingerprint: guidedDocumentFingerprint(
+                    this.#session.state.project.document,
+                  ),
+                }
+              : null;
+          this.#createGuidancePreviewCompletion =
+            next.definition?.goal === "create-first-sign" &&
+            next.currentStepId === "save-export" &&
+            next.completedStepIds.includes("physical-preview") &&
+            next.runToken !== null
+              ? {
+                  runToken: next.runToken,
+                  inputFingerprint: fingerprintPhysicalPreviewInput(
+                    this.#session.state.project,
+                  ),
+                }
+              : null;
+        }
         return;
       }
 
       if (request.type === "exit") {
-        await this.#applyGuidedWorkflow(
-          reduceGuidedWorkflow(this.#guidedWorkflow, {
-            type: "dismiss",
-            runToken: request.runToken,
-          }),
-        );
+        const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "dismiss",
+          runToken: request.runToken,
+        });
+        const didExit = next !== this.#guidedWorkflow;
+        await this.#applyGuidedWorkflow(next);
+        if (didExit) {
+          this.#createGuidancePreviewCompletion = null;
+          this.#createGuidanceAnalysisCompletion = null;
+        }
         return;
       }
 
       if (request.type === "back") {
-        await this.#applyGuidedWorkflow(
-          reduceGuidedWorkflow(this.#guidedWorkflow, {
-            type: "back",
-            expectedStepId: request.expectedStepId,
-            runToken: request.runToken,
-          }),
-        );
+        const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+          type: "back",
+          expectedStepId: request.expectedStepId,
+          runToken: request.runToken,
+        });
+        const didBack = next !== this.#guidedWorkflow;
+        await this.#applyGuidedWorkflow(next);
+        if (didBack && next.definition?.goal === "create-first-sign") {
+          this.#createGuidancePreviewCompletion = null;
+        }
         return;
       }
 
@@ -2348,6 +2411,8 @@ export class DesktopController {
         return;
       }
 
+      let acceptedCreatePreviewFingerprint: string | null = null;
+      let acceptedCreateResolution = false;
       const isResolutionStep =
         this.#guidedWorkflow.currentStepId === "resolve-findings";
       if (isResolutionStep) {
@@ -2372,8 +2437,66 @@ export class DesktopController {
         if (!permitted) {
           throw new Error("Blocking findings must be resolved before continuing.");
         }
+        acceptedCreateResolution =
+          this.#guidedWorkflow.definition?.goal === "create-first-sign";
+      } else if (this.#guidedWorkflow.definition?.goal === "create-first-sign") {
+        switch (this.#guidedWorkflow.currentStepId) {
+          case "choose-size-material":
+            if (request.completion.kind !== "step") {
+              throw new Error("Confirm the current size and physical material setup first.");
+            }
+            if (!this.#createGuidanceHasPhysicalStock()) {
+              throw new Error(
+                "Set positive real dimensions and assign material and thickness to a physical layer before continuing.",
+              );
+            }
+            break;
+          case "add-content":
+            if (request.completion.kind !== "step") {
+              throw new Error("Confirm the current physical-layer content first.");
+            }
+            if (!this.#createGuidanceHasPhysicalContent()) {
+              throw new Error(
+                "Add at least one real object to a physical manufacturing layer before continuing.",
+              );
+            }
+            break;
+          case "analyze-cutability":
+            if (request.completion.kind !== "step") {
+              throw new Error("Confirm the current whole-design analysis first.");
+            }
+            if (
+              !this.#createGuidanceHasPhysicalStock() ||
+              !this.#createGuidanceHasPhysicalContent() ||
+              !this.#hasCurrentWholeDesignAnalysis()
+            ) {
+              throw new Error(
+                "Keep real physical material and content in the design, then run Analyze all before continuing. Selection or layer-only analysis is not sufficient.",
+              );
+            }
+            break;
+          case "physical-preview":
+            if (request.completion.kind !== "physical-preview") {
+              throw new Error(
+                "Open the required 3D preview and render it, or explicitly acknowledge its current failure route.",
+              );
+            }
+            this.#assertCreatePhysicalPreviewCompletion(request.completion);
+            acceptedCreatePreviewFingerprint = fingerprintPhysicalPreviewInput(
+              this.#session.state.project,
+            );
+            break;
+          case "save-export":
+            throw new Error(
+              "Export SVG or DXF successfully to complete Create My First Sign.",
+            );
+          default:
+            if (request.completion.kind !== "step") {
+              throw new Error("That completion does not match this guidance checkpoint.");
+            }
+        }
       } else if (request.completion.kind !== "step") {
-        throw new Error("Resolution completion is only valid at the findings checkpoint.");
+        throw new Error("That completion is only valid at its matching checkpoint.");
       }
 
       let next = reduceGuidedWorkflow(this.#guidedWorkflow, {
@@ -2391,7 +2514,23 @@ export class DesktopController {
           });
         }
       }
+      const didAdvance = next !== this.#guidedWorkflow;
       await this.#applyGuidedWorkflow(next);
+      if (
+        didAdvance &&
+        (acceptedCreateResolution ||
+          (next.definition?.goal === "create-first-sign" &&
+            next.currentStepId === "physical-preview" &&
+            this.#hasCurrentWholeDesignAnalysis()))
+      ) {
+        this.#recordCreateGuidanceAnalysisCompletion();
+      }
+      if (didAdvance && acceptedCreatePreviewFingerprint !== null) {
+        this.#createGuidancePreviewCompletion = {
+          runToken: request.runToken,
+          inputFingerprint: acceptedCreatePreviewFingerprint,
+        };
+      }
     });
   }
 
@@ -2772,7 +2911,10 @@ export class DesktopController {
     this.#physicalPreviewJob = null;
     this.#physicalPreviewAssembly = null;
     this.#physicalPreviewAssemblyFingerprint = null;
+    this.#physicalPreviewFailureFingerprint = null;
     this.#physicalPreviewCapture = null;
+    this.#createGuidancePreviewCompletion = null;
+    this.#createGuidanceAnalysisCompletion = null;
     this.#aiAbortController?.abort();
     this.#aiAbortController = null;
     this.#aiJob = null;
@@ -2881,6 +3023,7 @@ export class DesktopController {
    */
   async #buildPhysicalPreview(operationId: string): Promise<void> {
     const project = this.#session.state.project;
+    const inputFingerprint = fingerprintPhysicalPreviewInput(project);
     const abortController = new AbortController();
     this.#physicalPreviewAbortControllers.set(operationId, abortController);
     this.#physicalPreviewJob = { operationId, percent: 0, stage: "preparing" };
@@ -2908,12 +3051,19 @@ export class DesktopController {
       );
       this.#physicalPreviewAssembly = result.assembly;
       this.#physicalPreviewAssemblyFingerprint = result.inputFingerprint;
+      this.#physicalPreviewFailureFingerprint = null;
     } catch (error) {
       if (
         error instanceof PhysicalPreviewCancelledError ||
         error instanceof PhysicalPreviewSupersededError
       ) {
         return;
+      }
+      if (
+        fingerprintPhysicalPreviewInput(this.#session.state.project) ===
+        inputFingerprint
+      ) {
+        this.#physicalPreviewFailureFingerprint = inputFingerprint;
       }
       throw error;
     } finally {
@@ -2955,9 +3105,11 @@ export class DesktopController {
   }
 
   #currentResolutionCounts(): ResolutionFindingCounts | null {
-    const analysis = this.#cutabilityProjection?.cutability ?? null;
+    const projection = this.#cutabilityProjection;
+    const analysis = projection?.cutability ?? null;
     if (
       analysis === null ||
+      projection?.scope.kind !== "whole-design" ||
       analysis.documentFingerprint !==
         fingerprintCutabilityDocument(this.#session.state.project.document)
     ) {
@@ -2970,6 +3122,224 @@ export class DesktopController {
       needsDecisionCount: analysis.warningCount,
       blockingCount: analysis.errorCount,
     };
+  }
+
+  #createGuidanceHasPhysicalStock(): boolean {
+    const document = this.#session.state.project.document;
+    if (
+      !Number.isFinite(document.dimensions.widthMm) ||
+      !Number.isFinite(document.dimensions.heightMm) ||
+      document.dimensions.widthMm <= 0 ||
+      document.dimensions.heightMm <= 0
+    ) {
+      return false;
+    }
+    return document.layers.some((layer) => {
+      const manufacturing = layer.manufacturing;
+      return (
+        manufacturing !== undefined &&
+        manufacturing.role !== "non-cut-preview" &&
+        manufacturing.material.trim() !== "" &&
+        Number.isFinite(manufacturing.thicknessMm) &&
+        manufacturing.thicknessMm > 0
+      );
+    });
+  }
+
+  #createGuidanceHasPhysicalContent(): boolean {
+    const document = this.#session.state.project.document;
+    const physicalLayerIds = new Set(
+      document.layers
+        .filter(
+          (layer) =>
+            layer.manufacturing !== undefined &&
+            layer.manufacturing.role !== "non-cut-preview" &&
+            Number.isFinite(layer.manufacturing.thicknessMm) &&
+            layer.manufacturing.thicknessMm > 0,
+        )
+        .map((layer) => layer.id),
+    );
+    return document.objects.some((object) => physicalLayerIds.has(object.layerId));
+  }
+
+  #hasCurrentWholeDesignAnalysis(): boolean {
+    return this.#currentResolutionCounts() !== null;
+  }
+
+  #recordCreateGuidanceAnalysisCompletion(): void {
+    if (this.#guidedWorkflow.runToken === null) return;
+    this.#createGuidanceAnalysisCompletion = {
+      runToken: this.#guidedWorkflow.runToken,
+      documentFingerprint: guidedDocumentFingerprint(
+        this.#session.state.project.document,
+      ),
+    };
+  }
+
+  #hasCurrentCreateGuidanceAnalysisEvidence(): boolean {
+    if (this.#hasCurrentWholeDesignAnalysis()) return true;
+    const evidence = this.#createGuidanceAnalysisCompletion;
+    return (
+      evidence !== null &&
+      evidence.runToken === this.#guidedWorkflow.runToken &&
+      evidence.documentFingerprint ===
+        guidedDocumentFingerprint(this.#session.state.project.document)
+    );
+  }
+
+  async #advanceCreateGuidanceStep(expectedStepId: string): Promise<boolean> {
+    if (
+      this.#guidedWorkflow.status !== "active" ||
+      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
+      this.#guidedWorkflow.currentStepId !== expectedStepId ||
+      this.#guidedWorkflow.runToken === null
+    ) {
+      return false;
+    }
+    const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+      type: "advance",
+      expectedStepId,
+      runToken: this.#guidedWorkflow.runToken,
+    });
+    if (next === this.#guidedWorkflow) return false;
+    await this.#applyGuidedWorkflow(next);
+    return true;
+  }
+
+  async #advanceCreateGuidanceFromDocumentOutcome(): Promise<void> {
+    if (
+      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
+      this.#guidedWorkflow.status !== "active"
+    ) {
+      return;
+    }
+    if (
+      this.#guidedWorkflow.currentStepId === "choose-size-material" &&
+      this.#createGuidanceHasPhysicalStock()
+    ) {
+      await this.#advanceCreateGuidanceStep("choose-size-material");
+      return;
+    }
+    if (
+      this.#guidedWorkflow.currentStepId === "add-content" &&
+      this.#createGuidanceHasPhysicalContent()
+    ) {
+      await this.#advanceCreateGuidanceStep("add-content");
+    }
+  }
+
+  async #advanceCreateGuidanceAfterWholeDesignAnalysis(): Promise<void> {
+    if (
+      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
+      this.#guidedWorkflow.status !== "active" ||
+      !this.#createGuidanceHasPhysicalStock() ||
+      !this.#createGuidanceHasPhysicalContent() ||
+      !this.#hasCurrentWholeDesignAnalysis()
+    ) {
+      return;
+    }
+    if (this.#guidedWorkflow.currentStepId === "analyze-cutability") {
+      await this.#advanceCreateGuidanceStep("analyze-cutability");
+    }
+    if (this.#guidedWorkflow.currentStepId === "resolve-findings") {
+      const counts = this.#currentResolutionCounts();
+      if (counts !== null && shouldAutoCompleteResolution(counts)) {
+        await this.#advanceCreateGuidanceStep("resolve-findings");
+      }
+    }
+    if (this.#guidedWorkflow.currentStepId === "physical-preview") {
+      this.#recordCreateGuidanceAnalysisCompletion();
+    }
+  }
+
+  #assertCreatePhysicalPreviewCompletion(
+    completion: Extract<
+      Extract<OnboardingActionRequest, { type: "advance" }>["completion"],
+      { kind: "physical-preview" }
+    >,
+  ): void {
+    if (
+      !this.#createGuidanceHasPhysicalStock() ||
+      !this.#createGuidanceHasPhysicalContent() ||
+      !this.#hasCurrentCreateGuidanceAnalysisEvidence()
+    ) {
+      throw new Error(
+        "The physical setup, sign content, or whole-design analysis changed. Restore it and run Analyze all again before continuing.",
+      );
+    }
+    const currentInputFingerprint = fingerprintPhysicalPreviewInput(
+      this.#session.state.project,
+    );
+    if (completion.result === "unavailable" && completion.reason === "build-failed") {
+      if (
+        completion.assemblyFingerprint !== null ||
+        this.#physicalPreviewFailureFingerprint !== currentInputFingerprint
+      ) {
+        throw new Error(
+          "The 3D preview has no current build failure to acknowledge.",
+        );
+      }
+      return;
+    }
+
+    const assembly = this.#physicalPreviewAssembly;
+    if (
+      assembly === null ||
+      this.#physicalPreviewAssemblyFingerprint !== currentInputFingerprint ||
+      completion.assemblyFingerprint !== assembly.fingerprint
+    ) {
+      throw new Error(
+        "The 3D preview outcome no longer matches the current physical design.",
+      );
+    }
+    if (completion.result === "rendered") {
+      if (assembly.status === "unavailable" || assembly.layers.length === 0) {
+        throw new Error("A physical 3D result was not rendered.");
+      }
+      return;
+    }
+    if (
+      completion.reason === "assembly-unavailable" &&
+      assembly.status !== "unavailable"
+    ) {
+      throw new Error("The current physical assembly is available for rendering.");
+    }
+    if (
+      completion.reason !== "assembly-unavailable" &&
+      assembly.status === "unavailable"
+    ) {
+      throw new Error("A missing physical assembly must use its explicit unavailable route.");
+    }
+  }
+
+  #assertCreateGuidanceReadyForExport(): void {
+    if (
+      this.#guidedWorkflow.status !== "active" ||
+      this.#guidedWorkflow.definition?.goal !== "create-first-sign" ||
+      this.#guidedWorkflow.currentStepId !== "save-export"
+    ) {
+      return;
+    }
+    if (
+      !this.#createGuidanceHasPhysicalStock() ||
+      !this.#createGuidanceHasPhysicalContent() ||
+      !this.#hasCurrentCreateGuidanceAnalysisEvidence()
+    ) {
+      throw new Error(
+        "The design changed after its guided checks. Go back, restore the physical setup, and run Analyze all again before export.",
+      );
+    }
+    const evidence = this.#createGuidancePreviewCompletion;
+    if (
+      evidence === null ||
+      evidence.runToken !== this.#guidedWorkflow.runToken ||
+      evidence.inputFingerprint !==
+        fingerprintPhysicalPreviewInput(this.#session.state.project)
+    ) {
+      throw new Error(
+        "The current physical design has not completed the required 3D preview checkpoint.",
+      );
+    }
   }
 
   async #replaceOnboardingPreferences(
@@ -3025,11 +3395,12 @@ export class DesktopController {
 
   async #invalidateGuidanceForProjectReplacement(): Promise<void> {
     if (this.#guidedWorkflow.status === "idle") return;
-    await this.#applyGuidedWorkflow(
-      reduceGuidedWorkflow(this.#guidedWorkflow, {
-        type: "project-replaced",
-      }),
-    );
+    const next = reduceGuidedWorkflow(this.#guidedWorkflow, {
+      type: "project-replaced",
+    });
+    await this.#applyGuidedWorkflow(next);
+    this.#createGuidancePreviewCompletion = null;
+    this.#createGuidanceAnalysisCompletion = null;
     this.#onboardingRecoveryNotice =
       "Guidance ended because the open project was replaced.";
   }

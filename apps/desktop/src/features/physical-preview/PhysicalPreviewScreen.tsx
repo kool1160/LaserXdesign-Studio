@@ -14,7 +14,7 @@ import {
   type AssemblyMode,
   type PreviewView,
 } from "@laserx/physical-preview-three";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   useCallback,
   useEffect,
@@ -59,6 +59,10 @@ export const KEYBOARD_ZOOM_SCALE = 0.9;
 export interface PhysicalPreviewScreenProps {
   assembly: PhysicalPreviewAssembly;
   onClose: () => void;
+  /** Offered only after the scene has completed at least one real WebGL frame. */
+  onRenderConfirmed?: () => void;
+  /** Explicit guided route when this exact assembly cannot be rendered. */
+  onUnavailable?: (reason: PhysicalPreviewUnavailableReason) => void;
   /**
    * Hands validated capture bytes to the privileged save path (G5). The
    * screen itself never writes a file and never learns the destination.
@@ -73,6 +77,13 @@ export interface PhysicalPreviewScreenProps {
   captureStatus: PhysicalPreviewCaptureStatus | null;
   projectName: string;
 }
+
+export type PhysicalPreviewUnavailableReason =
+  | "assembly-unavailable"
+  | "conversion-failed"
+  | "context-lost"
+  | "no-renderable-geometry"
+  | "webgl-unavailable";
 
 export interface PhysicalPreviewCaptureStatus {
   status: "saved" | "canceled" | "failed";
@@ -103,30 +114,73 @@ function captureMessage(status: PhysicalPreviewCaptureStatus | null): string {
   return status.error ?? "The capture could not be saved.";
 }
 
-function WebglUnavailable() {
+function UnavailableAction({
+  onUnavailable,
+  reason,
+}: {
+  onUnavailable: PhysicalPreviewScreenProps["onUnavailable"];
+  reason: PhysicalPreviewUnavailableReason;
+}) {
+  if (onUnavailable === undefined) return null;
+  return (
+    <button
+      type="button"
+      data-testid={`physical-preview-acknowledge-${reason}`}
+      onClick={() => onUnavailable(reason)}
+    >
+      Continue with 3D unavailable
+    </button>
+  );
+}
+
+function WebglUnavailable({
+  onUnavailable,
+}: {
+  onUnavailable: PhysicalPreviewScreenProps["onUnavailable"];
+}) {
   return (
     <div className="physical-preview-fallback" role="status" data-testid="physical-preview-webgl-unavailable">
       <h2>3D preview unavailable</h2>
       <p>
         This computer does not expose a WebGL rendering context, so the
         physical 3D preview cannot render. Nothing in the project was
-        changed. Try updating your graphics driver, or continue editing in
-        2D — 3D preview is optional.
+        changed. {onUnavailable === undefined
+          ? "Try updating your graphics driver, or continue editing in 2D."
+          : "Try updating your graphics driver or use the explicit unavailable route below."}
       </p>
+      <UnavailableAction
+        onUnavailable={onUnavailable}
+        reason="webgl-unavailable"
+      />
     </div>
   );
 }
 
-function ConversionFailed({ message }: { message: string }) {
+function ConversionFailed({
+  message,
+  onUnavailable,
+  reason = "conversion-failed",
+}: {
+  message: string;
+  onUnavailable: PhysicalPreviewScreenProps["onUnavailable"];
+  reason?: PhysicalPreviewUnavailableReason;
+}) {
   return (
     <div className="physical-preview-fallback" role="alert" data-testid="physical-preview-conversion-failed">
       <h2>3D preview could not render this document</h2>
       <p>{message} Nothing in the project was changed.</p>
+      <UnavailableAction onUnavailable={onUnavailable} reason={reason} />
     </div>
   );
 }
 
-function ContextLostOverlay({ failedToRestore }: { failedToRestore: boolean }) {
+function ContextLostOverlay({
+  failedToRestore,
+  onUnavailable,
+}: {
+  failedToRestore: boolean;
+  onUnavailable: PhysicalPreviewScreenProps["onUnavailable"];
+}) {
   return (
     <div className="physical-preview-context-lost-overlay" role="alert" data-testid="physical-preview-context-lost">
       <h2>3D preview lost its graphics context</h2>
@@ -135,6 +189,9 @@ function ContextLostOverlay({ failedToRestore }: { failedToRestore: boolean }) {
           ? "The graphics context could not be restored automatically. Close and reopen the preview to try again. Nothing in the project was changed."
           : "The browser reclaimed the WebGL context, so rendering paused. Nothing in the project was changed. The preview will resume automatically if the context is restored."}
       </p>
+      {failedToRestore && (
+        <UnavailableAction onUnavailable={onUnavailable} reason="context-lost" />
+      )}
     </div>
   );
 }
@@ -148,6 +205,28 @@ interface SceneContentProps {
   geometriesByLayer: ReadonlyMap<string, AssemblyLayerGeometry>;
   cameraRigRef: Ref<CameraRigHandle>;
   onCaptureReady: (handle: CaptureRigHandle | null) => void;
+  onRendered: (() => void) | undefined;
+}
+
+/**
+ * `useFrame` callbacks run immediately before React Three Fiber submits the
+ * scene. Deferring to a microtask reports only after that synchronous render
+ * stack has completed, so merely mounting a canvas can never satisfy the
+ * guided physical-preview checkpoint.
+ */
+function RenderedFrameSignal({ onRendered }: { onRendered: (() => void) | undefined }) {
+  const scheduled = useRef(false);
+  const reported = useRef(false);
+  useFrame(() => {
+    if (onRendered === undefined || scheduled.current || reported.current) return;
+    scheduled.current = true;
+    queueMicrotask(() => {
+      if (reported.current) return;
+      reported.current = true;
+      onRendered();
+    });
+  });
+  return null;
 }
 
 /** Lives inside `<Canvas>` so `computeCameraFit` can use the real pixel viewport. */
@@ -160,6 +239,7 @@ function SceneContent({
   geometriesByLayer,
   cameraRigRef,
   onCaptureReady,
+  onRendered,
 }: SceneContentProps) {
   const { size } = useThree();
   const fit = useMemo(
@@ -213,6 +293,7 @@ function SceneContent({
         resetToken={resetToken}
       />
       <CaptureRig onReady={onCaptureReady} />
+      <RenderedFrameSignal onRendered={onRendered} />
     </>
   );
 }
@@ -231,6 +312,8 @@ function SceneContent({
 export default function PhysicalPreviewScreen({
   assembly,
   onClose,
+  onRenderConfirmed,
+  onUnavailable,
   onCapture,
   captureStatus,
   projectName,
@@ -244,6 +327,7 @@ export default function PhysicalPreviewScreen({
   const cameraRigRef = useRef<CameraRigHandle>(null);
   const [captureHandle, setCaptureHandle] = useState<CaptureRigHandle | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [renderedFrameReady, setRenderedFrameReady] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const { lost: contextLost, failedToRestore } = useWebglContextLossState(canvasElement);
@@ -283,6 +367,10 @@ export default function PhysicalPreviewScreen({
     [geometriesByLayer],
   );
 
+  useEffect(() => {
+    setRenderedFrameReady(false);
+  }, [assembly.fingerprint]);
+
   const visibleLayerIds = useMemo(
     () =>
       new Set(
@@ -291,6 +379,14 @@ export default function PhysicalPreviewScreen({
           .filter((layerId) => !hiddenLayerIds.has(layerId)),
       ),
     [assembly, hiddenLayerIds],
+  );
+  const renderableGeometryCount = useMemo(
+    () =>
+      [...geometriesByLayer.values()].reduce(
+        (count, layer) => count + layer.geometries.length,
+        0,
+      ),
+    [geometriesByLayer],
   );
 
   const toggleLayerVisibility = useCallback((layerId: string) => {
@@ -517,6 +613,16 @@ export default function PhysicalPreviewScreen({
         >
           Capture PNG
         </button>
+        {onRenderConfirmed !== undefined && (
+          <button
+            type="button"
+            data-testid="guided-physical-preview-continue"
+            disabled={!renderedFrameReady}
+            onClick={onRenderConfirmed}
+          >
+            Continue to export
+          </button>
+        )}
         <button type="button" data-testid="physical-preview-close" onClick={onClose}>
           Close preview
         </button>
@@ -567,10 +673,35 @@ export default function PhysicalPreviewScreen({
         </ul>
       )}
       <div className="physical-preview-canvas-area" data-testid="physical-preview-canvas-area">
-        {!webglAvailable ? (
-          <WebglUnavailable />
+        {assembly.status === "unavailable" ? (
+          <div
+            className="physical-preview-fallback"
+            role="status"
+            data-testid="physical-preview-assembly-unavailable"
+          >
+            <h2>3D preview unavailable</h2>
+            <p>
+              This document has no renderable physical manufacturing assembly.
+              Nothing in the project was changed.
+            </p>
+            <UnavailableAction
+              onUnavailable={onUnavailable}
+              reason="assembly-unavailable"
+            />
+          </div>
+        ) : !webglAvailable ? (
+          <WebglUnavailable onUnavailable={onUnavailable} />
         ) : conversionError !== null ? (
-          <ConversionFailed message={conversionError} />
+          <ConversionFailed
+            message={conversionError}
+            onUnavailable={onUnavailable}
+          />
+        ) : renderableGeometryCount === 0 ? (
+          <ConversionFailed
+            message="The physical assembly contains no geometry that the 3D renderer can display."
+            onUnavailable={onUnavailable}
+            reason="no-renderable-geometry"
+          />
         ) : (
           <Canvas
             camera={{ fov: 45, near: 1, far: 10_000 }}
@@ -586,6 +717,7 @@ export default function PhysicalPreviewScreen({
             }}
           >
             <SceneContent
+              key={assembly.fingerprint}
               assembly={assembly}
               mode={mode}
               view={view}
@@ -594,10 +726,16 @@ export default function PhysicalPreviewScreen({
               geometriesByLayer={geometriesByLayer}
               cameraRigRef={cameraRigRef}
               onCaptureReady={setCaptureHandle}
+              onRendered={() => setRenderedFrameReady(true)}
             />
           </Canvas>
         )}
-        {contextLost && <ContextLostOverlay failedToRestore={failedToRestore} />}
+        {contextLost && (
+          <ContextLostOverlay
+            failedToRestore={failedToRestore}
+            onUnavailable={onUnavailable}
+          />
+        )}
       </div>
     </div>
   );

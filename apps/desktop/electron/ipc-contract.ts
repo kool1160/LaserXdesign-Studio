@@ -894,12 +894,31 @@ export const onboardingActionRequestSchema = z.discriminatedUnion("type", [
   z.strictObject({
     type: z.literal("advance"),
     ...guidedStepIdentitySchema,
-    completion: z.discriminatedUnion("kind", [
+    completion: z.union([
       z.strictObject({ kind: z.literal("step") }),
       z.strictObject({
         kind: z.literal("resolution"),
         trigger: z.enum(["automatic", "user"]),
         counts: resolutionFindingCountsSchema,
+      }),
+      z.strictObject({
+        kind: z.literal("physical-preview"),
+        result: z.literal("rendered"),
+        assemblyFingerprint: z.string().min(1),
+      }),
+      z.strictObject({
+        kind: z.literal("physical-preview"),
+        result: z.literal("unavailable"),
+        reason: z.enum([
+          "assembly-unavailable",
+          "build-failed",
+          "conversion-failed",
+          "context-lost",
+          "no-renderable-geometry",
+          "preview-crashed",
+          "webgl-unavailable",
+        ]),
+        assemblyFingerprint: z.string().min(1).nullable(),
       }),
     ]),
   }),

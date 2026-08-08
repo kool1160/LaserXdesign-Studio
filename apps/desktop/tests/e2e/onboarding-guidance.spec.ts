@@ -1,3 +1,7 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -88,19 +92,156 @@ test("clean first launch offers exactly three goals and a global exit", async ()
   }
 });
 
+test("packaged Create My First Sign follows real outcomes through whole-design analysis, rendered 3D, save, and SVG export", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "laserx-first-sign-e2e-"));
+  const exportPath = join(directory, "my-first-sign.svg");
+  const launched = await launchPackaged(directory, "discard", { exportPath });
+  try {
+    const page = await launched.electronApp.firstWindow();
+    await page.getByTestId("start-create-first-sign").click();
+
+    const rejectedCheckpoint = await page.evaluate(async () => {
+      const before = await window.laserx.getState();
+      const workflow = before.onboarding.workflow;
+      if (workflow.currentStepId === null || workflow.runToken === null) {
+        throw new Error("Expected active first-sign guidance.");
+      }
+      const result = await window.laserx.onboardingAction({
+        type: "advance",
+        expectedStepId: workflow.currentStepId,
+        runToken: workflow.runToken,
+        completion: { kind: "step" },
+      });
+      return {
+        ok: result.ok,
+        error: result.ok ? null : result.error,
+        step: result.state.onboarding.workflow.currentStepId,
+        objectCount: result.state.project.document.objects.length,
+      };
+    });
+    expect(rejectedCheckpoint).toEqual({
+      ok: false,
+      error: expect.stringContaining("physical layer"),
+      step: "choose-size-material",
+      objectCount: 0,
+    });
+
+    await page.getByLabel("Document width").fill("240");
+    await page.getByLabel("Document height").fill("120");
+    await page.getByLabel("Document input units").selectOption("millimeters");
+    await page.getByTestId("create-document").click();
+    await expect(page.getByLabel("Manufacturing layer role")).toBeVisible();
+    await page.getByLabel("Manufacturing layer role").selectOption("face");
+    await expect(
+      page.getByText("Add your sign content", { exact: true }),
+    ).toBeVisible();
+
+    await page.getByTestId("add-rectangle").click();
+    await expect(page.getByText("Check the design", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("run-selection-cutability-analysis")).toBeHidden();
+    await expect(page.getByTestId("run-cutability-analysis")).toBeEnabled();
+    await page.getByTestId("run-cutability-analysis").click();
+    await expect(page.getByText("Review the 3D result", { exact: true })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    await page.getByTestId("open-physical-preview").click();
+    await expect(page.getByTestId("physical-preview-canvas")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("guided-physical-preview-continue")).toBeEnabled({
+      timeout: 15_000,
+    });
+    await page.getByTestId("guided-physical-preview-continue").click();
+    await expect(page.getByTestId("physical-preview-overlay")).toHaveCount(0);
+    await expect(page.getByText("Save and export", { exact: true })).toBeVisible();
+
+    await clickAndWaitForCommand(page, "Save as");
+    const rejectedExportShortcut = await page.evaluate(async () => {
+      const workflow = (await window.laserx.getState()).onboarding.workflow;
+      if (workflow.currentStepId === null || workflow.runToken === null) {
+        throw new Error("Expected the export checkpoint to remain active.");
+      }
+      const result = await window.laserx.onboardingAction({
+        type: "advance",
+        expectedStepId: workflow.currentStepId,
+        runToken: workflow.runToken,
+        completion: { kind: "step" },
+      });
+      return {
+        ok: result.ok,
+        error: result.ok ? null : result.error,
+        step: result.state.onboarding.workflow.currentStepId,
+      };
+    });
+    expect(rejectedExportShortcut).toEqual({
+      ok: false,
+      error: expect.stringContaining("Export SVG or DXF"),
+      step: "save-export",
+    });
+
+    await page.getByTestId("export-svg").click();
+    await expect.poll(async () => {
+      try {
+        return (await readFile(exportPath, "utf8")).includes("<svg");
+      } catch {
+        return false;
+      }
+    }).toBe(true);
+    await expect.poll(() => page.evaluate(async () => {
+      const onboarding = (await window.laserx.getState()).onboarding;
+      return {
+        status: onboarding.workflow.status,
+        completed: onboarding.preferences.completedGoals,
+        activeWorkflow: onboarding.preferences.activeWorkflow,
+      };
+    })).toEqual({
+      status: "completed",
+      completed: ["create-first-sign"],
+      activeWorkflow: null,
+    });
+    await expect(page.getByTestId("guidance-shell")).toHaveCount(0);
+
+    const exported = await readFile(exportPath, "utf8");
+    expect(exported).toContain('width="240mm"');
+    expect(exported).toContain('height="120mm"');
+  } finally {
+    await killAndRemove(launched);
+  }
+});
+
 test("packaged guidance persists and resumes the exact stable step", async () => {
   const first = await launchPackaged();
   try {
     const page = await first.electronApp.firstWindow();
     await clickAndWaitForCommand(page, "Save as");
     await page.getByTestId("start-create-first-sign").click();
-    await page.getByTestId("guidance-continue").click();
+    await page.evaluate(async () => {
+      await window.laserx.createDocument({
+        width: 200,
+        height: 100,
+        inputUnit: "millimeters",
+      });
+      const layerId = (await window.laserx.getState()).project.document.activeLayerId;
+      await window.laserx.editorAction({
+        type: "layer.set-manufacturing",
+        layerId,
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      });
+    });
     await expect(page.getByText("Add your sign content", { exact: true })).toBeVisible();
-    await page.getByTestId("add-rectangle").click();
     await clickAndWaitForCommand(page, "Save");
     await expect.poll(
       () => page.evaluate(async () => (await window.laserx.getState()).project.document.objects.length),
-    ).toBe(1);
+    ).toBe(0);
     const firstToken = await page.evaluate(
       async () => (await window.laserx.getState()).onboarding.workflow.runToken,
     );
@@ -138,7 +279,8 @@ test("packaged guidance persists and resumes the exact stable step", async () =>
       await killAndRemove(second);
     }
   } catch (error) {
-    await killAndRemove(first);
+    await kill(first).catch(() => undefined);
+    await rm(first.directory, { recursive: true, force: true });
     throw error;
   }
 });
@@ -169,10 +311,32 @@ test("packaged transient recovery returns to a stable checkpoint with an exit", 
     const page = await first.electronApp.firstWindow();
     await clickAndWaitForCommand(page, "Save as");
     await page.getByTestId("start-create-first-sign").click();
-    for (let index = 0; index < 3; index += 1) {
-      await page.getByTestId("guidance-continue").click();
-    }
+    await page.evaluate(async () => {
+      await window.laserx.createDocument({
+        width: 200,
+        height: 100,
+        inputUnit: "millimeters",
+      });
+      const layerId = (await window.laserx.getState()).project.document.activeLayerId;
+      await window.laserx.editorAction({
+        type: "layer.set-manufacturing",
+        layerId,
+        manufacturing: {
+          role: "face",
+          material: "mild-steel",
+          thicknessMm: 3,
+          process: "laser",
+          notes: "",
+          registrationGroup: null,
+          registrationHoleIds: [],
+        },
+      });
+    });
+    await page.getByTestId("add-line").click();
+    await expect(page.getByText("Check the design", { exact: true })).toBeVisible();
+    await page.getByTestId("run-cutability-analysis").click();
     await expect(page.getByText("Review findings", { exact: true })).toBeVisible();
+    await clickAndWaitForCommand(page, "Save");
     await kill(first);
 
     const second = await launchPackaged(first.directory);

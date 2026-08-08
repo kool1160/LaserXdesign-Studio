@@ -31,6 +31,7 @@ import {
 import type {
   CommandResult,
   DesktopState,
+  OnboardingActionRequest,
 } from "../../electron/ipc-contract.js";
 import { Viewport } from "../components/Viewport.js";
 import { TextPanel } from "../components/TextPanel.js";
@@ -56,6 +57,10 @@ import {
 } from "../lib/viewport-adapter.js";
 
 type Command = () => Promise<CommandResult>;
+type OnboardingAdvanceCompletion = Extract<
+  OnboardingActionRequest,
+  { type: "advance" }
+>["completion"];
 type GeometryUiRequest =
   | {
       kind: "boolean";
@@ -106,6 +111,8 @@ export function App() {
   const [activeCutabilityOperationId, setActiveCutabilityOperationId] =
     useState<string | null>(null);
   const [physicalPreviewOpen, setPhysicalPreviewOpen] = useState(false);
+  const [physicalPreviewBuildFailed, setPhysicalPreviewBuildFailed] =
+    useState(false);
   const [activePhysicalPreviewOperationId, setActivePhysicalPreviewOperationId] =
     useState<string | null>(null);
   const [manufacturingSettings, setManufacturingSettings] =
@@ -323,6 +330,7 @@ export function App() {
 
   const openPhysicalPreview = useCallback(async () => {
     setPhysicalPreviewOpen(true);
+    setPhysicalPreviewBuildFailed(false);
     const operationId = window.crypto.randomUUID();
     setActivePhysicalPreviewOperationId(operationId);
     setBusy(true);
@@ -330,8 +338,12 @@ export function App() {
     try {
       const result = await window.laserx.runPhysicalPreview({ operationId });
       setState(result.state);
-      if (!result.ok) setError(result.error);
+      if (!result.ok) {
+        setPhysicalPreviewBuildFailed(true);
+        setError(result.error);
+      }
     } catch {
+      setPhysicalPreviewBuildFailed(true);
       setError("The physical preview worker returned an invalid response.");
     } finally {
       setActivePhysicalPreviewOperationId(null);
@@ -372,12 +384,44 @@ export function App() {
 
   const closePhysicalPreview = useCallback(() => {
     setPhysicalPreviewOpen(false);
+    setPhysicalPreviewBuildFailed(false);
     const operationId =
       state?.physicalPreview.job?.operationId ?? activePhysicalPreviewOperationId;
     if (operationId !== null) {
       void window.laserx.cancelPhysicalPreview({ operationId });
     }
   }, [state?.physicalPreview.job?.operationId, activePhysicalPreviewOperationId]);
+
+  const reportGuidedPhysicalPreviewOutcome = useCallback(
+    async (
+      expectedStepId: string,
+      runToken: string,
+      completion: OnboardingAdvanceCompletion,
+    ) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await window.laserx.onboardingAction({
+          type: "advance",
+          expectedStepId,
+          runToken,
+          completion,
+        });
+        setState(result.state);
+        if (result.ok) {
+          setPhysicalPreviewOpen(false);
+          setPhysicalPreviewBuildFailed(false);
+        } else {
+          setError(result.error);
+        }
+      } catch {
+        setError("The 3D preview outcome could not be recorded.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
 
   const chooseManufacturingPreset = useCallback((presetId: string) => {
     setManufacturingSettings(settingsForManufacturingPreset(presetId));
@@ -626,10 +670,53 @@ export function App() {
     needsDecisionCount: cutability?.warningCount ?? 0,
     blockingCount: cutability?.errorCount ?? 0,
   };
+  const guidanceIsCreateFirstSign =
+    guidanceActive && guidance.goal === "create-first-sign";
+  const guidedPhysicalLayerIds = new Set(
+    document.layers
+      .filter(
+        (layer) =>
+          layer.manufacturing !== undefined &&
+          layer.manufacturing.role !== "non-cut-preview" &&
+          Number.isFinite(layer.manufacturing.thicknessMm) &&
+          layer.manufacturing.thicknessMm > 0,
+      )
+      .map((layer) => layer.id),
+  );
+  const guidedPhysicalStockReady =
+    document.dimensions.widthMm > 0 &&
+    document.dimensions.heightMm > 0 &&
+    guidedPhysicalLayerIds.size > 0;
+  const guidedPhysicalContentReady = document.objects.some((object) =>
+    guidedPhysicalLayerIds.has(object.layerId),
+  );
+  const guidedWholeDesignAnalysisReady =
+    state.analysis.scope?.kind === "whole-design" && cutability !== null;
+  const guidedOutcomeConfirmation = guidanceIsCreateFirstSign
+    ? guidanceStep?.id === "choose-size-material" && guidedPhysicalStockReady
+      ? "Use current size and material"
+      : guidanceStep?.id === "add-content" && guidedPhysicalContentReady
+        ? "Use current sign content"
+        : guidanceStep?.id === "analyze-cutability" && guidedWholeDesignAnalysisReady
+          ? "Use current whole-design check"
+          : guidanceStep?.id === "resolve-findings"
+            ? "Continue after review"
+            : null
+    : "Continue";
+  const guidedPhysicalPreviewIdentity =
+    guidanceIsCreateFirstSign &&
+    guidanceStep?.id === "physical-preview" &&
+    guidance.runToken !== null
+      ? {
+          expectedStepId: guidanceStep.id,
+          runToken: guidance.runToken,
+        }
+      : null;
   const showGoalChooser =
     workspaceIsEmpty &&
     guidance.status === "idle" &&
-    !state.onboarding.preferences.dismissed;
+    !state.onboarding.preferences.dismissed &&
+    state.onboarding.resumeEligibility !== "available";
   const showResumeGuidance =
     guidance.status === "idle" &&
     state.onboarding.resumeEligibility === "available";
@@ -727,7 +814,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell${guidanceActive ? ` guidance-active guidance-${guidanceStep?.surface ?? "create"}` : ""}`}
+      className={`app-shell${guidanceActive ? ` guidance-active guidance-${guidanceStep?.surface ?? "create"} guidance-step-${guidanceStep?.id ?? "unknown"}` : ""}`}
       aria-busy={busy}
     >
       <a className="skip-link" href="#design-workspace">
@@ -894,8 +981,33 @@ export function App() {
           <div className="guidance-copy">
             <h2 id="guidance-step-title">{guidanceStep.title}</h2>
             <p>{guidanceStep.description}</p>
-            {guidanceStep.id === "resolve-findings" && cutability === null && (
-              <small>Run the design check before continuing.</small>
+            {guidanceIsCreateFirstSign && guidanceStep.id === "choose-size-material" && (
+              <small data-testid="guidance-outcome-hint">
+                Create the real-size document, then assign a physical role, material, and thickness in Layers.
+              </small>
+            )}
+            {guidanceIsCreateFirstSign && guidanceStep.id === "add-content" && (
+              <small data-testid="guidance-outcome-hint">
+                Add at least one editable object to a physical manufacturing layer.
+              </small>
+            )}
+            {guidanceIsCreateFirstSign && guidanceStep.id === "analyze-cutability" && (
+              <small data-testid="guidance-outcome-hint">
+                Choose Analyze all. A selection-only or layer-only check cannot complete this checkpoint.
+              </small>
+            )}
+            {guidanceIsCreateFirstSign && guidanceStep.id === "physical-preview" && (
+              <small data-testid="guidance-outcome-hint">
+                Open 3D Preview. This required checkpoint advances only after a rendered frame or an explicit unavailable result.
+              </small>
+            )}
+            {guidanceIsCreateFirstSign && guidanceStep.id === "save-export" && (
+              <small data-testid="guidance-outcome-hint">
+                Export SVG or DXF. The goal completes only after the file is written successfully.
+              </small>
+            )}
+            {guidanceStep.id === "resolve-findings" && !guidedWholeDesignAnalysisReady && (
+              <small>Run Analyze all on the current design before continuing.</small>
             )}
           </div>
           <div className="guidance-actions">
@@ -929,30 +1041,33 @@ export function App() {
                 Skip
               </button>
             )}
-            <button
-              type="button"
-              disabled={
-                busy ||
-                (guidanceStep.id === "resolve-findings" &&
-                  (cutability === null || guidanceResolutionCounts.blockingCount > 0))
-              }
-              data-testid="guidance-continue"
-              onClick={() => void run(() => window.laserx.onboardingAction({
-                type: "advance",
-                expectedStepId: guidanceStep.id,
-                runToken: guidance.runToken as string,
-                completion:
-                  guidanceStep.id === "resolve-findings"
-                    ? {
-                        kind: "resolution",
-                        trigger: "user",
-                        counts: guidanceResolutionCounts,
-                      }
-                    : { kind: "step" },
-              }))}
-            >
-              Continue
-            </button>
+            {guidedOutcomeConfirmation !== null && (
+              <button
+                type="button"
+                disabled={
+                  busy ||
+                  (guidanceStep.id === "resolve-findings" &&
+                    (!guidedWholeDesignAnalysisReady ||
+                      guidanceResolutionCounts.blockingCount > 0))
+                }
+                data-testid="guidance-continue"
+                onClick={() => void run(() => window.laserx.onboardingAction({
+                  type: "advance",
+                  expectedStepId: guidanceStep.id,
+                  runToken: guidance.runToken as string,
+                  completion:
+                    guidanceStep.id === "resolve-findings"
+                      ? {
+                          kind: "resolution",
+                          trigger: "user",
+                          counts: guidanceResolutionCounts,
+                        }
+                      : { kind: "step" },
+                }))}
+              >
+                {guidedOutcomeConfirmation}
+              </button>
+            )}
             <button
               type="button"
               className="guidance-exit"
@@ -1630,6 +1745,11 @@ export function App() {
               <button
                 type="button"
                 data-testid="run-selection-cutability-analysis"
+                hidden={
+                  guidanceIsCreateFirstSign &&
+                  (guidanceStep?.id === "analyze-cutability" ||
+                    guidanceStep?.id === "resolve-findings")
+                }
                 disabled={busy || state.editor.selectionIds.length === 0}
                 onClick={() => void runCutability(state.editor.selectionIds)}
               >
@@ -1881,7 +2001,7 @@ export function App() {
                   <option value="inches">inches</option>
                 </select>
               </label>
-              <button type="submit" disabled={busy}>
+              <button type="submit" data-testid="create-document" disabled={busy}>
                 Create document
               </button>
             </form>
@@ -2187,7 +2307,25 @@ export function App() {
                   </button>
                 </div>
               ) : state.physicalPreview.assembly !== null ? (
-                <PhysicalPreviewErrorBoundary onClose={closePhysicalPreview}>
+                <PhysicalPreviewErrorBoundary
+                  onClose={closePhysicalPreview}
+                  {...(guidedPhysicalPreviewIdentity === null
+                    ? {}
+                    : {
+                        onUnavailable: () =>
+                          void reportGuidedPhysicalPreviewOutcome(
+                            guidedPhysicalPreviewIdentity.expectedStepId,
+                            guidedPhysicalPreviewIdentity.runToken,
+                            {
+                              kind: "physical-preview",
+                              result: "unavailable",
+                              reason: "preview-crashed",
+                              assemblyFingerprint:
+                                state.physicalPreview.assembly?.fingerprint ?? null,
+                            },
+                          ),
+                      })}
+                >
                   <Suspense
                     fallback={
                       <div className="analysis-progress" data-testid="physical-preview-chunk-loading">
@@ -2202,6 +2340,40 @@ export function App() {
                       onCapture={savePhysicalPreviewCapture}
                       captureStatus={state.physicalPreview.capture}
                       projectName={state.project.name}
+                      {...(guidedPhysicalPreviewIdentity === null
+                        ? {}
+                        : {
+                            onRenderConfirmed: () =>
+                              void reportGuidedPhysicalPreviewOutcome(
+                                guidedPhysicalPreviewIdentity.expectedStepId,
+                                guidedPhysicalPreviewIdentity.runToken,
+                                {
+                                  kind: "physical-preview",
+                                  result: "rendered",
+                                  assemblyFingerprint:
+                                    state.physicalPreview.assembly?.fingerprint ?? "",
+                                },
+                              ),
+                            onUnavailable: (
+                              reason:
+                                | "assembly-unavailable"
+                                | "conversion-failed"
+                                | "context-lost"
+                                | "no-renderable-geometry"
+                                | "webgl-unavailable",
+                            ) =>
+                              void reportGuidedPhysicalPreviewOutcome(
+                                guidedPhysicalPreviewIdentity.expectedStepId,
+                                guidedPhysicalPreviewIdentity.runToken,
+                                {
+                                  kind: "physical-preview",
+                                  result: "unavailable",
+                                  reason,
+                                  assemblyFingerprint:
+                                    state.physicalPreview.assembly?.fingerprint ?? null,
+                                },
+                              ),
+                          })}
                     />
                   </Suspense>
                 </PhysicalPreviewErrorBoundary>
@@ -2209,9 +2381,30 @@ export function App() {
                 <div className="physical-preview-fallback" role="status" data-testid="physical-preview-empty">
                   <h2>3D preview unavailable</h2>
                   <p>The physical preview could not be generated. Nothing in the project was changed.</p>
-                  <button type="button" onClick={closePhysicalPreview}>
-                    Close
-                  </button>
+                  {guidedPhysicalPreviewIdentity !== null && physicalPreviewBuildFailed ? (
+                    <button
+                      type="button"
+                      data-testid="physical-preview-acknowledge-build-failure"
+                      onClick={() =>
+                        void reportGuidedPhysicalPreviewOutcome(
+                          guidedPhysicalPreviewIdentity.expectedStepId,
+                          guidedPhysicalPreviewIdentity.runToken,
+                          {
+                            kind: "physical-preview",
+                            result: "unavailable",
+                            reason: "build-failed",
+                            assemblyFingerprint: null,
+                          },
+                        )
+                      }
+                    >
+                      Continue with 3D unavailable
+                    </button>
+                  ) : (
+                    <button type="button" onClick={closePhysicalPreview}>
+                      Close
+                    </button>
+                  )}
                 </div>
               )}
             </div>
