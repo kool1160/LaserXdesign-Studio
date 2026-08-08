@@ -6,9 +6,11 @@ LaserX truthfully distinguishes common wood-based sheet goods and acrylic constr
 
 ## Activation gate
 
-M16 remains blocked until M15 is complete and the owner explicitly activates material expansion.
+M16 remains blocked until M15 is complete, the Issue #76 time-boxed private-alpha evidence is recorded, correctness/data-loss/trapping/severe-accessibility and repeated primary-workflow blockers are closed or explicitly accepted by the owner, and the owner explicitly activates material expansion.
 
-Issue #39, draft PR #40, and accepted Issue #42 research are inputs, not merge authority.
+The private-alpha checkpoint does not add material-catalog scope to M15 and does not replace M22 final usability validation.
+
+Issue #39, draft PR #40, accepted Issue #42 research, and Issue #76 are inputs, not merge authority.
 
 ## Included
 
@@ -37,6 +39,7 @@ Issue #39, draft PR #40, and accepted Issue #42 research are inputs, not merge a
 
 ## Exit checklist
 
+- [ ] M15 private-alpha evidence and blocker disposition are recorded before activation.
 - [ ] PR #40 foundation is independently repaired/reviewed before promotion.
 - [ ] Catalog, schema, migration, UI, export, and preview contracts are accepted.
 - [ ] Exact-head tests and packaged Windows evidence pass.
